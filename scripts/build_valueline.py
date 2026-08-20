@@ -32,6 +32,9 @@ FINANCIALS = [
     (None, "应收账款（亿元）", [120, 130, 140, 150, 160, 170, 175, 180, 189, 195, 200, 210, 208, 205, 198, 210, 218, 220, 215]),
     (None, "有息负债（亿元）", [350, 380, 400, 450, 500, 550, 580, 600, 620, 650, 680, 700, 690, 680, 650, 630, 610, 600, 580]),
     (None, "商誉（亿元）", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 30, 30, 30, 30, 30]),
+    ("股本结构", None, None),
+    (None, "普通股数量（亿股）", [198.7] * 19),
+    (None, "优先股数量（亿股）", [0] * 19),
     ("股东回报", None, None),
     (None, "股息率 %", [3.5, 3.8, 4.0, 4.2, 4.5, 4.6, 4.8, 5.0, 4.5, 4.2, 4.8, 5.2, 5.5, 5.8, 6.0, 5.6, 6.0, 6.3, 6.4]),
 ]
@@ -124,13 +127,16 @@ table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weig
 table.dense .row-head { font-weight: 500; color: #33404f; }
 
 .body { display: flex; gap: 18px; flex: 1; }
-.col-main { flex: 0 0 62%; }
-.col-side { flex: 0 0 38%; }
+.col-main { flex: 0 0 58%; }
+.col-side { flex: 0 0 42%; }
 .section { margin-bottom: 15px; }
 .sec-title { font-size: 13px; font-weight: 700; color: var(--accent); padding-bottom: 5px; margin-bottom: 9px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
 .sec-title .hint { font-size: 10px; font-weight: 400; color: var(--faint); }
-.val-grid { display: flex; flex-direction: column; gap: 8px; }
-.val-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff; }
+.disclaim { font-size: 9px; color: var(--faint); margin-bottom: 6px; }
+
+/* 估值与市场 */
+.val-grid { display: flex; flex-direction: column; gap: 7px; }
+.val-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 10px; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff; }
 .val-item .lbl { font-size: 11px; color: var(--muted); }
 .val-item .lbl b { display: block; font-size: 12px; color: var(--ink); font-weight: 600; }
 .val-item .val { text-align: right; }
@@ -138,17 +144,62 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .val-item .val .pct { font-size: 10px; color: var(--faint); margin-top: 1px; }
 .pct-low { color: var(--up) !important; font-weight: 600; }
 .pct-high { color: var(--down) !important; font-weight: 600; }
+
+/* 52周价格区间 */
+.price-range { margin-top: 10px; padding: 9px 10px; border: 1px solid var(--line-soft); border-radius: 6px; }
+.pr-bar { position: relative; height: 8px; background: #eef1f5; border-radius: 4px; margin-bottom: 6px; }
+.pr-marker { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--accent-2); border-radius: 1px; }
+.pr-labels { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); }
+.pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
+
+/* 机构一致预期 */
+.consensus { margin-top: 8px; padding: 9px 10px; background: var(--bg-soft); border-radius: 6px; font-size: 10.5px; color: var(--muted); line-height: 1.8; }
+.consensus b { color: var(--ink); }
+.consensus .tp { font-size: 13px; color: var(--accent); font-weight: 700; }
+.rating-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 5px 0 4px; }
+.rating-bar .seg { height: 100%; }
+.rating-legend { font-size: 9.5px; color: var(--faint); display: flex; gap: 10px; }
+
+/* 格雷厄姆体检 */
 .graham { margin-top: 10px; padding: 10px; background: var(--bg-soft); border-radius: 6px; }
 .graham .g-title { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
 .graham .g-row { display: flex; justify-content: space-between; font-size: 10.5px; padding: 2px 0; color: var(--muted); }
 .graham .g-row b { color: var(--ink); font-weight: 600; }
 .graham .g-score { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--ink); }
 .graham .g-score b { color: var(--down); }
+
+/* 机构观点分歧 */
+.bull-bear { display: flex; flex-direction: column; gap: 9px; }
+.bb-col { border-radius: 6px; padding: 9px 11px; border: 1px solid var(--line-soft); }
+.bb-col.bull { border-left: 3px solid var(--up); background: #fdf7f6; }
+.bb-col.bear { border-left: 3px solid var(--down); background: #f4faf6; }
+.bb-title { font-size: 11px; font-weight: 700; margin-bottom: 5px; }
+.bb-col.bull .bb-title { color: var(--up); }
+.bb-col.bear .bb-title { color: var(--down); }
+.bb-col ul { list-style: none; }
+.bb-col li { font-size: 10px; line-height: 1.6; color: #33404f; padding: 2px 0 2px 12px; position: relative; }
+.bb-col li::before { content: ""; position: absolute; left: 1px; top: 9px; width: 5px; height: 5px; border-radius: 50%; }
+.bb-col.bull li::before { background: var(--up); }
+.bb-col.bear li::before { background: var(--down); }
+
+/* 财务造假检测 */
+.fraud { padding: 10px; border: 1px solid var(--line-soft); border-radius: 6px; }
+.fraud .f-row { display: flex; justify-content: space-between; font-size: 10.5px; padding: 3px 0; color: var(--muted); }
+.fraud .f-row b { color: var(--ink); font-weight: 600; }
+.fraud .f-row b.ok { color: var(--down); }
+.fraud .f-row b.warn { color: var(--warn); }
+.fraud .f-row b.bad { color: var(--up); }
+.fraud .f-score { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--ink); }
+.fraud .f-score b.ok { color: var(--down); }
+
+/* 列表 */
 .thesis, .risk { list-style: none; }
 .thesis li, .risk li { font-size: 11px; line-height: 1.6; color: #33404f; padding: 4px 0 4px 16px; position: relative; border-bottom: 1px dashed var(--line-soft); }
 .thesis li:last-child, .risk li:last-child { border-bottom: none; }
 .thesis li::before { content: ""; position: absolute; left: 2px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); }
 .risk li::before { content: "!"; position: absolute; left: 2px; top: 5px; font-size: 10px; font-weight: 700; color: var(--warn); }
+
+/* 复盘层 */
 .review { background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 6px; padding: 11px 12px; }
 .review .r-title { font-size: 12px; font-weight: 700; color: #7a5c0a; margin-bottom: 7px; display: flex; align-items: center; gap: 6px; }
 .review .r-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
@@ -156,6 +207,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .review .r-row .k { font-weight: 600; color: #7a5c0a; margin-right: 4px; }
 .review .r-row.verified .k { color: var(--down); }
 .review .r-row.refuted .k { color: var(--up); }
+
+/* 数据校验 */
 .verify { font-size: 10px; color: var(--faint); line-height: 1.7; }
 .verify b { color: var(--muted); font-weight: 600; }
 .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 9.5px; color: var(--faint); line-height: 1.6; }
@@ -168,7 +221,7 @@ TEMPLATE = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ValueLine 一页研报 · 模板 v1.2</title>
+<title>ValueLine 一页研报 · 模板 v1.3</title>
 <style>@@CSS@@</style>
 </head>
 <body>
@@ -198,34 +251,17 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / %</span></div>
+    <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
     <div style="font-size:9px;color:var(--faint);margin-top:4px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
   </div>
 
   <div class="body">
     <div class="col-main">
-      <div class="section">
-        <div class="sec-title">投资逻辑</div>
-        <ul class="thesis">
-          <li>一体化「煤电路港航」协同，长协煤占比高，盈利穿越煤价周期、波动显著低于纯煤企。</li>
-          <li>高分红承诺：分红率长期不低于 60%，当前股息率 6%+，具备类债券收息属性。</li>
-          <li>资产负债表干净，低负债 + 净现金，符合格雷厄姆式财务稳健与安全边际要求。</li>
-        </ul>
-      </div>
-      <div class="section">
-        <div class="sec-title">风险提示</div>
-        <ul class="risk">
-          <li>动力煤现货价超预期下行，长协价重谈带来盈利下修压力。</li>
-          <li>宏观经济复苏不及预期，压制电力需求与发电量。</li>
-          <li>资本开支加大或分红率下调，削弱收息逻辑。</li>
-        </ul>
-      </div>
-    </div>
 
-    <div class="col-side">
       <div class="section">
-        <div class="sec-title">估值面板 <span class="hint">历史分位</span></div>
+        <div class="sec-title">估值与市场 <span class="hint">机构一致预期</span></div>
+        <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
         <div class="val-grid">
           <div class="val-item">
             <div class="lbl">市盈率<b>PE（TTM）</b></div>
@@ -240,6 +276,27 @@ TEMPLATE = """<!DOCTYPE html>
             <div class="val"><div class="v" style="color:var(--up)">6.1<span style="font-size:10px">%</span></div><div class="pct pct-low">分位 85% · 高位</div></div>
           </div>
         </div>
+
+        <div class="price-range">
+          <div class="pr-bar"><div class="pr-marker" style="left:43%"></div></div>
+          <div class="pr-labels">
+            <span>52周最低 <b>38.5</b></span>
+            <span>现价 <b>41.8</b></span>
+            <span>52周最高 <b>46.2</b></span>
+          </div>
+        </div>
+
+        <div class="consensus">
+          <div>机构一致目标价 <span class="tp">45.0</span> 元（<b>28</b> 家覆盖）</div>
+          <div class="rating-bar">
+            <div class="seg" style="width:43%;background:#c0392b"></div>
+            <div class="seg" style="width:36%;background:#e8a09b"></div>
+            <div class="seg" style="width:18%;background:#a9c2d4"></div>
+            <div class="seg" style="width:3%;background:#8fbfa0"></div>
+          </div>
+          <div class="rating-legend"><span>买入 12</span><span>增持 10</span><span>中性 5</span><span>减持 1</span></div>
+        </div>
+
         <div class="graham">
           <div class="g-title">格雷厄姆质量体检</div>
           <div class="g-row"><span>资产负债率</span><b>23.5% · 优秀</b></div>
@@ -248,6 +305,64 @@ TEMPLATE = """<!DOCTYPE html>
           <div class="g-row"><span>净现金 / 有息负债</span><b>净现金状态</b></div>
           <div class="g-score">综合质量评分：<b>8.2 / 10</b>（防御型及格线 6.5）</div>
         </div>
+      </div>
+
+      <div class="section">
+        <div class="sec-title">投资逻辑</div>
+        <ul class="thesis">
+          <li>一体化「煤电路港航」协同，长协煤占比高，盈利穿越煤价周期、波动显著低于纯煤企。</li>
+          <li>高分红承诺：分红率长期不低于 60%，当前股息率 6%+，具备类债券收息属性。</li>
+          <li>资产负债表干净，低负债 + 净现金，符合格雷厄姆式财务稳健与安全边际要求。</li>
+        </ul>
+      </div>
+
+      <div class="section">
+        <div class="sec-title">风险提示</div>
+        <ul class="risk">
+          <li>动力煤现货价超预期下行，长协价重谈带来盈利下修压力。</li>
+          <li>宏观经济复苏不及预期，压制电力需求与发电量。</li>
+          <li>资本开支加大或分红率下调，削弱收息逻辑。</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="col-side">
+
+      <div class="section">
+        <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
+        <div class="disclaim">以下为第三方机构代表性观点，非本人立场。</div>
+        <div class="bull-bear">
+          <div class="bb-col bull">
+            <div class="bb-title">看多观点（买入 / 增持）</div>
+            <ul>
+              <li>长协煤占比超七成，盈利穿越煤价周期、波动显著小于纯煤企。</li>
+              <li>高股息 + 低估值，红利资产稀缺性凸显，险资长线配置需求。</li>
+              <li>煤电一体化对冲周期，充沛现金流支撑高分红可持续。</li>
+            </ul>
+          </div>
+          <div class="bb-col bear">
+            <div class="bb-title">看空观点（中性偏空 / 减持）</div>
+            <ul>
+              <li>动力煤需求中长期见顶，煤价中枢面临逐步下移。</li>
+              <li>新能源替代加速，火电利用小时数与电价承压。</li>
+              <li>分红率已处高位，进一步提升空间有限。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="sec-title">财务造假检测 <span class="hint">算法打磨中</span></div>
+        <div class="fraud">
+          <div class="f-row"><span>M-Score（Beneish）</span><b class="ok">-2.8 · 安全</b></div>
+          <div class="f-row"><span>经营现金流 / 净利润</span><b class="ok">1.5 · 健康</b></div>
+          <div class="f-row"><span>应收增速 vs 营收增速</span><b class="ok">背离 -3% · 正常</b></div>
+          <div class="f-row"><span>存货 / 营收比异常</span><b class="ok">无异常</b></div>
+          <div class="f-row"><span>审计意见</span><b>标准无保留</b></div>
+          <div class="f-score">综合造假风险：<b class="ok">低</b></div>
+        </div>
+        <div style="font-size:9px;color:var(--faint);margin-top:4px;">检测算法与阈值待打磨，当前为占位示例。</div>
       </div>
 
       <div class="section">
@@ -266,16 +381,18 @@ TEMPLATE = """<!DOCTYPE html>
         <div class="verify">
           <div><b>数据来源：</b>AKShare（主） + 东方财富（备用）</div>
           <div><b>财务口径：</b>以公司财报 / Wind 一致预期为准</div>
+          <div><b>机构数据：</b>目标价与评级截至报告日，家数可能变动</div>
           <div><b>校验日期：</b>2026-08-20</div>
           <div><b>校验人：</b>李潇</div>
           <div><b>备注：</b>本页为模板演示，数据为示例值，正式发布前需逐项核对。</div>
         </div>
       </div>
+
     </div>
   </div>
 
   <div class="footer">
-    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含价格点位、仓位与买卖建议。
+    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构目标价与多空观点均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
   </div>
 
 </div>
