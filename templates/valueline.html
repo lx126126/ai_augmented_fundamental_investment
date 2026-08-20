@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ValueLine 一页研报 · 模板 v1.0</title>
+<style>
+  :root {
+    --ink: #1a2330;
+    --muted: #5c6b7a;
+    --faint: #8a97a6;
+    --line: #dde3ea;
+    --line-soft: #e8edf2;
+    --accent: #0f3d6e;
+    --accent-2: #14508c;
+    --bg-soft: #f5f7fa;
+    --up: #c0392b;      /* 涨 / 低估 / 正面 */
+    --down: #1e8e5a;    /* 跌 / 高估 / 负面 */
+    --warn: #b8860b;
+    --amber-bg: #fdf6e3;
+    --amber-line: #e8d5a0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+    color: var(--ink);
+    background: #e9edf1;
+    -webkit-font-smoothing: antialiased;
+    padding: 24px 0;
+  }
+
+  .page {
+    width: 794px;           /* A4 @96dpi */
+    min-height: 1123px;     /* A4 高度，内容超出一页时自动延伸 */
+    margin: 0 auto;
+    background: #ffffff;
+    box-shadow: 0 2px 16px rgba(15, 61, 110, 0.10);
+    padding: 34px 40px 30px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---------- 头部 ---------- */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 16px;
+    border-bottom: 3px solid var(--accent);
+  }
+  .co-name { font-size: 24px; font-weight: 700; letter-spacing: 1px; color: var(--accent); line-height: 1.15; }
+  .co-name .en { font-size: 12px; font-weight: 400; color: var(--faint); letter-spacing: 0.5px; margin-left: 8px; }
+  .co-meta { margin-top: 8px; font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .co-meta .tag {
+    display: inline-block; padding: 1px 7px; border-radius: 3px;
+    font-size: 10px; margin-right: 6px; border: 1px solid var(--line);
+    background: var(--bg-soft); color: var(--muted);
+  }
+  .co-meta .code { font-weight: 600; color: var(--ink); }
+
+  .header-right { text-align: right; flex-shrink: 0; margin-left: 16px; }
+  .quarter {
+    display: inline-block; background: var(--accent); color: #fff;
+    padding: 5px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;
+  }
+  .badges { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
+  .badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 500;
+  }
+  .badge.lynch { background: #eef3fb; color: var(--accent-2); border: 1px solid #c9d8ec; }
+  .badge.graham { background: #eef7f1; color: var(--down); border: 1px solid #c4e3d2; }
+
+  /* ---------- 一句话定位 ---------- */
+  .summary {
+    margin: 14px 0;
+    padding: 10px 14px;
+    background: var(--bg-soft);
+    border-left: 3px solid var(--accent-2);
+    font-size: 12px; line-height: 1.7; color: #33404f;
+  }
+  .summary b { color: var(--ink); }
+
+  /* ---------- 双栏主体 ---------- */
+  .body {
+    display: flex; gap: 18px; flex: 1;
+  }
+  .col-main { flex: 0 0 62%; }
+  .col-side { flex: 0 0 38%; }
+
+  .section { margin-bottom: 16px; }
+  .sec-title {
+    font-size: 13px; font-weight: 700; color: var(--accent);
+    padding-bottom: 5px; margin-bottom: 9px;
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .sec-title .hint { font-size: 10px; font-weight: 400; color: var(--faint); }
+
+  /* ---------- 表格 ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  th, td { padding: 5px 6px; text-align: right; border-bottom: 1px solid var(--line-soft); }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    background: var(--bg-soft); color: var(--muted); font-weight: 600;
+    border-bottom: 1px solid var(--line); font-size: 10px;
+  }
+  td.num { font-variant-numeric: tabular-nums; }
+  .up { color: var(--up); font-weight: 600; }
+  .down { color: var(--down); font-weight: 600; }
+  .flat { color: var(--muted); }
+  .row-head { font-weight: 500; color: #33404f; }
+
+  /* ---------- 估值面板 ---------- */
+  .val-grid { display: flex; flex-direction: column; gap: 8px; }
+  .val-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--line-soft); border-radius: 6px; background: #fff;
+  }
+  .val-item .lbl { font-size: 11px; color: var(--muted); }
+  .val-item .lbl b { display: block; font-size: 12px; color: var(--ink); font-weight: 600; }
+  .val-item .val { text-align: right; }
+  .val-item .val .v { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .val-item .val .pct { font-size: 10px; color: var(--faint); margin-top: 1px; }
+  .pct-low { color: var(--up) !important; font-weight: 600; }
+  .pct-high { color: var(--down) !important; font-weight: 600; }
+
+  /* 格雷厄姆质量分 */
+  .graham { margin-top: 10px; padding: 10px; background: var(--bg-soft); border-radius: 6px; }
+  .graham .g-title { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 6px; }
+  .graham .g-row { display: flex; justify-content: space-between; font-size: 10.5px; padding: 2px 0; color: var(--muted); }
+  .graham .g-row b { color: var(--ink); font-weight: 600; }
+  .graham .g-score { margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--ink); }
+  .graham .g-score b { color: var(--down); }
+
+  /* ---------- 列表 ---------- */
+  .thesis, .risk { list-style: none; }
+  .thesis li, .risk li {
+    font-size: 11px; line-height: 1.6; color: #33404f;
+    padding: 4px 0 4px 16px; position: relative;
+    border-bottom: 1px dashed var(--line-soft);
+  }
+  .thesis li:last-child, .risk li:last-child { border-bottom: none; }
+  .thesis li::before { content: ""; position: absolute; left: 2px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); }
+  .risk li::before { content: "!"; position: absolute; left: 2px; top: 5px; font-size: 10px; font-weight: 700; color: var(--warn); }
+
+  /* ---------- 复盘层（灵魂） ---------- */
+  .review {
+    background: var(--amber-bg); border: 1px solid var(--amber-line);
+    border-radius: 6px; padding: 11px 12px;
+  }
+  .review .r-title { font-size: 12px; font-weight: 700; color: #7a5c0a; margin-bottom: 7px; display: flex; align-items: center; gap: 6px; }
+  .review .r-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+  .review .r-row { font-size: 10.5px; line-height: 1.6; padding: 3px 0; }
+  .review .r-row .k { font-weight: 600; color: #7a5c0a; margin-right: 4px; }
+  .review .r-row.verified .k { color: var(--down); }
+  .review .r-row.refuted .k { color: var(--up); }
+
+  /* ---------- 数据校验 ---------- */
+  .verify { font-size: 10px; color: var(--faint); line-height: 1.7; }
+  .verify b { color: var(--muted); font-weight: 600; }
+
+  /* ---------- 页脚 ---------- */
+  .footer {
+    margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line);
+    font-size: 9.5px; color: var(--faint); line-height: 1.6;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .page { box-shadow: none; margin: 0; width: 100%; min-height: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- 头部 -->
+  <div class="header">
+    <div>
+      <div class="co-name">中国神华<span class="en">SHENHUA ENERGY</span></div>
+      <div class="co-meta">
+        <span class="code">601088.SH</span> · <span class="code">1088.HK</span>
+        <span class="tag">煤炭开采 · 动力煤</span>
+        <span class="tag">沪深300</span>
+        <div style="margin-top:3px;">报告期：2026 Q2 · 发布日期：2026-08-20</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="quarter">2026 Q2 更新</span>
+      <div class="badges">
+        <span class="badge lynch">林奇分类：周期型 · 稳健收息</span>
+        <span class="badge graham">格雷厄姆质量：高（低负债 · 净现金）</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 一句话定位 -->
+  <div class="summary">
+    <b>一句话定位：</b>煤、电、路、港、航一体化能源龙头，长协煤锁定盈利，现金流充沛、分红慷慨，具备类债券属性的周期成长型现金牛。
+  </div>
+
+  <!-- 双栏主体 -->
+  <div class="body">
+
+    <!-- 左主栏 -->
+    <div class="col-main">
+
+      <!-- 核心财务指标 -->
+      <div class="section">
+        <div class="sec-title">核心财务指标 <span class="hint">红=同比改善 · 绿=同比恶化</span></div>
+        <table>
+          <thead>
+            <tr><th>指标</th><th>2022</th><th>2023</th><th>2024</th><th>2025E</th><th>最新季度</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="row-head">营业收入（亿元）</td><td class="num">3,445</td><td class="num">3,431</td><td class="num">3,380</td><td class="num">3,410</td><td class="num flat">856</td></tr>
+            <tr><td class="row-head">归母净利润（亿元）</td><td class="num">696</td><td class="num">597</td><td class="num">586</td><td class="num">590</td><td class="num up">152 ▲</td></tr>
+            <tr><td class="row-head">毛利率 %</td><td class="num">40.2</td><td class="num">38.5</td><td class="num">37.9</td><td class="num">38.1</td><td class="num up">38.6 ▲</td></tr>
+            <tr><td class="row-head">净利率 %</td><td class="num">20.2</td><td class="num">17.4</td><td class="num">17.3</td><td class="num">17.3</td><td class="num up">17.8 ▲</td></tr>
+            <tr><td class="row-head">ROE（摊薄）%</td><td class="num">16.5</td><td class="num">14.9</td><td class="num">14.2</td><td class="num">14.3</td><td class="num flat">3.6</td></tr>
+            <tr><td class="row-head">资产负债率 %</td><td class="num">26.2</td><td class="num">24.9</td><td class="num">24.1</td><td class="num">23.8</td><td class="num down">23.5 ▼</td></tr>
+            <tr><td class="row-head">经营现金流（亿元）</td><td class="num">1,097</td><td class="num">886</td><td class="num">902</td><td class="num">910</td><td class="num up">248 ▲</td></tr>
+            <tr><td class="row-head">股息率 %</td><td class="num">5.6</td><td class="num">6.0</td><td class="num">6.3</td><td class="num">6.1</td><td class="num">—</td></tr>
+          </tbody>
+        </table>
+        <div style="font-size:9.5px;color:var(--faint);margin-top:4px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据。</div>
+      </div>
+
+      <!-- 投资逻辑 -->
+      <div class="section">
+        <div class="sec-title">投资逻辑</div>
+        <ul class="thesis">
+          <li>一体化「煤电路港航」协同，长协煤占比高，盈利穿越煤价周期、波动显著低于纯煤企。</li>
+          <li>高分红承诺：分红率长期不低于 60%，当前股息率 6%+，具备类债券收息属性。</li>
+          <li>资产负债表干净，低负债 + 净现金，符合格雷厄姆式财务稳健与安全边际要求。</li>
+          <li>火电 + 新能源装机构建第二增长曲线，从纯周期向「周期 + 公用」估值中枢迁移。</li>
+        </ul>
+      </div>
+
+      <!-- 风险提示 -->
+      <div class="section">
+        <div class="sec-title">风险提示</div>
+        <ul class="risk">
+          <li>动力煤现货价超预期下行，长协价重谈带来盈利下修压力。</li>
+          <li>宏观经济复苏不及预期，压制电力需求与发电量。</li>
+          <li>资本开支加大或分红率下调，削弱收息逻辑。</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <!-- 右侧栏 -->
+    <div class="col-side">
+
+      <!-- 估值面板 -->
+      <div class="section">
+        <div class="sec-title">估值面板 <span class="hint">历史分位</span></div>
+        <div class="val-grid">
+          <div class="val-item">
+            <div class="lbl">市盈率<b>PE（TTM）</b></div>
+            <div class="val"><div class="v">13.2<span style="font-size:10px;color:var(--muted)">x</span></div><div class="pct pct-low">分位 35% · 偏低</div></div>
+          </div>
+          <div class="val-item">
+            <div class="lbl">市净率<b>PB（MRQ）</b></div>
+            <div class="val"><div class="v">1.45<span style="font-size:10px;color:var(--muted)">x</span></div><div class="pct">分位 40% · 合理</div></div>
+          </div>
+          <div class="val-item">
+            <div class="lbl">股息率<b>Dividend Yield</b></div>
+            <div class="val"><div class="v" style="color:var(--up)">6.1<span style="font-size:10px">%</span></div><div class="pct pct-low">分位 85% · 高位</div></div>
+          </div>
+        </div>
+
+        <div class="graham">
+          <div class="g-title">格雷厄姆质量体检</div>
+          <div class="g-row"><span>资产负债率</span><b>23.5% · 优秀</b></div>
+          <div class="g-row"><span>流动比率</span><b>2.1 · 稳健</b></div>
+          <div class="g-row"><span>盈利稳定性（5年）</span><b>连续正盈利</b></div>
+          <div class="g-row"><span>净现金 / 有息负债</span><b>净现金状态</b></div>
+          <div class="g-score">综合质量评分：<b>8.2 / 10</b>（防御型及格线 6.5）</div>
+        </div>
+      </div>
+
+      <!-- 复盘层 -->
+      <div class="section">
+        <div class="sec-title">季度复盘 <span class="hint">上季假设 → 实际 → 验证</span></div>
+        <div class="review">
+          <div class="r-title"><span class="dot"></span>2026 Q2 复盘</div>
+          <div class="r-row"><span class="k">上季假设：</span>Q2 煤价企稳，长协价维持，盈利环比基本持平。</div>
+          <div class="r-row"><span class="k">实际：</span>现货煤价小幅反弹，长协履约稳定，归母净利略超预期。</div>
+          <div class="r-row verified"><span class="k">验证 ✓：</span>「盈利穿越周期」主逻辑成立。</div>
+          <div class="r-row refuted"><span class="k">打脸 ✗：</span>Q2 火电发电量低于预期，第二曲线贡献仍需观察。</div>
+        </div>
+      </div>
+
+      <!-- 数据校验 -->
+      <div class="section">
+        <div class="sec-title">数据校验记录</div>
+        <div class="verify">
+          <div><b>数据来源：</b>AKShare（主） + 东方财富（备用）</div>
+          <div><b>财务口径：</b>以公司财报 / Wind 一致预期为准</div>
+          <div><b>校验日期：</b>2026-08-20</div>
+          <div><b>校验人：</b>李潇</div>
+          <div><b>备注：</b>本页为模板演示，数据为示例值，正式发布前需逐项核对。</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- 页脚 -->
+  <div class="footer">
+    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含价格点位、仓位与买卖建议。
+  </div>
+
+</div>
+</body>
+</html>

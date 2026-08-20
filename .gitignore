@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 本地数据缓存（不提交原始行情/财务数据）
+data/raw/
+data/cache/
+*.parquet
+*.sqlite
+*.db
+
+# 报告输出（可选：如需归档历史报告可放开 reports/）
+# reports/
+
+# 导出产物
+*.png
+*.pdf
+
+# 环境与密钥
+.env
+.env.local
+*.token
+
+# 系统
+.DS_Store
+Thumbs.db
