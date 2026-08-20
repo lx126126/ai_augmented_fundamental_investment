@@ -29,12 +29,12 @@ body {
   padding: 24px 0;
 }
 .page {
-  width: 794px;
-  min-height: 1123px;
+  width: 1122px;
+  min-height: 1587px;
   margin: 0 auto;
   background: #ffffff;
   box-shadow: 0 2px 16px rgba(15, 61, 110, 0.10);
-  padding: 30px 40px 26px;
+  padding: 34px 44px 30px;
   display: flex;
   flex-direction: column;
 }
@@ -55,10 +55,10 @@ body {
 
 /* 全历史宽表 */
 .table-scroll { overflow-x: auto; }
-table.dense { width: 100%; border-collapse: collapse; font-size: 8.5px; table-layout: fixed; }
-table.dense th, table.dense td { padding: 3px 2px; text-align: right; border-bottom: 1px solid var(--line-soft); overflow: hidden; }
-table.dense th.name, table.dense td.name { text-align: left; width: 96px; }
-table.dense th { background: var(--bg-soft); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); font-size: 8px; }
+table.dense { width: 100%; border-collapse: collapse; font-size: 9.5px; table-layout: fixed; }
+table.dense th, table.dense td { padding: 4px 3px; text-align: right; border-bottom: 1px solid var(--line-soft); overflow: hidden; }
+table.dense th.name, table.dense td.name { text-align: left; width: 112px; }
+table.dense th { background: var(--bg-soft); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); font-size: 9px; }
 table.dense td.num { font-variant-numeric: tabular-nums; }
 table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 9px; text-align: left; border-bottom: 1px solid var(--line); }
 table.dense .row-head { font-weight: 500; color: #33404f; }
@@ -149,6 +149,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .verify { font-size: 10px; color: var(--faint); line-height: 1.7; }
 .verify b { color: var(--muted); font-weight: 600; }
 .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 9.5px; color: var(--faint); line-height: 1.6; }
+@page { size: A3; margin: 0; }
 @media print { body { background: #fff; padding: 0; } .page { box-shadow: none; margin: 0; width: 100%; min-height: auto; } }
 </style>
 </head>
