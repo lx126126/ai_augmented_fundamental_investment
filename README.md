@@ -33,11 +33,15 @@
 ├── scripts/
 │   ├── build_valueline.py      # 生成模板（含示例数据 + 图表 SVG 计算）
 │   └── export.py               # HTML -> PNG 长图 / PDF 导图脚本
+├── docs/
+│   └── architecture.md         # 架构设计（报告分层 / 数据层 / 调度 / 选型）
 ├── data/                       # 本地数据缓存（gitignore，不提交）
 ├── reports/                    # 报告输出（按季度归档，如 2026Q2/）
 ├── watchlist/                  # 跟踪池清单（5-8 只）
 └── README.md
 ```
+
+> 完整架构设计见 [docs/architecture.md](docs/architecture.md)。
 
 > 数据层 / 分析层代码（`src/data`、`src/analysis`）将在下一阶段搭建，本轮聚焦模板。
 
