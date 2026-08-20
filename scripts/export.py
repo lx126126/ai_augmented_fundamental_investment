@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 
-def export(html_path: Path, out_dir: Path, formats: list[str], width: int = 1122) -> None:
+def export(html_path: Path, out_dir: Path, formats: list[str], width: int = 1080) -> None:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -36,7 +36,7 @@ def export(html_path: Path, out_dir: Path, formats: list[str], width: int = 1122
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page(
-            viewport={"width": width, "height": 1600},
+            viewport={"width": width, "height": 2000},
             device_scale_factor=2,
         )
         page.goto(uri)
@@ -45,7 +45,7 @@ def export(html_path: Path, out_dir: Path, formats: list[str], width: int = 1122
         if "png" in formats:
             page.screenshot(path=str(out_dir / f"{stem}.png"), full_page=True)
         if "pdf" in formats:
-            page.pdf(path=str(out_dir / f"{stem}.pdf"), format="A3", print_background=True)
+            page.pdf(path=str(out_dir / f"{stem}.pdf"), prefer_css_page_size=True, print_background=True)
 
         browser.close()
 
