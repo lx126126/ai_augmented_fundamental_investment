@@ -68,12 +68,21 @@ QUARTERLY = [
     (None, "股息率 %", [6.0, 6.1, 6.2, 6.1, 6.3, 6.2, 6.3, 6.4]),
 ]
 
-# ============ 业务收入构成（最新报告期，示例数据） ============
+# ============ 业务收入构成（近两年季度，示例数据） ============
+# 结构：(业务条线, 颜色, [8季度收入], [8季度毛利率])
 SEGMENTS = [
-    ("煤炭业务", 2150, 64.2, "#378ADD"),
-    ("电力业务", 780, 23.3, "#E24B4A"),
-    ("运输业务", 280, 8.4, "#BA7517"),
-    ("煤化工业务", 140, 4.2, "#888780"),
+    ("煤炭业务", "#378ADD",
+     [540, 530, 560, 550, 545, 538, 555, 550],
+     [45.2, 44.8, 46.1, 45.8, 45.0, 44.5, 46.3, 45.8]),
+    ("电力业务", "#E24B4A",
+     [195, 190, 200, 198, 196, 194, 202, 200],
+     [15.2, 14.8, 15.6, 15.3, 15.0, 14.6, 15.8, 15.5]),
+    ("运输业务", "#BA7517",
+     [70, 68, 72, 70, 69, 68, 71, 70],
+     [28.5, 28.0, 29.2, 28.8, 28.3, 28.0, 29.0, 28.6]),
+    ("煤化工业务", "#888780",
+     [35, 34, 36, 35, 34, 34, 35, 35],
+     [12.3, 12.0, 12.8, 12.5, 12.2, 12.0, 12.6, 12.4]),
 ]
 
 
@@ -122,23 +131,40 @@ def build_quarter_table() -> str:
 
 
 def build_segments() -> str:
-    rows = []
-    for name, rev, pct, color in SEGMENTS:
-        rows.append(
-            f'<tr><td><span class="seg-dot" style="background:{color}"></span>{name}</td>'
-            f'<td class="num">{rev:,}</td><td class="num">{pct:.1f}%</td></tr>'
+    def _table(metric_idx: int, unit: str) -> str:
+        head = "".join(f"<th>{q}</th>" for q in QUARTER_LABELS)
+        rows = []
+        for name, color, revs, margins in SEGMENTS:
+            vals = revs if metric_idx == 0 else margins
+            cells = [f'<td class="row-head"><span class="seg-dot" style="background:{color}"></span>{name}</td>']
+            cells += [f'<td class="num">{_fmt(v)}</td>' for v in vals]
+            rows.append("<tr>" + "".join(cells) + "</tr>")
+        return (
+            f'<table class="dense"><thead><tr><th class="name">{unit}</th>{head}</tr></thead>'
+            f'<tbody>{"".join(rows)}</tbody></table>'
         )
+
+    rev_table = _table(0, "业务条线")
+    margin_table = _table(1, "业务条线")
+
+    latest = [s[2][-1] for s in SEGMENTS]  # 最新季度收入
+    total = sum(latest)
     bar = "".join(
-        f'<div class="seg" style="width:{pct}%;background:{color}"></div>'
-        for _, _, pct, color in SEGMENTS
+        f'<div class="seg" style="width:{v / total * 100:.1f}%;background:{s[1]}"></div>'
+        for s, v in zip(SEGMENTS, latest)
     )
+    legend = "".join(
+        f'<span class="seg-legend"><span class="seg-dot" style="background:{s[1]}"></span>{s[0]} {v / total * 100:.1f}%</span>'
+        for s, v in zip(SEGMENTS, latest)
+    )
+
     return (
-        '<div class="segments">'
-        '<div class="seg-title">业务收入构成（最新报告期）</div>'
-        '<table class="seg-table"><thead><tr><th>业务条线</th><th>收入（亿元）</th><th>占比</th></tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table>'
-        f'<div class="seg-bar">{bar}</div>'
+        '<div class="seg-row">'
+        f'<div class="seg-block"><div class="seg-block-title">收入（亿元）</div>{rev_table}</div>'
+        f'<div class="seg-block"><div class="seg-block-title">毛利率（%）</div>{margin_table}</div>'
         "</div>"
+        f'<div class="seg-bar">{bar}</div>'
+        f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新季度收入占比）</span></div>'
     )
 
 
@@ -205,10 +231,10 @@ table.dense td.num { font-variant-numeric: tabular-nums; }
 table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 10px; text-align: left; border-bottom: 1px solid var(--line); }
 table.dense .row-head { font-weight: 500; color: #33404f; }
 
-/* 季度表 + 业务收入构成 横排 */
-.quarter-row { display: flex; gap: 18px; align-items: flex-start; }
-.quarter-left { flex: 0 0 60%; }
-.quarter-right { flex: 0 0 40%; }
+/* 业务收入构成（两张表并排） */
+.seg-row { display: flex; gap: 18px; }
+.seg-block { flex: 1; }
+.seg-block-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 
 /* 商业模式 */
 .biz-row { display: flex; padding: 7px 0; border-bottom: 1px dashed var(--line-soft); font-size: 12px; line-height: 1.7; }
@@ -217,16 +243,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .biz-v { flex: 1; color: #33404f; }
 
 /* 业务收入构成 */
-.segments { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
-.seg-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 9px; }
-table.seg-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-table.seg-table th, table.seg-table td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--line-soft); }
-table.seg-table th:first-child, table.seg-table td:first-child { text-align: left; }
-table.seg-table th { background: var(--bg-soft); color: var(--muted); font-weight: 600; font-size: 10px; }
-table.seg-table td.num { font-variant-numeric: tabular-nums; }
 .seg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
-.seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 10px; }
+.seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; }
 .seg-bar .seg { height: 100%; }
+.seg-legend-row { font-size: 10px; color: var(--faint); margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.seg-note { color: var(--faint); }
 
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
@@ -368,16 +390,12 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
-    <div class="sub-title">近两年季度（24Q3–26Q2）与业务收入构成</div>
-    <div class="quarter-row">
-      <div class="quarter-left">
+    <div class="sub-title">近两年季度（24Q3–26Q2）</div>
 @@QUARTER_TABLE@@
-      </div>
-      <div class="quarter-right">
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
+
+    <div class="sub-title">业务收入构成（近两年季度）</div>
 @@SEGMENTS@@
-      </div>
-    </div>
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值；业务收入构成为最新报告期数据。</div>
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
   </div>
 
