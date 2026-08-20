@@ -27,3 +27,6 @@ data/cache/
 # 系统
 .DS_Store
 Thumbs.db
+
+# WorkBuddy 本地记忆（含隐私，严禁入库）
+.workbuddy/
