@@ -37,7 +37,19 @@ FINANCIALS = [
     (None, "普通股数量（亿股）", [198.7] * 19),
     (None, "优先股数量（亿股）", [0] * 19),
     ("股东回报", None, None),
+    (None, "分红比例 %", [42, 45, 44, 46, 48, 50, 52, 48, 45, 50, 55, 58, 60, 62, 65, 70, 72, 70, 72]),
     (None, "股息率 %", [3.5, 3.8, 4.0, 4.2, 4.5, 4.6, 4.8, 5.0, 4.5, 4.2, 4.8, 5.2, 5.5, 5.8, 6.0, 5.6, 6.0, 6.3, 6.4]),
+]
+
+# ============ 近两年季度（单季度，示例数据，非精确） ============
+QUARTER_LABELS = ["24Q3", "24Q4", "25Q1", "25Q2", "25Q3", "25Q4", "26Q1", "26Q2"]
+QUARTERLY = [
+    ("营业收入（亿元）", [850, 820, 870, 856, 840, 830, 860, 856]),
+    ("归母净利润（亿元）", [148, 135, 155, 152, 145, 138, 158, 152]),
+    ("毛利率 %", [38.2, 37.5, 38.8, 38.6, 38.0, 37.6, 38.9, 38.6]),
+    ("净利率 %", [17.4, 16.5, 17.8, 17.8, 17.3, 16.6, 18.4, 17.8]),
+    ("ROE（单季）%", [3.1, 2.8, 3.3, 3.6, 3.0, 2.9, 3.4, 3.6]),
+    ("经营现金流净额（亿元）", [240, 210, 260, 248, 235, 220, 270, 248]),
 ]
 
 
@@ -64,6 +76,19 @@ def build_table() -> str:
         f'<table class="dense"><thead><tr><th class="name">指标</th>{head}</tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
         "</div>"
+    )
+
+
+def build_quarter_table() -> str:
+    head = "".join(f"<th>{q}</th>" for q in QUARTER_LABELS)
+    rows = []
+    for name, vals in QUARTERLY:
+        cells = [f'<td class="row-head">{name}</td>']
+        cells += [f'<td class="num">{_fmt(v)}</td>' for v in vals]
+        rows.append("<tr>" + "".join(cells) + "</tr>")
+    return (
+        f'<table class="dense quarter"><thead><tr><th class="name">单季度指标</th>{head}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
     )
 
 
@@ -117,6 +142,7 @@ body {
 .section { margin-bottom: 20px; }
 .sec-title { font-size: 15px; font-weight: 700; color: var(--accent); padding-bottom: 6px; margin-bottom: 11px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
 .sec-title .hint { font-size: 11px; font-weight: 400; color: var(--faint); }
+.sub-title { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; }
 .disclaim { font-size: 10px; color: var(--faint); margin-bottom: 8px; }
 
 /* 全历史宽表 */
@@ -128,6 +154,8 @@ table.dense th { background: var(--bg-soft); color: var(--muted); font-weight: 6
 table.dense td.num { font-variant-numeric: tabular-nums; }
 table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 10px; text-align: left; border-bottom: 1px solid var(--line); }
 table.dense .row-head { font-weight: 500; color: #33404f; }
+table.dense.quarter { font-size: 10.5px; }
+table.dense.quarter th.name, table.dense.quarter td.name { width: 132px; }
 
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
@@ -150,7 +178,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
 .consensus b { color: var(--ink); }
-.consensus .tp { font-size: 15px; color: var(--accent); font-weight: 700; }
+.tp-grid { display: flex; gap: 8px; margin: 7px 0; }
+.tp-cell { flex: 1; text-align: center; padding: 7px 4px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
+.tp-cell .k { font-size: 9.5px; color: var(--faint); }
+.tp-cell .v { font-size: 15px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
 .rating-bar { display: flex; height: 11px; border-radius: 5px; overflow: hidden; margin: 6px 0 5px; }
 .rating-bar .seg { height: 100%; }
 .rating-legend { font-size: 10px; color: var(--faint); display: flex; gap: 12px; }
@@ -248,7 +279,9 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:5px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+    <div class="sub-title">近两年季度（单季度）</div>
+@@QUARTER_TABLE@@
+    <div style="font-size:10px;color:var(--faint);margin-top:8px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
   </div>
 
   <div class="section">
@@ -258,17 +291,17 @@ TEMPLATE = """<!DOCTYPE html>
       <div class="val-item">
         <div class="lbl">市盈率 PE（TTM）</div>
         <div class="v">13.2<small>x</small></div>
-        <div class="pct pct-low">分位 35% · 偏低</div>
+        <div class="pct pct-low">近10年分位 35% · 偏低</div>
       </div>
       <div class="val-item">
         <div class="lbl">市净率 PB（MRQ）</div>
         <div class="v">1.45<small>x</small></div>
-        <div class="pct">分位 40% · 合理</div>
+        <div class="pct">近10年分位 40% · 合理</div>
       </div>
       <div class="val-item">
         <div class="lbl">股息率</div>
         <div class="v" style="color:var(--up)">6.1<small>%</small></div>
-        <div class="pct pct-low">分位 85% · 高位</div>
+        <div class="pct pct-low">近10年分位 85% · 高位</div>
       </div>
     </div>
 
@@ -283,7 +316,13 @@ TEMPLATE = """<!DOCTYPE html>
         </div>
       </div>
       <div class="consensus">
-        <div>机构一致目标价 <span class="tp">45.0</span> 元（<b>28</b> 家覆盖）</div>
+        <div>机构目标价（<b>28</b> 家覆盖，单位：元）</div>
+        <div class="tp-grid">
+          <div class="tp-cell"><div class="k">最高</div><div class="v">52.0</div></div>
+          <div class="tp-cell"><div class="k">最低</div><div class="v">38.0</div></div>
+          <div class="tp-cell"><div class="k">平均</div><div class="v">45.0</div></div>
+          <div class="tp-cell"><div class="k">中位</div><div class="v">44.5</div></div>
+        </div>
         <div class="rating-bar">
           <div class="seg" style="width:43%;background:#c0392b"></div>
           <div class="seg" style="width:36%;background:#e8a09b"></div>
@@ -396,6 +435,7 @@ def build() -> None:
         TEMPLATE
         .replace("@@CSS@@", CSS)
         .replace("@@TABLE@@", build_table())
+        .replace("@@QUARTER_TABLE@@", build_quarter_table())
     )
     out = Path(__file__).resolve().parent.parent / "templates" / "valueline.html"
     out.write_text(html, encoding="utf-8")
