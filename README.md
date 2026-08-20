@@ -41,7 +41,9 @@
 
 > 数据层 / 分析层代码（`src/data`、`src/analysis`）将在下一阶段搭建，本轮聚焦模板。
 
-## ValueLine 模板 v1.3 字段说明
+## ValueLine 模板 v1.5 字段说明
+
+> **载体形态**：纵向长图（1080px 宽 × 高度自适应），单栏纵向堆叠，适配小程序上下滑动与小红书笔记。
 
 | 模块 | 字段 | 方法论锚点 |
 |------|------|-----------|
@@ -69,6 +71,7 @@
 # 导出 PNG 长图 + PDF（首次需装 playwright）
 pip install playwright && playwright install chromium
 python scripts/export.py templates/valueline.html -o reports/2026Q2 -f png pdf
+# PNG 为 @2x 超清长图（2160px 宽），可直接用于小程序/小红书
 ```
 
 ## 铁律（合规）
