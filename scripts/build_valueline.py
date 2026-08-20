@@ -68,6 +68,14 @@ QUARTERLY = [
     (None, "股息率 %", [6.0, 6.1, 6.2, 6.1, 6.3, 6.2, 6.3, 6.4]),
 ]
 
+# ============ 业务收入构成（最新报告期，示例数据） ============
+SEGMENTS = [
+    ("煤炭业务", 2150, 64.2, "#378ADD"),
+    ("电力业务", 780, 23.3, "#E24B4A"),
+    ("运输业务", 280, 8.4, "#BA7517"),
+    ("煤化工业务", 140, 4.2, "#888780"),
+]
+
 
 def _fmt(v) -> str:
     if v is None:
@@ -106,8 +114,31 @@ def build_quarter_table() -> str:
         cells += [f'<td class="num">{_fmt(v)}</td>' for v in vals]
         rows.append("<tr>" + "".join(cells) + "</tr>")
     return (
-        f'<table class="dense quarter"><thead><tr><th class="name">指标</th>{head}</tr></thead>'
+        '<div class="table-scroll">'
+        f'<table class="dense"><thead><tr><th class="name">指标</th>{head}</tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
+        "</div>"
+    )
+
+
+def build_segments() -> str:
+    rows = []
+    for name, rev, pct, color in SEGMENTS:
+        rows.append(
+            f'<tr><td><span class="seg-dot" style="background:{color}"></span>{name}</td>'
+            f'<td class="num">{rev:,}</td><td class="num">{pct:.1f}%</td></tr>'
+        )
+    bar = "".join(
+        f'<div class="seg" style="width:{pct}%;background:{color}"></div>'
+        for _, _, pct, color in SEGMENTS
+    )
+    return (
+        '<div class="segments">'
+        '<div class="seg-title">业务收入构成（最新报告期）</div>'
+        '<table class="seg-table"><thead><tr><th>业务条线</th><th>收入（亿元）</th><th>占比</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
+        f'<div class="seg-bar">{bar}</div>'
+        "</div>"
     )
 
 
@@ -173,8 +204,29 @@ table.dense th { background: var(--bg-soft); color: var(--muted); font-weight: 6
 table.dense td.num { font-variant-numeric: tabular-nums; }
 table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 10px; text-align: left; border-bottom: 1px solid var(--line); }
 table.dense .row-head { font-weight: 500; color: #33404f; }
-table.dense.quarter { font-size: 10.5px; }
-table.dense.quarter th.name, table.dense.quarter td.name { width: 132px; }
+
+/* 季度表 + 业务收入构成 横排 */
+.quarter-row { display: flex; gap: 18px; align-items: flex-start; }
+.quarter-left { flex: 0 0 60%; }
+.quarter-right { flex: 0 0 40%; }
+
+/* 商业模式 */
+.biz-row { display: flex; padding: 7px 0; border-bottom: 1px dashed var(--line-soft); font-size: 12px; line-height: 1.7; }
+.biz-row:last-child { border-bottom: none; }
+.biz-k { flex: 0 0 78px; font-weight: 700; color: var(--accent); }
+.biz-v { flex: 1; color: #33404f; }
+
+/* 业务收入构成 */
+.segments { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.seg-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 9px; }
+table.seg-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+table.seg-table th, table.seg-table td { padding: 5px 4px; text-align: right; border-bottom: 1px solid var(--line-soft); }
+table.seg-table th:first-child, table.seg-table td:first-child { text-align: left; }
+table.seg-table th { background: var(--bg-soft); color: var(--muted); font-weight: 600; font-size: 10px; }
+table.seg-table td.num { font-variant-numeric: tabular-nums; }
+.seg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 10px; }
+.seg-bar .seg { height: 100%; }
 
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
@@ -291,16 +343,41 @@ TEMPLATE = """<!DOCTYPE html>
     </div>
   </div>
 
-  <div class="summary">
-    <b>一句话定位：</b>煤、电、路、港、航一体化能源龙头，长协煤锁定盈利，现金流充沛、分红慷慨，具备类债券属性的周期成长型现金牛。
+  <div class="section">
+    <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
+    <div class="biz">
+      <div class="biz-row">
+        <div class="biz-k">盈利来源</div>
+        <div class="biz-v">煤炭生产销售（动力煤）＋火电发电＋铁路/港口/航运＋煤化工，一体化运营；煤炭为利润核心，电力与运输为稳定补充。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">盈利结构</div>
+        <div class="biz-v">煤炭业务贡献约 64% 收入与主要毛利，长协煤锁定价格；电力、运输平滑煤价周期波动。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">竞争地位</div>
+        <div class="biz-v">全球最大煤炭上市公司、国内动力煤龙头，核定产能与可采储量位居行业前列。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">护城河</div>
+        <div class="biz-v">资源禀赋（低成本大矿）＋一体化协同（煤电路港航）＋长协煤锁定＋规模与牌照壁垒。</div>
+      </div>
+    </div>
   </div>
 
   <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
-    <div class="sub-title">近两年季度（24Q3–26Q2）</div>
+    <div class="sub-title">近两年季度（24Q3–26Q2）与业务收入构成</div>
+    <div class="quarter-row">
+      <div class="quarter-left">
 @@QUARTER_TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
+      </div>
+      <div class="quarter-right">
+@@SEGMENTS@@
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值；业务收入构成为最新报告期数据。</div>
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
   </div>
 
@@ -456,6 +533,7 @@ def build() -> None:
         .replace("@@CSS@@", CSS)
         .replace("@@TABLE@@", build_table())
         .replace("@@QUARTER_TABLE@@", build_quarter_table())
+        .replace("@@SEGMENTS@@", build_segments())
     )
     out = Path(__file__).resolve().parent.parent / "templates" / "valueline.html"
     out.write_text(html, encoding="utf-8")
