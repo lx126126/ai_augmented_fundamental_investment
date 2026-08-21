@@ -52,10 +52,10 @@
         方法论底座：格雷厄姆流派 + 彼得·林奇六类
 ```
 
-- **数据层**：多源采集 → 清洗校验 → 预计算入库（全市场批量 ETL）
+- **数据层**：多源采集 → 文档解析（XBRL/PDF 财报结构化抽取）→ 清洗校验 → 预计算入库（全市场批量 ETL）
 - **分析层**：基本面指标、估值分位、林奇六类分类、格雷厄姆质量体检、财务造假检测
-- **报告层**：ValueLine 一页 HTML 模板 + 季度更新引擎 + 跟踪池管理
-- **产品层**：微信小程序（搜索即出报告）+ 内容发布 + 后端 API
+- **报告层**：ValueLine 一页 HTML 模板 + LLM 文本生成 + 季度更新引擎 + 跟踪池管理
+- **产品层**：微信小程序（搜索即出报告）+ FastAPI 后端 + 内容发布
 
 ---
 
@@ -70,6 +70,8 @@
 | 机构目标价 / 评级 | AKShare / 东财 | Wind（若有） | 持续更新 |
 | 分业务收入构成 | 公司财报 | 东财 | 季度/年度 |
 | 股本结构（普通股/优先股） | 财报 | — | 变动时 |
+
+> **文档解析（XBRL / PDF / HTML 结构化抽取）**：财报与公告的原始形态是 PDF / XBRL / HTML，需抽取为可用表格——XBRL（A 股财报标准披露格式，解析三表 + 附注标签）、PDF 财报（招股书/年报，含图片型 PDF 与复杂表格、中英文，规则解析 + LLM 视觉模型兜底）、HTML 公告（巨潮等）。此模块对齐岗位的「文档解析」能力，与金融数据方向天然契合。
 
 ### 4.2 预计算方案（关键）
 
@@ -104,13 +106,17 @@
 | 本地开发 + 分析 | **DuckDB** | 嵌入式、列式存储、分析查询快、parquet 原生支持、零运维 |
 | 产品层 API（小程序后端） | **PostgreSQL** | 多用户并发、服务化、生态成熟 |
 | 文件层 | **parquet + COS** | 原始数据与中间结果归档，云存储 |
+| 云数仓（规模化迁移目标） | **Snowflake / BigQuery** | schema 化表格设计与维护、弹性算力，对齐岗位「现代云数据仓库」要求 |
 
-> 分阶段：开发阶段 DuckDB + parquet 本地；产品阶段 PostgreSQL 承接 API 查询，parquet 走 COS 归档。
+> 分阶段：开发阶段 DuckDB + parquet 本地；产品阶段 PostgreSQL 承接 API 查询，parquet 走 COS 归档。Snowflake/BigQuery 作为规模化后的迁移目标，schema 设计保持与 Postgres 兼容。
 
-### 4.5 数据质量
+### 4.5 数据质量与监控
 
 - 财报数据以公司官方披露为准，逐项校验（模板内「数据校验记录」模块留痕）
 - 机构数据标注截至日期与家数
+- **数据质量检验**：缺失值 / 异常值 / 口径一致性校验，未通过则告警
+- **血缘追踪**：字段级 lineage 标注（源 → 清洗 → 指标），可追溯
+- **调度告警**：任务失败 / 延迟告警（Airflow 通知）
 
 ---
 
@@ -144,6 +150,12 @@ Playwright 导图（PNG @2x / PDF）
 
 **铁律：LLM 只「翻译」不「编数据」** —— 财务数据必须是拉取的真实值，LLM 只负责把数据讲成投研语言，防止幻觉与失真。
 
+**LLM 工程化**（对齐岗位「LLM 层」要求）：
+
+- **结构化输出**：JSON schema / function calling 约束 LLM 输出，直接落库与渲染
+- **RAG**：财报原文 / 研报片段向量化检索，作为生成上下文（复用 Milvus + ES 经验）
+- **评估与质量监控**：生成文本与数据一致性校验、幻觉检测、简单评分
+
 ### 6.2 模板结构（当前 v1.x）
 
 头部 → 商业模式 → 核心财务数据（年度全历史 + 近两年季度 + 业务收入构成）→ 估值与市场 → 投资逻辑 → 风险 → 机构观点分歧 → 财务造假检测 → 季度复盘 → 数据校验 → 免责页脚
@@ -166,7 +178,13 @@ Playwright 导图（PNG @2x / PDF）
 - 跟踪池标的 → 展示「深度研报」（深度层）
 - 长图上下滑动浏览
 
-### 7.2 合规分级（前置约束，非事后补丁）
+### 7.2 后端服务层（FastAPI）
+
+- **FastAPI** 提供查询 API：股票搜索 → 返回结构化数据 + 报告 HTML
+- 服务下游分析师工具与小程序前端
+- 生产经验：gunicorn 部署、并发控制、探活（复用公司实战经验）
+
+### 7.3 合规分级（前置约束，非事后补丁）
 
 | 层级 | 内容 |
 |------|------|
@@ -180,14 +198,18 @@ Playwright 导图（PNG @2x / PDF）
 ## 8. AI-Native 数据管道（技术亮点，兼顾简历）
 
 ```
-Airflow/Prefect 调度 → 全市场批量 ETL → DuckDB/PostgreSQL 入库
-        → 指标计算 + 造假检测 → LLM 生成报告文本 → 模板渲染 → 导图
+Airflow 调度 → 多源抓取 + 文档解析(XBRL/PDF) → 全市场批量 ETL
+        → DuckDB/PostgreSQL 入库(含血缘追踪) → 指标计算 + 造假检测
+        → LLM 生成报告文本(结构化输出+RAG) → 模板渲染 → 导图
+        → FastAPI 查询 API
 ```
 
-- **调度**：Airflow（最小 DAG，本地运行，0 成本）或 Prefect
-- **LLM 应用**：造假检测 + 报告文本生成（vLLM/Qwen）
-- **云存储**：COS / S3
-- 此架构同时服务产品与简历，覆盖「编排 + 批量 ETL + 数据库选型 + LLM 应用」四块数据工程核心能力
+- **调度**：Airflow（最小 DAG，本地运行，0 成本）或 Prefect / Dagster
+- **文档解析**：XBRL / PDF / HTML 结构化抽取
+- **LLM 应用**：造假检测 + 报告文本生成（vLLM/Qwen + OpenAI/Anthropic API），结构化输出 + RAG + 评估
+- **后端**：FastAPI 查询 API
+- **云**：COS / S3 存储；Snowflake / BigQuery 云数仓（规模化迁移目标）
+- 此架构覆盖岗位「源数据接入 + 文档解析 + 数仓 + 编排监控 + LLM 层 + 后端 + 云」全部七块核心能力
 
 ---
 
@@ -209,9 +231,12 @@ Airflow/Prefect 调度 → 全市场批量 ETL → DuckDB/PostgreSQL 入库
 |----|------|
 | 语言 | Python |
 | 数据源 | AKShare（主）+ mootdx/腾讯（备用） |
-| 调度 | Airflow（最小 DAG）/ Prefect |
-| 存储 | DuckDB（开发）+ PostgreSQL（产品）+ parquet/COS |
-| LLM | vLLM / Qwen3 |
+| 文档解析 | XBRL / PDF / HTML（规则解析 + LLM 视觉模型兜底） |
+| 调度 | Airflow（最小 DAG）/ Prefect / Dagster |
+| 存储 | DuckDB（开发）+ PostgreSQL（产品）+ parquet/COS + Snowflake/BigQuery（迁移） |
+| 数据质量 | 校验 + 告警 + 血缘追踪 |
+| LLM | vLLM / Qwen3 + OpenAI/Anthropic API，结构化输出 + RAG + 评估 |
+| 后端 | FastAPI + gunicorn |
 | 报告 | HTML 模板 + Playwright 导图 |
 | 产品 | 微信小程序 + 后端 API |
 | 版本控制 | GitHub |
