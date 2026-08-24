@@ -1,0 +1,95 @@
+"""字段映射：AKShare 接口字段 → 标准字段名（snake_case）。
+
+数据层统一使用标准字段名，屏蔽上游接口的中文/英文列名差异。
+"""
+from __future__ import annotations
+
+# ---------------------------------------------------------------------------
+# 1. 财务指标接口 stock_financial_analysis_indicator（中文列名，比率型指标）
+# ---------------------------------------------------------------------------
+FINANCIAL_INDICATOR_MAP = {
+    "日期": "report_date",
+    # 盈利能力
+    "销售毛利率(%)": "gross_margin_pct",
+    "销售净利率(%)": "net_margin_pct",
+    "营业利润率(%)": "operating_margin_pct",
+    "主营业务利润率(%)": "main_biz_margin_pct",
+    "净资产收益率(%)": "roe_pct",
+    "加权净资产收益率(%)": "roe_weighted_pct",
+    "总资产利润率(%)": "roa_pct",
+    "总资产净利润率(%)": "roa_net_pct",
+    "成本费用利润率(%)": "cost_profit_pct",
+    # 成长性
+    "主营业务收入增长率(%)": "revenue_yoy_pct",
+    "净利润增长率(%)": "net_profit_yoy_pct",
+    "净资产增长率(%)": "net_assets_yoy_pct",
+    "总资产增长率(%)": "total_assets_yoy_pct",
+    # 偿债能力
+    "资产负债率(%)": "debt_ratio_pct",
+    "流动比率": "current_ratio",
+    "速动比率": "quick_ratio",
+    "现金比率(%)": "cash_ratio_pct",
+    "产权比率(%)": "equity_multiplier_pct",
+    # 营运能力
+    "应收账款周转率(次)": "receivable_turnover",
+    "存货周转率(次)": "inventory_turnover",
+    "总资产周转率(次)": "asset_turnover",
+    "流动资产周转率(次)": "current_asset_turnover",
+    # 现金流质量（造假检测核心）
+    "经营现金净流量与净利润的比率(%)": "ocf_to_profit_pct",
+    "经营现金净流量对销售收入比率(%)": "ocf_to_revenue_pct",
+    "现金流量比率(%)": "cashflow_ratio_pct",
+    # 每股指标
+    "摊薄每股收益(元)": "eps",
+    "每股净资产_调整前(元)": "bps",
+    "每股经营性现金流(元)": "ocf_per_share",
+    # 股东回报
+    "股息发放率(%)": "dividend_payout_pct",
+    # 资产规模
+    "总资产(元)": "total_assets",
+}
+
+# ---------------------------------------------------------------------------
+# 2. 东财利润表 stock_profit_sheet_by_report_em（英文列名，绝对额）
+# ---------------------------------------------------------------------------
+PROFIT_SHEET_MAP = {
+    "REPORT_DATE": "report_date",
+    "REPORT_TYPE": "report_type",
+    "TOTAL_OPERATE_INCOME": "revenue",           # 营业总收入
+    "OPERATE_INCOME": "operating_revenue",        # 营业收入
+    "OPERATE_COST": "operating_cost",             # 营业成本
+    "OPERATE_PROFIT": "operating_profit",         # 营业利润
+    "TOTAL_PROFIT": "total_profit",               # 利润总额
+    "NETPROFIT": "net_profit",                    # 净利润
+    "PARENT_NETPROFIT": "net_profit_parent",      # 归母净利润
+}
+
+# ---------------------------------------------------------------------------
+# 3. 东财资产负债表 stock_balance_sheet_by_report_em（英文列名，时点值）
+# ---------------------------------------------------------------------------
+BALANCE_SHEET_MAP = {
+    "REPORT_DATE": "report_date",
+    "REPORT_TYPE": "report_type",
+    "ASSET_BALANCE": "total_assets",              # 总资产
+    "LIAB_BALANCE": "total_liabilities",          # 总负债
+    "EQUITY_BALANCE": "total_equity",             # 股东权益合计
+    "MONETARYFUNDS": "monetary_funds",            # 货币资金
+    "INVENTORY": "inventory",                     # 存货
+    "ACCOUNTS_RECE": "accounts_receivable",       # 应收账款
+    "GOODWILL": "goodwill",                       # 商誉
+    "FIXED_ASSET": "fixed_assets",                # 固定资产
+    "BORROW_FUND": "borrowings",                  # 借款（有息负债核心）
+    "LONG_LOAN": "long_term_loan",                # 长期借款
+    "SHORT_LOAN": "short_term_loan",              # 短期借款
+}
+
+# ---------------------------------------------------------------------------
+# 4. 东财现金流表 stock_cash_flow_sheet_by_report_em（英文列名）
+# ---------------------------------------------------------------------------
+CASH_FLOW_MAP = {
+    "REPORT_DATE": "report_date",
+    "REPORT_TYPE": "report_type",
+    "NETCASH_OPERATE": "ocf",                     # 经营活动现金流净额
+    "NETCASH_INVEST": "icf",                      # 投资活动现金流净额
+    "NETCASH_FINANCE": "fcf",                     # 筹资活动现金流净额
+}
