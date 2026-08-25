@@ -119,8 +119,45 @@ def fetch_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None
     return df
 
 
+def fetch_quote(code: str) -> pd.DataFrame | None:
+    """腾讯行情：公司名、现价、PE(TTM)、PB、总市值、52周高低（实时精确）。
+
+    走 qt.gtimg.cn（腾讯域名，网络受限时东财 push2 的替代）。
+    字段：name/price/pe/pb/market_cap/price_52w_high/price_52w_low
+    """
+    import requests
+    em = _em_symbol(code).lower()  # sh601088 / sz600519
+    try:
+        r = requests.get(f"https://qt.gtimg.cn/q={em}", timeout=8)
+        r.raise_for_status()
+    except Exception:
+        return None
+    import re
+    m = re.search(r'="([^"]*)"', r.text)
+    if not m:
+        return None
+    f = m.group(1).split("~")
+    if len(f) < 49 or not f[1]:
+        return None
+    def _num(s, default=None):
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return default
+    return pd.DataFrame([{
+        "name": f[1],
+        "price": _num(f[3]),
+        "pe": _num(f[39]),
+        "pb": _num(f[46]),
+        "market_cap": _num(f[45]),
+        "price_52w_high": _num(f[47]),
+        "price_52w_low": _num(f[48]),
+        "symbol": code.zfill(6),
+    }])
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
-    """一次拉取全部六张表，返回 {表名: DataFrame}。"""
+    """一次拉取全部表，返回 {表名: DataFrame}。"""
     data = {
         "financial_indicator": fetch_financial_indicator(code, start_year),
         "profit_sheet": fetch_profit_sheet(code),
@@ -132,4 +169,7 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     val = fetch_valuation(code)
     if val is not None:
         data["valuation"] = val
+    quote = fetch_quote(code)
+    if quote is not None:
+        data["quote"] = quote
     return data

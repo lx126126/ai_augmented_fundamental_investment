@@ -110,7 +110,7 @@ def _q_label(dt) -> str:
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
     """读 parquet 原始数据（含分业务构成 + 估值，最多 7 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -170,10 +170,27 @@ def build_template_data(code: str) -> dict:
             for i, (name, revs, margins) in enumerate(seg_result)
         ]
 
-    # 估值面板（百度估值，可选）
+    # 估值面板（百度估值算分位 + 腾讯行情精确当前值，可选）
     valuation = None
     if "valuation" in raw and "total_shares" in annual.columns:
         valuation = build_valuation(raw["valuation"], annual)
+        # 腾讯行情提供精确的当前 PE/PB/52周/市值，覆盖百度估值稀疏采样
+        if "quote" in raw and valuation is not None:
+            q = raw["quote"].iloc[0]
+            if q.get("pe") and q.get("pe") > 0:
+                valuation["pe"] = q["pe"]
+            if q.get("pb") and q.get("pb") > 0:
+                valuation["pb"] = q["pb"]
+            if q.get("price_52w_low") and q.get("price_52w_high"):
+                valuation["price_low"] = q["price_52w_low"]
+                valuation["price_high"] = q["price_52w_high"]
+            if q.get("price"):
+                valuation["price_now"] = q["price"]
+
+    # 公司名（腾讯行情）
+    company_name = None
+    if "quote" in raw:
+        company_name = raw["quote"].iloc[0].get("name")
 
     # 格雷厄姆体检（从年度财务数据算）
     graham = _build_graham(annual)
@@ -188,6 +205,7 @@ def build_template_data(code: str) -> dict:
         "segments": segments,
         "valuation": valuation,
         "graham": graham,
+        "company_name": company_name,
     }
 
 

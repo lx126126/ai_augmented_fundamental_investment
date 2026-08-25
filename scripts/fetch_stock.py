@@ -29,8 +29,11 @@ def main() -> None:
 
     print("\n各表摘要:")
     for table, df in data.items():
-        print(f"  {table}: {df.shape[0]} 行 × {df.shape[1]} 列, "
-              f"报告期 {df['report_date'].min().date()} ~ {df['report_date'].max().date()}")
+        if "report_date" in df.columns:
+            period = f"报告期 {df['report_date'].min().date()} ~ {df['report_date'].max().date()}"
+        else:
+            period = "（无报告期）"
+        print(f"  {table}: {df.shape[0]} 行 × {df.shape[1]} 列, {period}")
 
 
 if __name__ == "__main__":

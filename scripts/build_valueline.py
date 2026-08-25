@@ -40,6 +40,8 @@ SEGMENT_LABELS = SAMPLE_QUARTER_LABELS  # 示例时分业务用季度标签；�
 SEGMENTS = SAMPLE_SEGMENTS
 VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
 GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
+COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
+COMPANY_CODE = "601088"    # 股票代码
 
 
 def _fmt(v) -> str:
@@ -408,19 +410,18 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="header">
     <div>
-      <div class="co-name">中国神华<span class="en">SHENHUA ENERGY</span></div>
+      <div class="co-name">@@COMPANY_NAME@@</div>
       <div class="co-meta">
-        <span class="code">601088.SH</span> · <span class="code">1088.HK</span>
-        <span class="tag">煤炭开采 · 动力煤</span>
-        <span class="tag">沪深300</span>
-        <div style="margin-top:3px;">报告期：2026 Q2 · 发布日期：2026-08-20</div>
+        <span class="code">@@COMPANY_CODE@@</span>
+        <span class="tag">@@INDUSTRY@@</span>
+        <div style="margin-top:3px;">报告期：@@REPORT_PERIOD@@ · 发布日期：@@PUBLISH_DATE@@</div>
       </div>
     </div>
     <div class="header-right">
-      <span class="quarter">2026 Q2 更新</span>
+      <span class="quarter">@@REPORT_PERIOD@@ 更新</span>
       <div class="badges">
-        <span class="badge lynch">林奇分类：周期型 · 稳健收息</span>
-        <span class="badge graham">格雷厄姆质量：高（低负债 · 净现金）</span>
+        <span class="badge lynch">林奇分类：@@LYNCH_TYPE@@</span>
+        <span class="badge graham">格雷厄姆质量：@@GRAHAM_BADGE@@</span>
       </div>
     </div>
   </div>
@@ -566,7 +567,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, COMPANY_NAME, COMPANY_CODE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -579,6 +580,9 @@ def build(code: str = "601088") -> None:
             SEGMENTS = real["segments"]
         VALUATION = real["valuation"]
         GRAHAM = real["graham"]
+        if real["company_name"]:
+            COMPANY_NAME = real["company_name"]
+        COMPANY_CODE = code
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -587,6 +591,7 @@ def build(code: str = "601088") -> None:
     year_range = f"{YEARS[0]}–{YEARS[-1]}"
     quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"
     segment_range = f"{SEGMENT_LABELS[0]}–{SEGMENT_LABELS[-1]}" if SEGMENT_LABELS else ""
+    publish_date = "2026-08-25"
 
     html = (
         TEMPLATE
@@ -600,6 +605,13 @@ def build(code: str = "601088") -> None:
         .replace("@@VAL_GRID@@", build_val_grid())
         .replace("@@MARKET_ROW@@", build_market_row())
         .replace("@@GRAHAM@@", build_graham())
+        .replace("@@COMPANY_NAME@@", COMPANY_NAME)
+        .replace("@@COMPANY_CODE@@", COMPANY_CODE)
+        .replace("@@INDUSTRY@@", "行业待接入")
+        .replace("@@REPORT_PERIOD@@", report_period)
+        .replace("@@PUBLISH_DATE@@", publish_date)
+        .replace("@@LYNCH_TYPE@@", "待分析")
+        .replace("@@GRAHAM_BADGE@@", "待分析")
     )
 
     root = Path(__file__).resolve().parent.parent
