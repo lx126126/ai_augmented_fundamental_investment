@@ -195,6 +195,9 @@ def build_template_data(code: str) -> dict:
     # 格雷厄姆体检（从年度财务数据算）
     graham = _build_graham(annual)
 
+    # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
+    narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code)
+
     return {
         "years": years,
         "financials": financials,
@@ -206,6 +209,7 @@ def build_template_data(code: str) -> dict:
         "valuation": valuation,
         "graham": graham,
         "company_name": company_name,
+        "narrative_data": narrative_data,
     }
 
 
@@ -233,4 +237,68 @@ def _build_graham(annual: pd.DataFrame) -> dict:
         "current_ratio": _clean(current_ratio),
         "profit_stable": stable,
         "net_cash": _clean(net_cash),
+    }
+
+
+def _build_narrative_data(annual, segments, valuation, company_name, code) -> dict:
+    """LLM 叙事层的事实摘要（纯数据，无文字）。"""
+    latest = annual.iloc[-1]
+    latest_year = int(latest["report_date"].year)
+
+    def _g(col):
+        v = latest.get(col) if col in annual.columns else None
+        return None if (v is None or pd.isna(v)) else float(v)
+
+    def _round(v, d=1):
+        return round(v, d) if v is not None else None
+
+    # 近 5 年营收/净利
+    recent = []
+    for _, r in annual.tail(5).iterrows():
+        recent.append({
+            "year": int(r["report_date"].year),
+            "revenue": _round(r.get("operating_revenue"), 1) if "operating_revenue" in annual.columns else None,
+            "profit": _round(r.get("net_profit_parent"), 1) if "net_profit_parent" in annual.columns else None,
+        })
+
+    # 分业务摘要（最新期收入占比 + 毛利率）
+    seg_summary = []
+    if segments:
+        latest_revs = [(s[0], s[2][-1]) for s in segments if s[2] and s[2][-1] is not None]
+        total = sum(v for _, v in latest_revs)
+        margin_map = {s[0]: (s[3][-1] if s[3] and s[3][-1] is not None else None) for s in segments}
+        for name, rev in latest_revs:
+            seg_summary.append({
+                "name": name,
+                "revenue_pct": round(rev / total * 100, 1) if total else None,
+                "margin": _round(margin_map.get(name), 1),
+            })
+
+    val_summary = None
+    if valuation:
+        val_summary = {
+            "pe": _round(valuation.get("pe"), 1),
+            "pb": _round(valuation.get("pb"), 2),
+            "pe_pctile": _round(valuation.get("pe_pctile"), 0),
+            "pb_pctile": _round(valuation.get("pb_pctile"), 0),
+        }
+
+    return {
+        "name": company_name,
+        "code": code,
+        "latest_year": latest_year,
+        "latest": {
+            "revenue": _round(_g("operating_revenue"), 1),
+            "net_profit": _round(_g("net_profit_parent"), 1),
+            "gross_margin": _round(_g("gross_margin_pct"), 1),
+            "net_margin": _round(_g("net_margin_pct"), 1),
+            "roe": _round(_g("roe_pct"), 2),
+            "debt_ratio": _round(_g("debt_ratio_pct"), 1),
+            "ocf": _round(_g("ocf"), 1),
+        },
+        "recent": recent,
+        "segments": seg_summary,
+        "dividend_payout": _round(_g("dividend_payout_pct"), 1),
+        "dividend_yield": _round(_g("dividend_yield_pct"), 1),
+        "valuation": val_summary,
     }

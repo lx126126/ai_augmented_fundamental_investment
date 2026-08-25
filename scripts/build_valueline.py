@@ -22,6 +22,13 @@ try:
 except Exception:
     _HAS_DATA = False
 
+# 尝试导入 LLM 叙事层生成（可选，无 key 时降级为占位）
+try:
+    from src.report.llm import generate_narrative
+    _HAS_LLM = True
+except Exception:
+    _HAS_LLM = False
+
 # 示例数据（仅降级用；真实渲染用 adapter 从 parquet 读取）
 from _sample_data import (
     SAMPLE_YEARS,
@@ -42,6 +49,7 @@ VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
 GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
+NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 
 
 def _fmt(v) -> str:
@@ -225,6 +233,58 @@ def build_graham() -> str:
         f'<div class="g-row"><span>流动比率</span><b>{cur}</b></div>'
         f'<div class="g-row"><span>盈利稳定性（5年）</span><b>{stable}</b></div>'
         f'<div class="g-row"><span>净现金 / 有息负债</span><b>{net_cash}</b></div>'
+        "</div>"
+    )
+
+
+def _narr(path, default=""):
+    """从 NARRATIVE 取嵌套字段，缺失返回 default。"""
+    if not NARRATIVE:
+        return default
+    node = NARRATIVE
+    for key in path:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        else:
+            return default
+    return node if node else default
+
+
+def build_business_model() -> str:
+    bm = NARRATIVE.get("business_model", {}) if NARRATIVE else {}
+    rows = []
+    for key, label in [("revenue_source", "盈利来源"), ("profit_structure", "盈利结构"),
+                       ("competitive_position", "竞争地位"), ("moat", "护城河")]:
+        val = bm.get(key, "")
+        rows.append(f'<div class="biz-row"><div class="biz-k">{label}</div><div class="biz-v">{val}</div></div>')
+    if not any(bm.get(k) for k in ("revenue_source", "profit_structure", "competitive_position", "moat")):
+        return '<div class="biz"><div class="biz-v" style="color:var(--faint);">商业模式待 LLM 生成</div></div>'
+    return '<div class="biz">' + "".join(rows) + "</div>"
+
+
+def build_thesis() -> str:
+    items = NARRATIVE.get("thesis", []) if NARRATIVE else []
+    if not items:
+        return '<ul class="thesis"><li>投资逻辑待 LLM 生成</li></ul>'
+    return '<ul class="thesis">' + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
+
+
+def build_risks() -> str:
+    items = NARRATIVE.get("risks", []) if NARRATIVE else []
+    if not items:
+        return '<ul class="risk"><li>风险提示待 LLM 生成</li></ul>'
+    return '<ul class="risk">' + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
+
+
+def build_review() -> str:
+    obs = _narr(["review", "observation"], "")
+    if not obs:
+        return '<div class="review"><div class="r-row" style="color:var(--faint);">复盘待 LLM 生成 + 人工积累</div></div>'
+    return (
+        '<div class="review">'
+        '<div class="r-title"><span class="dot"></span>最新季度观察</div>'
+        f'<div class="r-row">{obs}</div>'
+        '<div class="r-row" style="color:var(--faint);font-size:10px;margin-top:4px;">复盘层需人工持续跟踪积累（上季假设→实际→验证），当前为 LLM 数据观察。</div>'
         "</div>"
     )
 
@@ -428,24 +488,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-    <div class="biz">
-      <div class="biz-row">
-        <div class="biz-k">盈利来源</div>
-        <div class="biz-v">煤炭生产销售（动力煤）＋火电发电＋铁路/港口/航运＋煤化工，一体化运营；煤炭为利润核心，电力与运输为稳定补充。</div>
-      </div>
-      <div class="biz-row">
-        <div class="biz-k">盈利结构</div>
-        <div class="biz-v">煤炭业务贡献约 64% 收入与主要毛利，长协煤锁定价格；电力、运输平滑煤价周期波动。</div>
-      </div>
-      <div class="biz-row">
-        <div class="biz-k">竞争地位</div>
-        <div class="biz-v">全球最大煤炭上市公司、国内动力煤龙头，核定产能与可采储量位居行业前列。</div>
-      </div>
-      <div class="biz-row">
-        <div class="biz-k">护城河</div>
-        <div class="biz-v">资源禀赋（低成本大矿）＋一体化协同（煤电路港航）＋长协煤锁定＋规模与牌照壁垒。</div>
-      </div>
-    </div>
+@@BIZ@@
   </div>
 
   <div class="section">
@@ -470,20 +513,12 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-    <ul class="thesis">
-      <li>一体化「煤电路港航」协同，长协煤占比高，盈利穿越煤价周期、波动显著低于纯煤企。</li>
-      <li>高分红承诺：分红率长期不低于 60%，当前股息率 6%+，具备类债券收息属性。</li>
-      <li>资产负债表干净，低负债 + 净现金，符合格雷厄姆式财务稳健与安全边际要求。</li>
-    </ul>
+@@THESIS@@
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-    <ul class="risk">
-      <li>动力煤现货价超预期下行，长协价重谈带来盈利下修压力。</li>
-      <li>宏观经济复苏不及预期，压制电力需求与发电量。</li>
-      <li>资本开支加大或分红率下调，削弱收息逻辑。</li>
-    </ul>
+@@RISKS@@
   </div>
 
   <div class="section">
@@ -524,13 +559,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">季度复盘 <span class="hint">上季假设 → 实际 → 验证</span></div>
-    <div class="review">
-      <div class="r-title"><span class="dot"></span>2026 Q2 复盘</div>
-      <div class="r-row"><span class="k">上季假设：</span>Q2 煤价企稳，长协价维持，盈利环比基本持平。</div>
-      <div class="r-row"><span class="k">实际：</span>现货煤价小幅反弹，长协履约稳定，归母净利略超预期。</div>
-      <div class="r-row verified"><span class="k">验证 ✓：</span>「盈利穿越周期」主逻辑成立。</div>
-      <div class="r-row refuted"><span class="k">打脸 ✗：</span>Q2 火电发电量低于预期，第二曲线贡献仍需观察。</div>
-    </div>
+@@REVIEW@@
   </div>
 
   <div class="section">
@@ -567,7 +596,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, COMPANY_NAME, COMPANY_CODE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -583,6 +612,10 @@ def build(code: str = "601088") -> None:
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
+        # LLM 生成叙事层（数据先行）
+        NARRATIVE = None
+        if _HAS_LLM and real.get("narrative_data"):
+            NARRATIVE = generate_narrative(real["narrative_data"])
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -592,6 +625,10 @@ def build(code: str = "601088") -> None:
     quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"
     segment_range = f"{SEGMENT_LABELS[0]}–{SEGMENT_LABELS[-1]}" if SEGMENT_LABELS else ""
     publish_date = "2026-08-25"
+
+    industry = _narr(["industry"], "行业待接入")
+    lynch_type = _narr(["lynch_type"], "待分析")
+    graham_badge = _narr(["graham_badge"], "待分析")
 
     html = (
         TEMPLATE
@@ -605,13 +642,17 @@ def build(code: str = "601088") -> None:
         .replace("@@VAL_GRID@@", build_val_grid())
         .replace("@@MARKET_ROW@@", build_market_row())
         .replace("@@GRAHAM@@", build_graham())
+        .replace("@@BIZ@@", build_business_model())
+        .replace("@@THESIS@@", build_thesis())
+        .replace("@@RISKS@@", build_risks())
+        .replace("@@REVIEW@@", build_review())
         .replace("@@COMPANY_NAME@@", COMPANY_NAME)
         .replace("@@COMPANY_CODE@@", COMPANY_CODE)
-        .replace("@@INDUSTRY@@", "行业待接入")
+        .replace("@@INDUSTRY@@", industry)
         .replace("@@REPORT_PERIOD@@", report_period)
         .replace("@@PUBLISH_DATE@@", publish_date)
-        .replace("@@LYNCH_TYPE@@", "待分析")
-        .replace("@@GRAHAM_BADGE@@", "待分析")
+        .replace("@@LYNCH_TYPE@@", lynch_type)
+        .replace("@@GRAHAM_BADGE@@", graham_badge)
     )
 
     root = Path(__file__).resolve().parent.parent
