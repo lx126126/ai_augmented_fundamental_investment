@@ -87,23 +87,37 @@ def build_quarter_table() -> str:
 
 
 def build_segments() -> str:
-    def _table(metric_idx: int, unit: str) -> str:
+    n_periods = len(SEGMENTS[0][2]) if SEGMENTS else 0
+
+    # 各期收入占比（该条线收入 / 当期总收入 × 100）
+    shares = []
+    for _name, _color, revs, _margins in SEGMENTS:
+        s = []
+        for i in range(n_periods):
+            total = sum((seg[2][i] or 0) for seg in SEGMENTS)
+            v = revs[i]
+            s.append((v / total * 100) if (v is not None and total > 0) else None)
+        shares.append(s)
+
+    def _table(vals_list, unit: str) -> str:
         head = "".join(f"<th>{q}</th>" for q in SEGMENT_LABELS)
         rows = []
-        for name, color, revs, margins in SEGMENTS:
-            vals = revs if metric_idx == 0 else margins
+        for (name, color, _revs, _margins), vals in zip(SEGMENTS, vals_list):
             cells = [f'<td class="row-head"><span class="seg-dot" style="background:{color}"></span>{name}</td>']
             cells += [f'<td class="num">{_fmt(v)}</td>' for v in vals]
             rows.append("<tr>" + "".join(cells) + "</tr>")
         return (
+            '<div class="table-scroll">'
             f'<table class="dense"><thead><tr><th class="name">{unit}</th>{head}</tr></thead>'
             f'<tbody>{"".join(rows)}</tbody></table>'
+            "</div>"
         )
 
-    rev_table = _table(0, "业务条线")
-    margin_table = _table(1, "业务条线")
+    rev_table = _table([s[2] for s in SEGMENTS], "业务条线")
+    margin_table = _table([s[3] for s in SEGMENTS], "业务条线")
+    share_table = _table(shares, "业务条线")
 
-    # 最新报告期收入占比（None 视为 0，避免求和报错）
+    # 最新报告期收入占比（堆叠条，None 视为 0）
     latest = [s[2][-1] if s[2][-1] is not None else 0 for s in SEGMENTS]
     total = sum(latest)
     if total > 0:
@@ -123,6 +137,7 @@ def build_segments() -> str:
         '<div class="seg-row">'
         f'<div class="seg-block"><div class="seg-block-title">收入（亿元）</div>{rev_table}</div>'
         f'<div class="seg-block"><div class="seg-block-title">毛利率（%）</div>{margin_table}</div>'
+        f'<div class="seg-block"><div class="seg-block-title">收入占比（%）</div>{share_table}</div>'
         "</div>"
         f'<div class="seg-bar">{bar}</div>'
         f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'

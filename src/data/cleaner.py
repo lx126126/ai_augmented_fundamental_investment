@@ -186,11 +186,11 @@ def _period_label(dt) -> str:
     return f"{y}年报"
 
 
-def build_segments(seg_df: pd.DataFrame, n_periods: int = 4):
-    """分业务收入构成（通用）：近 N 个半年度 × 业务条线（按最新期收入降序）。
+def build_segments(seg_df: pd.DataFrame, lookback_years: int = 2):
+    """分业务收入构成（通用）：近 N 年 × 业务条线（按最新期收入降序）。
 
-    返回 (period_labels, [(业务条线, [收入序列(亿元)], [毛利率序列(%)])])
-    业务条线名动态（不写死行业），口径自动选「按产品/按行业」中条线更丰富的。
+    频率自适应：数据源有季度披露就用季度，只有半年度就用半年度（按时间跨度取，
+    而非固定期数）。返回 (period_labels, [(业务条线, [收入(亿)], [毛利率(%)])])。
     毛利率按收入加权平均（有值的行），全缺失则为 None。
     """
     cand = seg_df[seg_df["category_type"].isin(["按产品分类", "按行业分类"])].copy()
@@ -205,8 +205,11 @@ def build_segments(seg_df: pd.DataFrame, n_periods: int = 4):
             best_n, best_type = n, ct
     df = cand[cand["category_type"] == best_type].copy()
 
-    periods = sorted(df["report_date"].unique())[-n_periods:]
-    df = df[df["report_date"].isin(periods)]
+    # 按时间跨度取近 N 年（频率自适应：季度/半年度）
+    latest = df["report_date"].max()
+    cutoff = latest - pd.DateOffset(years=lookback_years)
+    df = df[df["report_date"] >= cutoff]
+    periods = sorted(df["report_date"].unique())
 
     df["rev_yi"] = df["segment_revenue"] / 1e8
     df["margin_pct"] = df["segment_margin"] * 100
