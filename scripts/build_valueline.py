@@ -36,6 +36,7 @@ YEARS = SAMPLE_YEARS
 FINANCIALS = SAMPLE_FINANCIALS
 QUARTER_LABELS = SAMPLE_QUARTER_LABELS
 QUARTERLY = SAMPLE_QUARTERLY
+SEGMENT_LABELS = SAMPLE_QUARTER_LABELS  # 示例时分业务用季度标签；真实数据用半年度标签
 SEGMENTS = SAMPLE_SEGMENTS
 
 
@@ -87,7 +88,7 @@ def build_quarter_table() -> str:
 
 def build_segments() -> str:
     def _table(metric_idx: int, unit: str) -> str:
-        head = "".join(f"<th>{q}</th>" for q in QUARTER_LABELS)
+        head = "".join(f"<th>{q}</th>" for q in SEGMENT_LABELS)
         rows = []
         for name, color, revs, margins in SEGMENTS:
             vals = revs if metric_idx == 0 else margins
@@ -102,16 +103,21 @@ def build_segments() -> str:
     rev_table = _table(0, "业务条线")
     margin_table = _table(1, "业务条线")
 
-    latest = [s[2][-1] for s in SEGMENTS]  # 最新季度收入
+    # 最新报告期收入占比（None 视为 0，避免求和报错）
+    latest = [s[2][-1] if s[2][-1] is not None else 0 for s in SEGMENTS]
     total = sum(latest)
-    bar = "".join(
-        f'<div class="seg" style="width:{v / total * 100:.1f}%;background:{s[1]}"></div>'
-        for s, v in zip(SEGMENTS, latest)
-    )
-    legend = "".join(
-        f'<span class="seg-legend"><span class="seg-dot" style="background:{s[1]}"></span>{s[0]} {v / total * 100:.1f}%</span>'
-        for s, v in zip(SEGMENTS, latest)
-    )
+    if total > 0:
+        bar = "".join(
+            f'<div class="seg" style="width:{v / total * 100:.1f}%;background:{s[1]}"></div>'
+            for s, v in zip(SEGMENTS, latest)
+        )
+        legend = "".join(
+            f'<span class="seg-legend"><span class="seg-dot" style="background:{s[1]}"></span>{s[0]} {v / total * 100:.1f}%</span>'
+            for s, v in zip(SEGMENTS, latest)
+        )
+    else:
+        bar = ""
+        legend = ""
 
     return (
         '<div class="seg-row">'
@@ -119,7 +125,7 @@ def build_segments() -> str:
         f'<div class="seg-block"><div class="seg-block-title">毛利率（%）</div>{margin_table}</div>'
         "</div>"
         f'<div class="seg-bar">{bar}</div>'
-        f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新季度收入占比）</span></div>'
+        f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'
     )
 
 
@@ -349,7 +355,7 @@ TEMPLATE = """<!DOCTYPE html>
 @@QUARTER_TABLE@@
     <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
 
-    <div class="sub-title">业务收入构成（近两年季度）</div>
+    <div class="sub-title">业务收入构成（@@SEGMENT_RANGE@@）</div>
 @@SEGMENTS@@
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
   </div>
@@ -512,7 +518,7 @@ def _load_real_data() -> dict | None:
 
 
 def build() -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS
     real = _load_real_data()
     if real:
         YEARS = real["years"]
@@ -520,6 +526,9 @@ def build() -> None:
         QUARTER_LABELS = real["quarter_labels"]
         QUARTERLY = real["quarterly"]
         report_period = real["report_period"]
+        if real["segments"]:
+            SEGMENT_LABELS = real["segment_labels"]
+            SEGMENTS = real["segments"]
         data_src = "真实数据 601088"
     else:
         report_period = "2026Q2"
@@ -527,6 +536,7 @@ def build() -> None:
 
     year_range = f"{YEARS[0]}–{YEARS[-1]}"
     quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"
+    segment_range = f"{SEGMENT_LABELS[0]}–{SEGMENT_LABELS[-1]}" if SEGMENT_LABELS else ""
 
     html = (
         TEMPLATE
@@ -536,6 +546,7 @@ def build() -> None:
         .replace("@@SEGMENTS@@", build_segments())
         .replace("@@YEAR_RANGE@@", year_range)
         .replace("@@QUARTER_RANGE@@", quarter_range)
+        .replace("@@SEGMENT_RANGE@@", segment_range)
     )
 
     root = Path(__file__).resolve().parent.parent

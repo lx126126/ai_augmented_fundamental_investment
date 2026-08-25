@@ -161,3 +161,66 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
 
     merged = merged.sort_values("report_date").tail(n_quarters).reset_index(drop=True)
     return merged
+
+
+# 业务条线归一化：口径逐年变（煤炭/煤炭收入、铁路/港口/航运→运输）
+_SEGMENT_ORDER = ["煤炭", "发电", "运输", "煤化工", "其他"]
+
+
+def _normalize_segment(name: str) -> str | None:
+    """业务条线名 → 五大类，分部抵销等内部项返回 None（排除）。"""
+    name = str(name)
+    if "抵销" in name:
+        return None
+    if "煤化工" in name:
+        return "煤化工"
+    if "煤" in name:
+        return "煤炭"
+    if "发电" in name or "电力" in name:
+        return "发电"
+    if any(k in name for k in ("运输", "铁路", "港口", "航运")):
+        return "运输"
+    return "其他"  # 其他(补充)/未分配项目/无法归类
+
+
+def _period_label(dt) -> str:
+    """半年度报告期标签：2024-06-30 → 24中报，2024-12-31 → 24年报。"""
+    y = str(dt.year)[2:]
+    return f"{y}中报" if dt.month == 6 else f"{y}年报"
+
+
+def build_segments(seg_df: pd.DataFrame, n_periods: int = 4):
+    """分业务收入构成：近 N 个半年度 × 五大业务条线。
+
+    返回 (period_labels, [(业务条线, [收入序列(亿元)], [毛利率序列(%)])])
+    毛利率按收入加权平均（有值的行），全缺失则为 None。
+    """
+    df = seg_df[seg_df["category_type"] == "按行业分类"].copy()
+    df["norm"] = df["segment_name"].map(_normalize_segment)
+    df = df[df["norm"].notna()]
+
+    periods = sorted(df["report_date"].unique())[-n_periods:]
+    df = df[df["report_date"].isin(periods)]
+
+    df["rev_yi"] = df["segment_revenue"] / 1e8
+    df["margin_pct"] = df["segment_margin"] * 100
+
+    period_labels = [_period_label(p) for p in periods]
+
+    result = []
+    for norm in _SEGMENT_ORDER:
+        sub = df[df["norm"] == norm]
+        revs, margins = [], []
+        for p in periods:
+            row = sub[sub["report_date"] == p]
+            rev = row["rev_yi"].sum(min_count=1) if len(row) else None
+            valid = row.dropna(subset=["margin_pct"])
+            if len(valid) and valid["rev_yi"].sum() > 0:
+                margin = (valid["margin_pct"] * valid["rev_yi"]).sum() / valid["rev_yi"].sum()
+            else:
+                margin = None
+            revs.append(rev if rev == rev else None)  # NaN → None
+            margins.append(margin)
+        result.append((norm, revs, margins))
+
+    return period_labels, result

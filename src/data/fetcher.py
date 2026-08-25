@@ -15,6 +15,7 @@ from .fields import (
     BALANCE_SHEET_MAP,
     CASH_FLOW_MAP,
     DIVIDEND_MAP,
+    SEGMENT_MAP,
 )
 
 
@@ -85,12 +86,22 @@ def fetch_dividend(code: str) -> pd.DataFrame:
     return df
 
 
+def fetch_segments(code: str) -> pd.DataFrame:
+    """主营构成（分业务收入/毛利率），东财口径，半年度披露。"""
+    raw = ak.stock_zygc_em(symbol=_em_symbol(code))
+    df = _remap(raw, SEGMENT_MAP).copy()
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    df["symbol"] = code.zfill(6)
+    return df
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
-    """一次拉取全部五张表，返回 {表名: DataFrame}。"""
+    """一次拉取全部六张表，返回 {表名: DataFrame}。"""
     return {
         "financial_indicator": fetch_financial_indicator(code, start_year),
         "profit_sheet": fetch_profit_sheet(code),
         "balance_sheet": fetch_balance_sheet(code),
         "cash_flow": fetch_cash_flow(code),
         "dividend": fetch_dividend(code),
+        "segments": fetch_segments(code),
     }

@@ -11,7 +11,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cleaner import build_annual_financials, build_quarter_financials
+from .cleaner import build_annual_financials, build_quarter_financials, build_segments
+
+
+# 业务条线颜色（与模板 SEGMENTS 一致）
+SEGMENT_COLORS = {
+    "煤炭": "#378ADD",
+    "发电": "#E24B4A",
+    "运输": "#BA7517",
+    "煤化工": "#888780",
+    "其他": "#6b7280",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -106,9 +116,9 @@ def _q_label(dt) -> str:
 
 
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
-    """读 parquet 原始数据（5 张表）。"""
+    """读 parquet 原始数据（含分业务构成，共 6 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -158,10 +168,23 @@ def build_template_data(code: str) -> dict:
     latest_q = quarter["report_date"].iloc[-1]
     report_period = f"{latest_q.year}Q{(latest_q.month - 1) // 3 + 1}"
 
+    # 分业务收入构成（半年度，可选）
+    segment_labels = None
+    segments = None
+    if "segments" in raw:
+        segment_labels, seg_result = build_segments(raw["segments"])
+        segments = [
+            (name, SEGMENT_COLORS.get(name, "#6b7280"),
+             [_clean(v) for v in revs], [_clean(v) for v in margins])
+            for name, revs, margins in seg_result
+        ]
+
     return {
         "years": years,
         "financials": financials,
         "quarter_labels": quarter_labels,
         "quarterly": quarterly,
         "report_period": report_period,
+        "segment_labels": segment_labels,
+        "segments": segments,
     }
