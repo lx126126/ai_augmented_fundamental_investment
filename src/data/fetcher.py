@@ -14,6 +14,7 @@ from .fields import (
     PROFIT_SHEET_MAP,
     BALANCE_SHEET_MAP,
     CASH_FLOW_MAP,
+    DIVIDEND_MAP,
 )
 
 
@@ -74,11 +75,22 @@ def fetch_cash_flow(code: str) -> pd.DataFrame:
     return df
 
 
+def fetch_dividend(code: str) -> pd.DataFrame:
+    """分红送配：每10股派息、股息率、总股本（普通股数量）。"""
+    raw = ak.stock_fhps_detail_em(symbol=code)
+    df = _remap(raw, DIVIDEND_MAP).copy()
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    df["symbol"] = code.zfill(6)
+    df["dividend_yield_pct"] = df["dividend_yield"] * 100  # 小数 → 百分比
+    return df
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
-    """一次拉取全部四张表，返回 {表名: DataFrame}。"""
+    """一次拉取全部五张表，返回 {表名: DataFrame}。"""
     return {
         "financial_indicator": fetch_financial_indicator(code, start_year),
         "profit_sheet": fetch_profit_sheet(code),
         "balance_sheet": fetch_balance_sheet(code),
         "cash_flow": fetch_cash_flow(code),
+        "dividend": fetch_dividend(code),
     }

@@ -43,8 +43,21 @@ def _to_yi(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _annual_dividend(dv: pd.DataFrame) -> pd.DataFrame:
+    """分红按年度汇总（同一年多次分红加总），report_date 归一到 12-31。"""
+    df = dv.copy()
+    df["year"] = df["report_date"].dt.year
+    agg = df.groupby(["symbol", "year"], as_index=False).agg(
+        dividend_per_10=("dividend_per_10", "sum"),          # 年内多次分红加总
+        dividend_yield_pct=("dividend_yield_pct", "sum"),    # 年内累计股息率
+        total_shares=("total_shares", "last"),               # 取最新股本
+    )
+    agg["report_date"] = pd.to_datetime(agg["year"].astype(str) + "-12-31")
+    return agg
+
+
 def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
-    """合并四表，输出对齐模板的年度财务数据（宽表，金额单位亿元）。"""
+    """合并多表，输出对齐模板的年度财务数据（宽表，金额单位亿元）。"""
     ps = _annual(_to_yi(calc_gross_margin(data["profit_sheet"])))
     cf = _annual(_to_yi(data["cash_flow"]))
     bs = _annual(_to_yi(data["balance_sheet"]))
@@ -65,5 +78,17 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     merged = merged.merge(cf[cf_cols], on=key, how="left")
     merged = merged.merge(bs[bs_cols], on=key, how="left")
     merged = merged.merge(fi[fi_cols], on=key, how="left")
+
+    # 分红数据：每股派息、股息率、总股本（普通股数量）
+    if "dividend" in data:
+        dv = _annual_dividend(data["dividend"])
+        dv_cols = key + [c for c in ["dividend_per_10", "dividend_yield_pct", "total_shares"] if c in dv.columns]
+        merged = merged.merge(dv[dv_cols], on=key, how="left")
+
+    # 分红比例（股利支付率）= 分红总额 / 归母净利润 × 100
+    if "dividend_per_10" in merged.columns and "total_shares" in merged.columns:
+        merged["dividend_total"] = merged["dividend_per_10"] / 10 * merged["total_shares"] / 1e8  # 分红总额(亿元)
+    if "dividend_total" in merged.columns and "net_profit_parent" in merged.columns:
+        merged["dividend_payout_pct"] = merged["dividend_total"] / merged["net_profit_parent"] * 100
 
     return merged
