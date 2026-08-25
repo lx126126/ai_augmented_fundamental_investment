@@ -10,7 +10,17 @@
     python scripts/build_valueline.py
 """
 from __future__ import annotations
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# 尝试导入数据适配层（可选，无 parquet 数据时降级为示例数据）
+try:
+    from src.data.adapter import build_template_data
+    _HAS_DATA = True
+except Exception:
+    _HAS_DATA = False
 
 # ============ 上市以来全历史（示例数据，非精确） ============
 YEARS = list(range(2007, 2026))  # 2007 上市 - 2025
@@ -89,6 +99,8 @@ SEGMENTS = [
 def _fmt(v) -> str:
     if v is None:
         return "—"
+    if isinstance(v, str):
+        return v  # 已是格式化字符串（来自 adapter）
     if isinstance(v, int):
         return str(v)
     return f"{v:.1f}"
@@ -388,9 +400,9 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">核心财务数据（上市以来全历史 2007–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
+    <div class="sec-title">核心财务数据（上市以来全历史 @@YEAR_RANGE@@） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
-    <div class="sub-title">近两年季度（24Q3–26Q2）</div>
+    <div class="sub-title">近两年季度（@@QUARTER_RANGE@@）</div>
 @@QUARTER_TABLE@@
     <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
 
@@ -545,17 +557,43 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def _load_real_data() -> dict | None:
+    """尝试加载真实数据（神华 601088），失败返回 None。"""
+    if not _HAS_DATA:
+        return None
+    try:
+        return build_template_data("601088")
+    except Exception as e:
+        print(f"[build_valueline] 加载真实数据失败，降级为示例数据: {e}")
+        return None
+
+
 def build() -> None:
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY
+    real = _load_real_data()
+    if real:
+        YEARS = real["years"]
+        FINANCIALS = real["financials"]
+        QUARTER_LABELS = real["quarter_labels"]
+        QUARTERLY = real["quarterly"]
+
+    year_range = f"{YEARS[0]}–{YEARS[-1]}"
+    quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"
+
     html = (
         TEMPLATE
         .replace("@@CSS@@", CSS)
         .replace("@@TABLE@@", build_table())
         .replace("@@QUARTER_TABLE@@", build_quarter_table())
         .replace("@@SEGMENTS@@", build_segments())
+        .replace("@@YEAR_RANGE@@", year_range)
+        .replace("@@QUARTER_RANGE@@", quarter_range)
     )
     out = Path(__file__).resolve().parent.parent / "templates" / "valueline.html"
     out.write_text(html, encoding="utf-8")
     print(f"generated: {out}")
+    print(f"  数据来源: {'真实数据 601088' if real else '示例数据'}")
+    print(f"  年度: {year_range} ({len(YEARS)} 年), 季度: {quarter_range} ({len(QUARTER_LABELS)} 季)")
 
 
 if __name__ == "__main__":
