@@ -70,9 +70,9 @@ PROFIT_SHEET_MAP = {
 BALANCE_SHEET_MAP = {
     "REPORT_DATE": "report_date",
     "REPORT_TYPE": "report_type",
-    "ASSET_BALANCE": "total_assets",              # 总资产
-    "LIAB_BALANCE": "total_liabilities",          # 总负债
-    "EQUITY_BALANCE": "total_equity",             # 股东权益合计
+    "TOTAL_ASSETS": "total_assets",               # 总资产
+    "TOTAL_LIABILITIES": "total_liabilities",     # 总负债
+    "TOTAL_PARENT_EQUITY": "total_equity",        # 归母净资产
     "MONETARYFUNDS": "monetary_funds",            # 货币资金
     "INVENTORY": "inventory",                     # 存货
     "ACCOUNTS_RECE": "accounts_receivable",       # 应收账款
