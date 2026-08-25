@@ -506,20 +506,20 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def _load_real_data() -> dict | None:
-    """尝试加载真实数据（神华 601088），失败返回 None。"""
+def _load_real_data(code: str) -> dict | None:
+    """尝试加载真实数据，失败返回 None。"""
     if not _HAS_DATA:
         return None
     try:
-        return build_template_data("601088")
+        return build_template_data(code)
     except Exception as e:
         print(f"[build_valueline] 加载真实数据失败，降级为示例数据: {e}")
         return None
 
 
-def build() -> None:
+def build(code: str = "601088") -> None:
     global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS
-    real = _load_real_data()
+    real = _load_real_data(code)
     if real:
         YEARS = real["years"]
         FINANCIALS = real["financials"]
@@ -529,7 +529,7 @@ def build() -> None:
         if real["segments"]:
             SEGMENT_LABELS = real["segment_labels"]
             SEGMENTS = real["segments"]
-        data_src = "真实数据 601088"
+        data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
         data_src = "示例数据"
@@ -555,8 +555,8 @@ def build() -> None:
     tpl_out = root / "templates" / "valueline.html"
     tpl_out.write_text(html, encoding="utf-8")
 
-    # 2. reports/{报告期}/601088.html（归档报告）
-    report_out = root / "reports" / report_period / "601088.html"
+    # 2. reports/{报告期}/{code}.html（归档报告）
+    report_out = root / "reports" / report_period / f"{code}.html"
     report_out.parent.mkdir(parents=True, exist_ok=True)
     report_out.write_text(html, encoding="utf-8")
 
@@ -568,4 +568,5 @@ def build() -> None:
 
 
 if __name__ == "__main__":
-    build()
+    code = sys.argv[1] if len(sys.argv) > 1 else "601088"
+    build(code)

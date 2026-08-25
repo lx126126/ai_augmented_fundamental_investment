@@ -163,41 +163,47 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     return merged
 
 
-# 业务条线归一化：口径逐年变（煤炭/煤炭收入、铁路/港口/航运→运输）
-_SEGMENT_ORDER = ["煤炭", "发电", "运输", "煤化工", "其他"]
-
-
-def _normalize_segment(name: str) -> str | None:
-    """业务条线名 → 五大类，分部抵销等内部项返回 None（排除）。"""
-    name = str(name)
-    if "抵销" in name:
+# 业务条线名清理（通用，不写死行业）：去噪，排除内部抵销/未分配项
+def _clean_segment_name(name: str) -> str | None:
+    """清理业务条线名，返回 None 表示排除（内部抵销/未分配项）。"""
+    name = str(name).strip()
+    if any(k in name for k in ("抵销", "未分配")):
         return None
-    if "煤化工" in name:
-        return "煤化工"
-    if "煤" in name:
-        return "煤炭"
-    if "发电" in name or "电力" in name:
-        return "发电"
-    if any(k in name for k in ("运输", "铁路", "港口", "航运")):
-        return "运输"
-    return "其他"  # 其他(补充)/未分配项目/无法归类
+    name = name.replace("收入", "").replace("(补充)", "").strip()
+    return name or None
 
 
 def _period_label(dt) -> str:
-    """半年度报告期标签：2024-06-30 → 24中报，2024-12-31 → 24年报。"""
+    """报告期标签（通用，覆盖季度/半年度）：03-31→Q1，06-30→中报，09-30→三季报，12-31→年报。"""
     y = str(dt.year)[2:]
-    return f"{y}中报" if dt.month == 6 else f"{y}年报"
+    m = dt.month
+    if m == 3:
+        return f"{y}Q1"
+    if m == 6:
+        return f"{y}中报"
+    if m == 9:
+        return f"{y}三季报"
+    return f"{y}年报"
 
 
 def build_segments(seg_df: pd.DataFrame, n_periods: int = 4):
-    """分业务收入构成：近 N 个半年度 × 五大业务条线。
+    """分业务收入构成（通用）：近 N 个半年度 × 业务条线（按最新期收入降序）。
 
     返回 (period_labels, [(业务条线, [收入序列(亿元)], [毛利率序列(%)])])
+    业务条线名动态（不写死行业），口径自动选「按产品/按行业」中条线更丰富的。
     毛利率按收入加权平均（有值的行），全缺失则为 None。
     """
-    df = seg_df[seg_df["category_type"] == "按行业分类"].copy()
-    df["norm"] = df["segment_name"].map(_normalize_segment)
-    df = df[df["norm"].notna()]
+    cand = seg_df[seg_df["category_type"].isin(["按产品分类", "按行业分类"])].copy()
+    cand["clean"] = cand["segment_name"].map(_clean_segment_name)
+    cand = cand[cand["clean"].notna()]
+
+    # 选业务条线更丰富的分类口径（按产品 vs 按行业）
+    best_type, best_n = None, 0
+    for ct in ("按产品分类", "按行业分类"):
+        n = cand[cand["category_type"] == ct]["clean"].nunique()
+        if n > best_n:
+            best_n, best_type = n, ct
+    df = cand[cand["category_type"] == best_type].copy()
 
     periods = sorted(df["report_date"].unique())[-n_periods:]
     df = df[df["report_date"].isin(periods)]
@@ -207,20 +213,29 @@ def build_segments(seg_df: pd.DataFrame, n_periods: int = 4):
 
     period_labels = [_period_label(p) for p in periods]
 
+    # 业务条线按最新期收入降序
+    latest_period = periods[-1]
+    seg_order = (
+        df[df["report_date"] == latest_period]
+        .groupby("clean")["rev_yi"].sum()
+        .sort_values(ascending=False).index.tolist()
+    )
+
     result = []
-    for norm in _SEGMENT_ORDER:
-        sub = df[df["norm"] == norm]
+    for name in seg_order:
+        sub = df[df["clean"] == name]
         revs, margins = [], []
         for p in periods:
             row = sub[sub["report_date"] == p]
             rev = row["rev_yi"].sum(min_count=1) if len(row) else None
+            rev = None if (rev is not None and pd.isna(rev)) else rev
             valid = row.dropna(subset=["margin_pct"])
             if len(valid) and valid["rev_yi"].sum() > 0:
                 margin = (valid["margin_pct"] * valid["rev_yi"]).sum() / valid["rev_yi"].sum()
             else:
                 margin = None
-            revs.append(rev if rev == rev else None)  # NaN → None
+            revs.append(rev)
             margins.append(margin)
-        result.append((norm, revs, margins))
+        result.append((name, revs, margins))
 
     return period_labels, result

@@ -14,14 +14,8 @@ import pandas as pd
 from .cleaner import build_annual_financials, build_quarter_financials, build_segments
 
 
-# 业务条线颜色（与模板 SEGMENTS 一致）
-SEGMENT_COLORS = {
-    "煤炭": "#378ADD",
-    "发电": "#E24B4A",
-    "运输": "#BA7517",
-    "煤化工": "#888780",
-    "其他": "#6b7280",
-}
+# 业务条线调色板（按收入降序循环分配，适配任意条线数）
+SEGMENT_PALETTE = ["#378ADD", "#E24B4A", "#BA7517", "#888780", "#5B8FF9", "#F6903D", "#61A0A8", "#9270CA"]
 
 
 # ---------------------------------------------------------------------------
@@ -171,9 +165,9 @@ def build_template_data(code: str) -> dict:
     if "segments" in raw:
         segment_labels, seg_result = build_segments(raw["segments"])
         segments = [
-            (name, SEGMENT_COLORS.get(name, "#6b7280"),
+            (name, SEGMENT_PALETTE[i % len(SEGMENT_PALETTE)],
              [_clean(v) for v in revs], [_clean(v) for v in margins])
-            for name, revs, margins in seg_result
+            for i, (name, revs, margins) in enumerate(seg_result)
         ]
 
     return {
