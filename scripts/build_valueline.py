@@ -134,8 +134,10 @@ def build_segments() -> str:
         legend = ""
 
     return (
+        '<div class="seg-block seg-full">'
+        f'<div class="seg-block-title">收入（亿元）</div>{rev_table}'
+        "</div>"
         '<div class="seg-row">'
-        f'<div class="seg-block"><div class="seg-block-title">收入（亿元）</div>{rev_table}</div>'
         f'<div class="seg-block"><div class="seg-block-title">毛利率（%）</div>{margin_table}</div>'
         f'<div class="seg-block"><div class="seg-block-title">收入占比（%）</div>{share_table}</div>'
         "</div>"
@@ -207,9 +209,10 @@ table.dense td.num { font-variant-numeric: tabular-nums; }
 table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 10px; text-align: left; border-bottom: 1px solid var(--line); }
 table.dense .row-head { font-weight: 500; color: #33404f; }
 
-/* 业务收入构成（两张表并排） */
+/* 业务收入构成 */
 .seg-row { display: flex; gap: 18px; }
 .seg-block { flex: 1; }
+.seg-full { margin-bottom: 14px; }
 .seg-block-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
 
 /* 商业模式 */
