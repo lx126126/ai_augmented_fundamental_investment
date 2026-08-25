@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cleaner import build_annual_financials, build_quarter_financials, build_segments
+from .cleaner import build_annual_financials, build_quarter_financials, build_segments, build_valuation
 
 
 # 业务条线调色板（按收入降序循环分配，适配任意条线数）
@@ -108,9 +108,9 @@ def _q_label(dt) -> str:
 
 
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
-    """读 parquet 原始数据（含分业务构成，共 6 张表）。"""
+    """读 parquet 原始数据（含分业务构成 + 估值，最多 7 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -170,6 +170,14 @@ def build_template_data(code: str) -> dict:
             for i, (name, revs, margins) in enumerate(seg_result)
         ]
 
+    # 估值面板（百度估值，可选）
+    valuation = None
+    if "valuation" in raw and "total_shares" in annual.columns:
+        valuation = build_valuation(raw["valuation"], annual)
+
+    # 格雷厄姆体检（从年度财务数据算）
+    graham = _build_graham(annual)
+
     return {
         "years": years,
         "financials": financials,
@@ -178,4 +186,33 @@ def build_template_data(code: str) -> dict:
         "report_period": report_period,
         "segment_labels": segment_labels,
         "segments": segments,
+        "valuation": valuation,
+        "graham": graham,
+    }
+
+
+def _build_graham(annual: pd.DataFrame) -> dict:
+    """格雷厄姆质量体检（从年度数据派生）。"""
+    latest = annual.iloc[-1]
+
+    debt_ratio = latest.get("debt_ratio_pct")
+    current_ratio = latest.get("current_ratio")
+
+    # 盈利稳定性：近 5 年归母净利是否连续为正
+    profits = annual["net_profit_parent"].tail(5)
+    stable = bool((profits > 0).all()) if len(profits) >= 3 else None
+
+    # 净现金 = 货币资金 - 有息负债
+    net_cash = None
+    if "monetary_funds" in annual.columns and "interest_bearing_debt" in annual.columns:
+        mf = latest.get("monetary_funds")
+        ibd = latest.get("interest_bearing_debt")
+        if mf is not None and ibd is not None:
+            net_cash = mf - ibd
+
+    return {
+        "debt_ratio": _clean(debt_ratio),
+        "current_ratio": _clean(current_ratio),
+        "profit_stable": stable,
+        "net_cash": _clean(net_cash),
     }

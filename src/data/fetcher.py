@@ -95,9 +95,30 @@ def fetch_segments(code: str) -> pd.DataFrame:
     return df
 
 
+def fetch_valuation(code: str, period: str = "近三年") -> pd.DataFrame | None:
+    """百度估值：总市值（亿）+ 市净率（近 N 年每日，用于估值与分位）。
+
+    东财行情域名被代理拦截时，用百度估值兜底；某指标无数据时返回 None。
+    """
+    try:
+        mcap = ak.stock_zh_valuation_baidu(symbol=code, indicator="总市值", period=period)
+        pb = ak.stock_zh_valuation_baidu(symbol=code, indicator="市净率", period=period)
+    except Exception:
+        return None
+    if mcap is None or mcap.empty or pb is None or pb.empty:
+        return None
+    mcap = mcap.rename(columns={"value": "market_cap"})
+    pb = pb.rename(columns={"value": "pb"})
+    df = mcap.merge(pb, on="date", how="inner")
+    df = df.rename(columns={"date": "report_date"})
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    df["symbol"] = code.zfill(6)
+    return df
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     """一次拉取全部六张表，返回 {表名: DataFrame}。"""
-    return {
+    data = {
         "financial_indicator": fetch_financial_indicator(code, start_year),
         "profit_sheet": fetch_profit_sheet(code),
         "balance_sheet": fetch_balance_sheet(code),
@@ -105,3 +126,7 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
         "dividend": fetch_dividend(code),
         "segments": fetch_segments(code),
     }
+    val = fetch_valuation(code)
+    if val is not None:
+        data["valuation"] = val
+    return data

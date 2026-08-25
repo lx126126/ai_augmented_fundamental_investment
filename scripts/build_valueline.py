@@ -38,6 +38,8 @@ QUARTER_LABELS = SAMPLE_QUARTER_LABELS
 QUARTERLY = SAMPLE_QUARTERLY
 SEGMENT_LABELS = SAMPLE_QUARTER_LABELS  # 示例时分业务用季度标签；真实数据用半年度标签
 SEGMENTS = SAMPLE_SEGMENTS
+VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
+GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
 
 
 def _fmt(v) -> str:
@@ -143,6 +145,85 @@ def build_segments() -> str:
         "</div>"
         f'<div class="seg-bar">{bar}</div>'
         f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'
+    )
+
+
+def _pct_text(pct):
+    """估值分位 → (百分比文本, css类, 定性)。"""
+    if pct is None:
+        return "—", "", "—"
+    if pct < 30:
+        return f"{pct:.0f}%", "pct-low", "偏低"
+    if pct > 70:
+        return f"{pct:.0f}%", "pct-high", "高位"
+    return f"{pct:.0f}%", "", "合理"
+
+
+def build_val_grid() -> str:
+    if not VALUATION:
+        return '<div style="font-size:11px;color:var(--faint);padding:8px 0;">估值数据待接入（行情接口受网络限制）。</div>'
+    v = VALUATION
+    pe = f"{v['pe']:.1f}<small>x</small>" if v.get("pe") else "—"
+    pb = f"{v['pb']:.2f}<small>x</small>" if v.get("pb") else "—"
+    dy = f"{v['dividend_yield']:.1f}<small>%</small>" if v.get("dividend_yield") else "—"
+    pe_pct, pe_cls, _ = _pct_text(v.get("pe_pctile"))
+    pb_pct, pb_cls, _ = _pct_text(v.get("pb_pctile"))
+    return (
+        '<div class="val-grid">'
+        f'<div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">{pe}</div><div class="pct {pe_cls}">近3年分位 {pe_pct}</div></div>'
+        f'<div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">{pb}</div><div class="pct {pb_cls}">近3年分位 {pb_pct}</div></div>'
+        f'<div class="val-item"><div class="lbl">股息率</div><div class="v" style="color:var(--up)">{dy}</div><div class="pct">最新报告期</div></div>'
+        "</div>"
+    )
+
+
+def build_market_row() -> str:
+    if not VALUATION:
+        return ""
+    v = VALUATION
+    low, now, high = v.get("price_low"), v.get("price_now"), v.get("price_high")
+    if low is None or high is None or now is None:
+        return ""
+    pos = (now - low) / (high - low) * 100 if high > low else 50
+    return (
+        '<div class="market-row">'
+        '<div class="price-range">'
+        '<div class="pr-title">52周价格区间（元）</div>'
+        f'<div class="pr-bar"><div class="pr-marker" style="left:{pos:.1f}%"></div></div>'
+        '<div class="pr-labels">'
+        f'<span>52周最低 <b>{low:.2f}</b></span>'
+        f'<span>现价 <b>{now:.2f}</b></span>'
+        f'<span>52周最高 <b>{high:.2f}</b></span>'
+        "</div></div>"
+        '<div class="consensus">'
+        '<div>机构目标价（<b>数据待接入</b>）</div>'
+        '<div style="font-size:10px;color:var(--faint);margin-top:5px;">机构目标价与评级数据源受网络限制暂未接入，后续补齐。</div>'
+        "</div></div>"
+    )
+
+
+def build_graham() -> str:
+    if not GRAHAM:
+        return ""
+    g = GRAHAM
+    debt = f"{g['debt_ratio']:.1f}%" if g.get("debt_ratio") is not None else "—"
+    cur = f"{g['current_ratio']:.2f}" if g.get("current_ratio") is not None else "—"
+    if g.get("profit_stable") is None:
+        stable = "—"
+    else:
+        stable = "连续正盈利" if g["profit_stable"] else "存在亏损年份"
+    if g.get("net_cash") is None:
+        net_cash = "—"
+    else:
+        net_cash = "净现金" if g["net_cash"] > 0 else "有息负债＞货币资金"
+    return (
+        '<div class="graham">'
+        '<div class="g-title">格雷厄姆质量体检</div>'
+        f'<div class="g-row"><span>资产负债率</span><b>{debt}</b></div>'
+        f'<div class="g-row"><span>流动比率</span><b>{cur}</b></div>'
+        f'<div class="g-row"><span>盈利稳定性（5年）</span><b>{stable}</b></div>'
+        f'<div class="g-row"><span>净现金 / 有息负债</span><b>{net_cash}</b></div>'
+        "</div>"
     )
 
 
@@ -379,62 +460,11 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">估值与市场 <span class="hint">机构一致预期</span></div>
+    <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算</span></div>
     <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
-    <div class="val-grid">
-      <div class="val-item">
-        <div class="lbl">市盈率 PE（TTM）</div>
-        <div class="v">13.2<small>x</small></div>
-        <div class="pct pct-low">近10年分位 35% · 偏低</div>
-      </div>
-      <div class="val-item">
-        <div class="lbl">市净率 PB（MRQ）</div>
-        <div class="v">1.45<small>x</small></div>
-        <div class="pct">近10年分位 40% · 合理</div>
-      </div>
-      <div class="val-item">
-        <div class="lbl">股息率</div>
-        <div class="v" style="color:var(--up)">6.1<small>%</small></div>
-        <div class="pct pct-low">近10年分位 85% · 高位</div>
-      </div>
-    </div>
-
-    <div class="market-row">
-      <div class="price-range">
-        <div class="pr-title">52周价格区间（元）</div>
-        <div class="pr-bar"><div class="pr-marker" style="left:43%"></div></div>
-        <div class="pr-labels">
-          <span>52周最低 <b>38.5</b></span>
-          <span>现价 <b>41.8</b></span>
-          <span>52周最高 <b>46.2</b></span>
-        </div>
-      </div>
-      <div class="consensus">
-        <div>机构目标价（<b>28</b> 家覆盖，单位：元）</div>
-        <div class="tp-grid">
-          <div class="tp-cell"><div class="k">最高</div><div class="v">52.0</div></div>
-          <div class="tp-cell"><div class="k">最低</div><div class="v">38.0</div></div>
-          <div class="tp-cell"><div class="k">平均</div><div class="v">45.0</div></div>
-          <div class="tp-cell"><div class="k">中位</div><div class="v">44.5</div></div>
-        </div>
-        <div class="rating-bar">
-          <div class="seg" style="width:43%;background:#c0392b"></div>
-          <div class="seg" style="width:36%;background:#e8a09b"></div>
-          <div class="seg" style="width:18%;background:#a9c2d4"></div>
-          <div class="seg" style="width:3%;background:#8fbfa0"></div>
-        </div>
-        <div class="rating-legend"><span>买入 12</span><span>增持 10</span><span>中性 5</span><span>减持 1</span></div>
-      </div>
-    </div>
-
-    <div class="graham">
-      <div class="g-title">格雷厄姆质量体检</div>
-      <div class="g-row"><span>资产负债率</span><b>23.5% · 优秀</b></div>
-      <div class="g-row"><span>流动比率</span><b>2.1 · 稳健</b></div>
-      <div class="g-row"><span>盈利稳定性（5年）</span><b>连续正盈利</b></div>
-      <div class="g-row"><span>净现金 / 有息负债</span><b>净现金状态</b></div>
-      <div class="g-score">综合质量评分：<b>8.2 / 10</b>（防御型及格线 6.5）</div>
-    </div>
+@@VAL_GRID@@
+@@MARKET_ROW@@
+@@GRAHAM@@
   </div>
 
   <div class="section">
@@ -536,7 +566,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -547,6 +577,8 @@ def build(code: str = "601088") -> None:
         if real["segments"]:
             SEGMENT_LABELS = real["segment_labels"]
             SEGMENTS = real["segments"]
+        VALUATION = real["valuation"]
+        GRAHAM = real["graham"]
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -565,6 +597,9 @@ def build(code: str = "601088") -> None:
         .replace("@@YEAR_RANGE@@", year_range)
         .replace("@@QUARTER_RANGE@@", quarter_range)
         .replace("@@SEGMENT_RANGE@@", segment_range)
+        .replace("@@VAL_GRID@@", build_val_grid())
+        .replace("@@MARKET_ROW@@", build_market_row())
+        .replace("@@GRAHAM@@", build_graham())
     )
 
     root = Path(__file__).resolve().parent.parent
