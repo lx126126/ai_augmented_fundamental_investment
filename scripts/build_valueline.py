@@ -289,6 +289,22 @@ def build_review() -> str:
     )
 
 
+def build_bull_bear() -> str:
+    bb = NARRATIVE.get("bull_bear", {}) if NARRATIVE else {}
+    bulls = bb.get("bull", []) or []
+    bears = bb.get("bear", []) or []
+    if not bulls and not bears:
+        return '<div class="bull-bear"><div class="bb-col" style="color:var(--faint);">多空视角待 LLM 生成</div></div>'
+    bull_li = "".join(f"<li>{t}</li>" for t in bulls) or "<li>（待生成）</li>"
+    bear_li = "".join(f"<li>{t}</li>" for t in bears) or "<li>（待生成）</li>"
+    return (
+        '<div class="bull-bear">'
+        f'<div class="bb-col bull"><div class="bb-title">看多视角</div><ul>{bull_li}</ul></div>'
+        f'<div class="bb-col bear"><div class="bb-title">看空视角</div><ul>{bear_li}</ul></div>'
+        "</div>"
+    )
+
+
 # ============ CSS ============
 CSS = """
 :root {
@@ -523,25 +539,8 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
-    <div class="disclaim">以下为第三方机构代表性观点，非本人立场。</div>
-    <div class="bull-bear">
-      <div class="bb-col bull">
-        <div class="bb-title">看多观点（买入 / 增持）</div>
-        <ul>
-          <li>长协煤占比超七成，盈利穿越煤价周期、波动显著小于纯煤企。</li>
-          <li>高股息 + 低估值，红利资产稀缺性凸显，险资长线配置需求。</li>
-          <li>煤电一体化对冲周期，充沛现金流支撑高分红可持续。</li>
-        </ul>
-      </div>
-      <div class="bb-col bear">
-        <div class="bb-title">看空观点（中性偏空 / 减持）</div>
-        <ul>
-          <li>动力煤需求中长期见顶，煤价中枢面临逐步下移。</li>
-          <li>新能源替代加速，火电利用小时数与电价承压。</li>
-          <li>分红率已处高位，进一步提升空间有限。</li>
-        </ul>
-      </div>
-    </div>
+    <div class="disclaim">以下为 AI 基于财务数据生成的多空分析视角，非机构观点、非本人投资建议。</div>
+@@BULL_BEAR@@
   </div>
 
   <div class="section">
@@ -646,6 +645,7 @@ def build(code: str = "601088") -> None:
         .replace("@@THESIS@@", build_thesis())
         .replace("@@RISKS@@", build_risks())
         .replace("@@REVIEW@@", build_review())
+        .replace("@@BULL_BEAR@@", build_bull_bear())
         .replace("@@COMPANY_NAME@@", COMPANY_NAME)
         .replace("@@COMPANY_CODE@@", COMPANY_CODE)
         .replace("@@INDUSTRY@@", industry)
