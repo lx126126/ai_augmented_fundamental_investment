@@ -42,7 +42,7 @@ def fetch_financial_indicator(code: str, start_year: str = "2005") -> pd.DataFra
     """
     raw = ak.stock_financial_analysis_indicator(symbol=code, start_year=start_year)
     df = _remap(raw, FINANCIAL_INDICATOR_MAP).copy()
-    df["report_date"] = pd.to_datetime(df["report_date"])
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     return df
 
@@ -51,7 +51,7 @@ def fetch_profit_sheet(code: str) -> pd.DataFrame:
     """利润表（绝对额）：营业收入/净利润等。"""
     raw = ak.stock_profit_sheet_by_report_em(symbol=_em_symbol(code))
     df = _remap(raw, PROFIT_SHEET_MAP).copy()
-    df["report_date"] = pd.to_datetime(df["report_date"])
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     return df
 
@@ -60,7 +60,7 @@ def fetch_balance_sheet(code: str) -> pd.DataFrame:
     """资产负债表（时点值）：总资产/负债/货币资金/存货/应收/商誉等。"""
     raw = ak.stock_balance_sheet_by_report_em(symbol=_em_symbol(code))
     df = _remap(raw, BALANCE_SHEET_MAP).copy()
-    df["report_date"] = pd.to_datetime(df["report_date"])
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     return df
 
@@ -69,7 +69,7 @@ def fetch_cash_flow(code: str) -> pd.DataFrame:
     """现金流表：经营/投资/筹资现金流净额。"""
     raw = ak.stock_cash_flow_sheet_by_report_em(symbol=_em_symbol(code))
     df = _remap(raw, CASH_FLOW_MAP).copy()
-    df["report_date"] = pd.to_datetime(df["report_date"])
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     return df
 
