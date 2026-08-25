@@ -72,8 +72,6 @@ QUARTER_SPEC = [
     ("股本结构（季末）", None, None, None),
     (None, "普通股数量（亿股）", "total_shares_yi", 2),
     (None, "优先股数量（亿股）", "preferred_shares_yi", 2),
-    ("股东回报", None, None, None),
-    (None, "股息率 %", "dividend_yield_pct", 1),
 ]
 
 
@@ -156,7 +154,6 @@ def build_template_data(code: str) -> dict:
     if latest_shares is not None:
         quarter["total_shares_yi"] = latest_shares / 1e8  # 股本变动不频繁，用最新值近似
     quarter["preferred_shares_yi"] = 0.0
-    quarter["dividend_yield_pct"] = None  # 季度无股息率
 
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)
