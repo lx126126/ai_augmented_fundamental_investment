@@ -95,10 +95,11 @@ def fetch_segments(code: str) -> pd.DataFrame:
     return df
 
 
-def fetch_valuation(code: str, period: str = "近三年") -> pd.DataFrame | None:
-    """百度估值：总市值（亿）+ 市净率（近 N 年每日，用于估值与分位）。
+def fetch_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None:
+    """百度估值：总市值 + 市净率（近 N 年，长表结构，两指标独立不 merge）。
 
-    东财行情域名被代理拦截时，用百度估值兜底；某指标无数据时返回 None。
+    长表列：report_date, value, indicator(market_cap/pb), symbol
+    东财行情域名被网络限制时用百度估值兜底；某指标无数据时返回 None。
     """
     try:
         mcap = ak.stock_zh_valuation_baidu(symbol=code, indicator="总市值", period=period)
@@ -107,9 +108,11 @@ def fetch_valuation(code: str, period: str = "近三年") -> pd.DataFrame | None
         return None
     if mcap is None or mcap.empty or pb is None or pb.empty:
         return None
-    mcap = mcap.rename(columns={"value": "market_cap"})
-    pb = pb.rename(columns={"value": "pb"})
-    df = mcap.merge(pb, on="date", how="inner")
+    mcap = mcap.copy()
+    pb = pb.copy()
+    mcap["indicator"] = "market_cap"
+    pb["indicator"] = "pb"
+    df = pd.concat([mcap, pb], ignore_index=True)
     df = df.rename(columns={"date": "report_date"})
     df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)

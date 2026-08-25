@@ -247,18 +247,22 @@ def build_segments(seg_df: pd.DataFrame, lookback_years: int = 2):
 def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     """估值面板：PE/PB/股息率/52周股价区间/估值分位。
 
-    - PB / 市值：百度估值直接给（近三年每日）
+    valuation 为长表（indicator: market_cap/pb，value 为对应值）。
+    - PB / 市值：百度估值直接给（近十年）
     - PE = 最新总市值 / 最新年报归母净利
     - 52周股价 = 近一年市值 min/max ÷ 总股本
-    - 分位：PB 用近三年 PB 序列；PE 用市值分位近似（净利短期稳定）
+    - 分位：PB 用 PB 序列；PE 用市值分位近似（净利短期稳定）
     """
-    val = valuation.sort_values("report_date")
-    latest = val.iloc[-1]
-    mcap = latest["market_cap"]  # 总市值（亿元）
-    pb = latest["pb"]
+    mcap = valuation[valuation["indicator"] == "market_cap"].sort_values("report_date")
+    pb = valuation[valuation["indicator"] == "pb"].sort_values("report_date")
+    if mcap.empty or pb.empty:
+        return None
+
+    pb_now = pb["value"].iloc[-1]
+    mcap_now = mcap["value"].iloc[-1]  # 总市值（亿元）
 
     net_profit = annual["net_profit_parent"].iloc[-1]  # 最新年报归母净利（亿元）
-    pe = mcap / net_profit if net_profit and net_profit > 0 else None
+    pe = mcap_now / net_profit if net_profit and net_profit > 0 else None
 
     dividend_yield = None
     if "dividend_yield_pct" in annual.columns:
@@ -267,20 +271,20 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     total_shares_yi = annual["total_shares"].iloc[-1] / 1e8 if "total_shares" in annual.columns else None
 
     # 52周股价区间（近一年市值 ÷ 总股本）
-    one_year = val[val["report_date"] >= (val["report_date"].max() - pd.DateOffset(years=1))]
+    one_year = mcap[mcap["report_date"] >= (mcap["report_date"].max() - pd.DateOffset(years=1))]
     price_low = price_now = price_high = None
-    if total_shares_yi:
-        price_low = one_year["market_cap"].min() / total_shares_yi
-        price_high = one_year["market_cap"].max() / total_shares_yi
-        price_now = mcap / total_shares_yi
+    if total_shares_yi and not one_year.empty:
+        price_low = one_year["value"].min() / total_shares_yi
+        price_high = one_year["value"].max() / total_shares_yi
+        price_now = mcap_now / total_shares_yi
 
     # 分位（当前值在历史序列中的百分位）
-    pb_pctile = (val["pb"] < pb).mean() * 100 if pb is not None else None
-    pe_pctile = (val["market_cap"] < mcap).mean() * 100 if mcap is not None else None
+    pb_pctile = (pb["value"] < pb_now).mean() * 100
+    pe_pctile = (mcap["value"] < mcap_now).mean() * 100
 
     return {
         "pe": pe,
-        "pb": pb,
+        "pb": pb_now,
         "dividend_yield": dividend_yield,
         "price_low": price_low,
         "price_now": price_now,
