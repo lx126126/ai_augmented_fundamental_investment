@@ -154,9 +154,14 @@ def build_template_data(code: str) -> dict:
     quarter_labels = [_q_label(d) for d in quarter["report_date"].tolist()]
     quarterly = _extract(quarter, QUARTER_SPEC)
 
+    # 报告期 = 最新季度，如 2026Q1（用于 reports/ 归档目录）
+    latest_q = quarter["report_date"].iloc[-1]
+    report_period = f"{latest_q.year}Q{(latest_q.month - 1) // 3 + 1}"
+
     return {
         "years": years,
         "financials": financials,
         "quarter_labels": quarter_labels,
         "quarterly": quarterly,
+        "report_period": report_period,
     }

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ValueLine 一页研报 · 模板 v1.5</title>
+<style>
+:root {
+  --ink: #1a2330;
+  --muted: #5c6b7a;
+  --faint: #8a97a6;
+  --line: #dde3ea;
+  --line-soft: #e8edf2;
+  --accent: #0f3d6e;
+  --accent-2: #14508c;
+  --bg-soft: #f5f7fa;
+  --up: #c0392b;
+  --down: #1e8e5a;
+  --warn: #b8860b;
+  --amber-bg: #fdf6e3;
+  --amber-line: #e8d5a0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: var(--ink);
+  background: #e9edf1;
+  -webkit-font-smoothing: antialiased;
+  padding: 24px 0;
+}
+.page {
+  width: 1080px;
+  margin: 0 auto;
+  background: #ffffff;
+  box-shadow: 0 2px 16px rgba(15, 61, 110, 0.10);
+  padding: 40px 48px 36px;
+}
+.header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid var(--accent); }
+.co-name { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: var(--accent); line-height: 1.15; }
+.co-name .en { font-size: 14px; font-weight: 400; color: var(--faint); letter-spacing: 0.5px; margin-left: 10px; }
+.co-meta { margin-top: 9px; font-size: 12px; color: var(--muted); line-height: 1.8; }
+.co-meta .tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; margin-right: 7px; border: 1px solid var(--line); background: var(--bg-soft); color: var(--muted); }
+.co-meta .code { font-weight: 600; color: var(--ink); }
+.header-right { text-align: right; flex-shrink: 0; margin-left: 16px; }
+.quarter { display: inline-block; background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
+.badges { margin-top: 9px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.badge { font-size: 11px; padding: 3px 10px; border-radius: 3px; font-weight: 500; }
+.badge.lynch { background: #eef3fb; color: var(--accent-2); border: 1px solid #c9d8ec; }
+.badge.graham { background: #eef7f1; color: var(--down); border: 1px solid #c4e3d2; }
+.summary { margin: 16px 0; padding: 12px 16px; background: var(--bg-soft); border-left: 3px solid var(--accent-2); font-size: 13px; line-height: 1.8; color: #33404f; }
+.summary b { color: var(--ink); }
+
+.section { margin-bottom: 20px; }
+.sec-title { font-size: 15px; font-weight: 700; color: var(--accent); padding-bottom: 6px; margin-bottom: 11px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: baseline; }
+.sec-title .hint { font-size: 11px; font-weight: 400; color: var(--faint); }
+.sub-title { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; }
+.disclaim { font-size: 10px; color: var(--faint); margin-bottom: 8px; }
+
+/* 全历史宽表 */
+.table-scroll { overflow-x: auto; }
+table.dense { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+table.dense th, table.dense td { padding: 4px 3px; text-align: right; border-bottom: 1px solid var(--line-soft); overflow: hidden; }
+table.dense th.name, table.dense td.name { text-align: left; width: 118px; }
+table.dense th { background: var(--bg-soft); color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); font-size: 9.5px; }
+table.dense td.num { font-variant-numeric: tabular-nums; }
+table.dense tr.group td { background: #eef3fb; color: var(--accent-2); font-weight: 600; font-size: 10px; text-align: left; border-bottom: 1px solid var(--line); }
+table.dense .row-head { font-weight: 500; color: #33404f; }
+
+/* 业务收入构成（两张表并排） */
+.seg-row { display: flex; gap: 18px; }
+.seg-block { flex: 1; }
+.seg-block-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 6px; }
+
+/* 商业模式 */
+.biz-row { display: flex; padding: 7px 0; border-bottom: 1px dashed var(--line-soft); font-size: 12px; line-height: 1.7; }
+.biz-row:last-child { border-bottom: none; }
+.biz-k { flex: 0 0 78px; font-weight: 700; color: var(--accent); }
+.biz-v { flex: 1; color: #33404f; }
+
+/* 业务收入构成 */
+.seg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; }
+.seg-bar .seg { height: 100%; }
+.seg-legend-row { font-size: 10px; color: var(--faint); margin-top: 7px; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+.seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.seg-note { color: var(--faint); }
+
+/* 估值三件套（横排） */
+.val-grid { display: flex; gap: 12px; }
+.val-item { flex: 1; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fff; }
+.val-item .lbl { font-size: 11px; color: var(--muted); }
+.val-item .v { font-size: 21px; font-weight: 700; color: var(--ink); margin: 4px 0; font-variant-numeric: tabular-nums; }
+.val-item .v small { font-size: 12px; font-weight: 400; color: var(--muted); }
+.val-item .pct { font-size: 10px; color: var(--faint); }
+.pct-low { color: var(--up) !important; font-weight: 600; }
+.pct-high { color: var(--down) !important; font-weight: 600; }
+
+/* 市场数据（52周 + 机构预期 横排） */
+.market-row { display: flex; gap: 12px; margin-top: 12px; }
+.market-row > div { flex: 1; }
+.price-range { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.price-range .pr-title { font-size: 11px; color: var(--muted); margin-bottom: 9px; }
+.pr-bar { position: relative; height: 8px; background: #eef1f5; border-radius: 4px; margin-bottom: 7px; }
+.pr-marker { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--accent-2); border-radius: 1px; }
+.pr-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+.pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
+.consensus b { color: var(--ink); }
+.tp-grid { display: flex; gap: 8px; margin: 7px 0; }
+.tp-cell { flex: 1; text-align: center; padding: 7px 4px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
+.tp-cell .k { font-size: 9.5px; color: var(--faint); }
+.tp-cell .v { font-size: 15px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rating-bar { display: flex; height: 11px; border-radius: 5px; overflow: hidden; margin: 6px 0 5px; }
+.rating-bar .seg { height: 100%; }
+.rating-legend { font-size: 10px; color: var(--faint); display: flex; gap: 12px; }
+
+/* 格雷厄姆体检 */
+.graham { margin-top: 12px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
+.graham .g-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 7px; }
+.graham .g-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: var(--muted); }
+.graham .g-row b { color: var(--ink); font-weight: 600; }
+.graham .g-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
+.graham .g-score b { color: var(--down); }
+
+/* 机构观点分歧（两列横排） */
+.bull-bear { display: flex; gap: 12px; }
+.bb-col { flex: 1; border-radius: 8px; padding: 12px 14px; border: 1px solid var(--line-soft); }
+.bb-col.bull { border-left: 3px solid var(--up); background: #fdf7f6; }
+.bb-col.bear { border-left: 3px solid var(--down); background: #f4faf6; }
+.bb-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.bb-col.bull .bb-title { color: var(--up); }
+.bb-col.bear .bb-title { color: var(--down); }
+.bb-col ul { list-style: none; }
+.bb-col li { font-size: 11px; line-height: 1.7; color: #33404f; padding: 3px 0 3px 14px; position: relative; }
+.bb-col li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; border-radius: 50%; }
+.bb-col.bull li::before { background: var(--up); }
+.bb-col.bear li::before { background: var(--down); }
+
+/* 财务造假检测 */
+.fraud { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.fraud .f-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; color: var(--muted); }
+.fraud .f-row b { color: var(--ink); font-weight: 600; }
+.fraud .f-row b.ok { color: var(--down); }
+.fraud .f-row b.warn { color: var(--warn); }
+.fraud .f-row b.bad { color: var(--up); }
+.fraud .f-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
+.fraud .f-score b.ok { color: var(--down); }
+
+/* 列表 */
+.thesis, .risk { list-style: none; }
+.thesis li, .risk li { font-size: 12px; line-height: 1.7; color: #33404f; padding: 5px 0 5px 18px; position: relative; border-bottom: 1px dashed var(--line-soft); }
+.thesis li:last-child, .risk li:last-child { border-bottom: none; }
+.thesis li::before { content: ""; position: absolute; left: 3px; top: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); }
+.risk li::before { content: "!"; position: absolute; left: 3px; top: 6px; font-size: 11px; font-weight: 700; color: var(--warn); }
+
+/* 复盘层 */
+.review { background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 8px; padding: 13px 15px; }
+.review .r-title { font-size: 13px; font-weight: 700; color: #7a5c0a; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
+.review .r-title .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+.review .r-row { font-size: 11.5px; line-height: 1.7; padding: 3px 0; }
+.review .r-row .k { font-weight: 600; color: #7a5c0a; margin-right: 4px; }
+.review .r-row.verified .k { color: var(--down); }
+.review .r-row.refuted .k { color: var(--up); }
+
+/* 数据校验 */
+.verify { font-size: 11px; color: var(--faint); line-height: 1.8; }
+.verify b { color: var(--muted); font-weight: 600; }
+.footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); line-height: 1.7; }
+@media print { body { background: #fff; padding: 0; } .page { box-shadow: none; margin: 0; width: 100%; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div>
+      <div class="co-name">中国神华<span class="en">SHENHUA ENERGY</span></div>
+      <div class="co-meta">
+        <span class="code">601088.SH</span> · <span class="code">1088.HK</span>
+        <span class="tag">煤炭开采 · 动力煤</span>
+        <span class="tag">沪深300</span>
+        <div style="margin-top:3px;">报告期：2026 Q2 · 发布日期：2026-08-20</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="quarter">2026 Q2 更新</span>
+      <div class="badges">
+        <span class="badge lynch">林奇分类：周期型 · 稳健收息</span>
+        <span class="badge graham">格雷厄姆质量：高（低负债 · 净现金）</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
+    <div class="biz">
+      <div class="biz-row">
+        <div class="biz-k">盈利来源</div>
+        <div class="biz-v">煤炭生产销售（动力煤）＋火电发电＋铁路/港口/航运＋煤化工，一体化运营；煤炭为利润核心，电力与运输为稳定补充。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">盈利结构</div>
+        <div class="biz-v">煤炭业务贡献约 64% 收入与主要毛利，长协煤锁定价格；电力、运输平滑煤价周期波动。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">竞争地位</div>
+        <div class="biz-v">全球最大煤炭上市公司、国内动力煤龙头，核定产能与可采储量位居行业前列。</div>
+      </div>
+      <div class="biz-row">
+        <div class="biz-k">护城河</div>
+        <div class="biz-v">资源禀赋（低成本大矿）＋一体化协同（煤电路港航）＋长协煤锁定＋规模与牌照壁垒。</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">核心财务数据（上市以来全历史 2004–2025） <span class="hint">单位：亿元 / 亿股 / %</span></div>
+<div class="table-scroll"><table class="dense"><thead><tr><th class="name">指标</th><th>2004</th><th>2005</th><th>2006</th><th>2007</th><th>2008</th><th>2009</th><th>2010</th><th>2011</th><th>2012</th><th>2013</th><th>2014</th><th>2015</th><th>2016</th><th>2017</th><th>2018</th><th>2019</th><th>2020</th><th>2021</th><th>2022</th><th>2023</th><th>2024</th><th>2025</th></tr></thead><tbody><tr class="group"><td colspan="23">利润表</td></tr><tr><td class="row-head">营业收入（亿元）</td><td class="num">392.7</td><td class="num">522.4</td><td class="num">651.9</td><td class="num">821.1</td><td class="num">1071.3</td><td class="num">1213.1</td><td class="num">1576.6</td><td class="num">2092.2</td><td class="num">2545.8</td><td class="num">2838.0</td><td class="num">2530.8</td><td class="num">1770.7</td><td class="num">1831.3</td><td class="num">2487.5</td><td class="num">2641.0</td><td class="num">2418.7</td><td class="num">2332.6</td><td class="num">3356.4</td><td class="num">3445.3</td><td class="num">3430.7</td><td class="num">3397.9</td><td class="num">2949.2</td></tr><tr><td class="row-head">归母净利润（亿元）</td><td class="num">78.9</td><td class="num">147.0</td><td class="num">166.2</td><td class="num">205.0</td><td class="num">259.6</td><td class="num">302.8</td><td class="num">378.5</td><td class="num">449.9</td><td class="num">485.1</td><td class="num">456.8</td><td class="num">374.2</td><td class="num">161.4</td><td class="num">227.1</td><td class="num">450.4</td><td class="num">438.7</td><td class="num">432.5</td><td class="num">391.7</td><td class="num">500.8</td><td class="num">696.5</td><td class="num">596.9</td><td class="num">558.0</td><td class="num">528.5</td></tr><tr><td class="row-head">毛利率 %</td><td class="num">48.5</td><td class="num">55.7</td><td class="num">52.9</td><td class="num">51.7</td><td class="num">48.7</td><td class="num">49.3</td><td class="num">46.0</td><td class="num">41.1</td><td class="num">36.1</td><td class="num">33.9</td><td class="num">34.3</td><td class="num">37.6</td><td class="num">39.5</td><td class="num">42.2</td><td class="num">41.1</td><td class="num">40.7</td><td class="num">36.5</td><td class="num">32.9</td><td class="num">39.0</td><td class="num">35.9</td><td class="num">34.1</td><td class="num">35.1</td></tr><tr><td class="row-head">净利率 %</td><td class="num">—</td><td class="num">32.6</td><td class="num">29.8</td><td class="num">28.2</td><td class="num">27.8</td><td class="num">28.6</td><td class="num">28.0</td><td class="num">24.7</td><td class="num">22.3</td><td class="num">19.6</td><td class="num">18.7</td><td class="num">13.1</td><td class="num">16.1</td><td class="num">21.7</td><td class="num">20.5</td><td class="num">21.3</td><td class="num">20.3</td><td class="num">17.7</td><td class="num">23.7</td><td class="num">20.3</td><td class="num">20.4</td><td class="num">21.3</td></tr><tr><td class="row-head">经营现金流净额（亿元）</td><td class="num">214.0</td><td class="num">268.1</td><td class="num">245.7</td><td class="num">299.4</td><td class="num">442.3</td><td class="num">559.3</td><td class="num">609.1</td><td class="num">732.2</td><td class="num">746.1</td><td class="num">542.9</td><td class="num">690.7</td><td class="num">554.1</td><td class="num">818.8</td><td class="num">951.5</td><td class="num">882.5</td><td class="num">631.1</td><td class="num">812.9</td><td class="num">943.5</td><td class="num">1097.3</td><td class="num">896.9</td><td class="num">910.9</td><td class="num">750.6</td></tr><tr><td class="row-head">ROE（摊薄）%</td><td class="num">—</td><td class="num">25.5</td><td class="num">24.9</td><td class="num">15.4</td><td class="num">17.9</td><td class="num">17.9</td><td class="num">18.9</td><td class="num">20.1</td><td class="num">18.8</td><td class="num">16.8</td><td class="num">12.6</td><td class="num">5.5</td><td class="num">7.3</td><td class="num">14.9</td><td class="num">13.4</td><td class="num">12.3</td><td class="num">10.9</td><td class="num">13.3</td><td class="num">17.7</td><td class="num">14.6</td><td class="num">13.7</td><td class="num">12.9</td></tr><tr class="group"><td colspan="23">资产负债表</td></tr><tr><td class="row-head">总资产（亿元）</td><td class="num">1122.7</td><td class="num">1404.5</td><td class="num">1725.3</td><td class="num">2410.4</td><td class="num">2751.8</td><td class="num">3105.1</td><td class="num">3676.9</td><td class="num">4029.8</td><td class="num">4679.7</td><td class="num">5076.7</td><td class="num">5445.7</td><td class="num">5539.6</td><td class="num">5716.6</td><td class="num">5671.2</td><td class="num">5872.4</td><td class="num">5584.8</td><td class="num">5584.5</td><td class="num">6068.3</td><td class="num">6218.4</td><td class="num">6301.3</td><td class="num">6680.2</td><td class="num">6277.6</td></tr><tr><td class="row-head">总负债（亿元）</td><td class="num">721.8</td><td class="num">673.2</td><td class="num">838.0</td><td class="num">887.6</td><td class="num">1036.5</td><td class="num">1137.6</td><td class="num">1333.9</td><td class="num">1377.0</td><td class="num">1585.8</td><td class="num">1781.4</td><td class="num">1849.7</td><td class="num">1958.1</td><td class="num">1917.6</td><td class="num">1925.0</td><td class="num">1827.9</td><td class="num">1428.7</td><td class="num">1333.2</td><td class="num">1613.8</td><td class="num">1625.2</td><td class="num">1517.6</td><td class="num">1713.8</td><td class="num">1463.1</td></tr><tr><td class="row-head">净资产（归母）（亿元）</td><td class="num">265.0</td><td class="num">575.5</td><td class="num">689.3</td><td class="num">1313.8</td><td class="num">1466.2</td><td class="num">1693.3</td><td class="num">2022.0</td><td class="num">2255.3</td><td class="num">2596.9</td><td class="num">2723.6</td><td class="num">2952.4</td><td class="num">2927.9</td><td class="num">3123.6</td><td class="num">3014.9</td><td class="num">3277.6</td><td class="num">3519.3</td><td class="num">3601.9</td><td class="num">3766.9</td><td class="num">3939.0</td><td class="num">4086.9</td><td class="num">4195.6</td><td class="num">4091.1</td></tr><tr><td class="row-head">货币资金（亿元）</td><td class="num">71.9</td><td class="num">198.9</td><td class="num">157.7</td><td class="num">534.4</td><td class="num">594.9</td><td class="num">734.7</td><td class="num">822.1</td><td class="num">692.8</td><td class="num">617.4</td><td class="num">462.7</td><td class="num">435.1</td><td class="num">478.5</td><td class="num">507.6</td><td class="num">810.9</td><td class="num">722.0</td><td class="num">514.8</td><td class="num">1274.6</td><td class="num">1628.9</td><td class="num">1705.0</td><td class="num">1499.9</td><td class="num">1438.5</td><td class="num">967.7</td></tr><tr><td class="row-head">存货（亿元）</td><td class="num">26.9</td><td class="num">35.7</td><td class="num">48.8</td><td class="num">63.4</td><td class="num">78.4</td><td class="num">77.3</td><td class="num">115.7</td><td class="num">129.4</td><td class="num">157.2</td><td class="num">176.4</td><td class="num">159.8</td><td class="num">128.2</td><td class="num">133.4</td><td class="num">116.5</td><td class="num">99.7</td><td class="num">120.5</td><td class="num">127.5</td><td class="num">126.3</td><td class="num">121.0</td><td class="num">128.5</td><td class="num">126.7</td><td class="num">118.5</td></tr><tr><td class="row-head">应收账款（亿元）</td><td class="num">27.2</td><td class="num">25.1</td><td class="num">46.8</td><td class="num">58.9</td><td class="num">75.2</td><td class="num">75.7</td><td class="num">92.4</td><td class="num">126.5</td><td class="num">190.9</td><td class="num">220.4</td><td class="num">246.3</td><td class="num">233.7</td><td class="num">161.8</td><td class="num">133.2</td><td class="num">84.9</td><td class="num">78.5</td><td class="num">78.0</td><td class="num">102.6</td><td class="num">109.7</td><td class="num">118.8</td><td class="num">125.7</td><td class="num">132.2</td></tr><tr><td class="row-head">有息负债（亿元）</td><td class="num">545.7</td><td class="num">456.8</td><td class="num">532.3</td><td class="num">546.2</td><td class="num">691.6</td><td class="num">700.8</td><td class="num">610.8</td><td class="num">504.5</td><td class="num">614.8</td><td class="num">652.4</td><td class="num">575.8</td><td class="num">606.1</td><td class="num">628.5</td><td class="num">738.1</td><td class="num">487.6</td><td class="num">377.8</td><td class="num">552.9</td><td class="num">534.4</td><td class="num">436.5</td><td class="num">325.6</td><td class="num">364.9</td><td class="num">286.8</td></tr><tr><td class="row-head">商誉（亿元）</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td></tr><tr class="group"><td colspan="23">股本结构</td></tr><tr><td class="row-head">普通股数量（亿股）</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.90</td><td class="num">198.69</td><td class="num">198.69</td><td class="num">198.69</td><td class="num">198.69</td><td class="num">198.69</td><td class="num">216.89</td></tr><tr><td class="row-head">优先股数量（亿股）</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr><tr class="group"><td colspan="23">股东回报</td></tr><tr><td class="row-head">分红比例 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">17.5</td><td class="num">35.2</td><td class="num">34.8</td><td class="num">39.4</td><td class="num">39.8</td><td class="num">39.4</td><td class="num">39.6</td><td class="num">39.3</td><td class="num">39.4</td><td class="num">40.3</td><td class="num">40.2</td><td class="num">39.9</td><td class="num">57.9</td><td class="num">91.8</td><td class="num">100.8</td><td class="num">72.7</td><td class="num">75.2</td><td class="num">80.5</td><td class="num">82.5</td></tr><tr><td class="row-head">股息率 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">0.4</td><td class="num">1.6</td><td class="num">2.4</td><td class="num">2.7</td><td class="num">3.6</td><td class="num">5.6</td><td class="num">6.2</td><td class="num">2.9</td><td class="num">2.3</td><td class="num">2.1</td><td class="num">4.7</td><td class="num">4.3</td><td class="num">7.7</td><td class="num">9.1</td><td class="num">7.6</td><td class="num">8.2</td><td class="num">5.0</td><td class="num">5.5</td><td class="num">4.7</td></tr></tbody></table></div>
+    <div class="sub-title">近两年季度（24Q2–26Q1）</div>
+<div class="table-scroll"><table class="dense"><thead><tr><th class="name">指标</th><th>24Q2</th><th>24Q3</th><th>24Q4</th><th>25Q1</th><th>25Q2</th><th>25Q3</th><th>25Q4</th><th>26Q1</th></tr></thead><tbody><tr class="group"><td colspan="9">利润表（单季）</td></tr><tr><td class="row-head">营业收入（亿元）</td><td class="num">809.6</td><td class="num">863.5</td><td class="num">843.1</td><td class="num">695.9</td><td class="num">685.2</td><td class="num">750.4</td><td class="num">817.6</td><td class="num">704.0</td></tr><tr><td class="row-head">归母净利润（亿元）</td><td class="num">134.5</td><td class="num">153.7</td><td class="num">124.2</td><td class="num">119.5</td><td class="num">126.9</td><td class="num">144.1</td><td class="num">138.0</td><td class="num">106.7</td></tr><tr><td class="row-head">毛利率 %</td><td class="num">31.9</td><td class="num">35.3</td><td class="num">35.5</td><td class="num">34.1</td><td class="num">37.4</td><td class="num">36.7</td><td class="num">32.6</td><td class="num">32.9</td></tr><tr><td class="row-head">净利率 %</td><td class="num">16.6</td><td class="num">17.8</td><td class="num">14.7</td><td class="num">17.2</td><td class="num">18.5</td><td class="num">19.2</td><td class="num">16.9</td><td class="num">15.2</td></tr><tr><td class="row-head">经营现金流净额（亿元）</td><td class="num">241.8</td><td class="num">295.8</td><td class="num">96.1</td><td class="num">205.4</td><td class="num">252.6</td><td class="num">194.6</td><td class="num">98.1</td><td class="num">173.6</td></tr><tr><td class="row-head">ROE（单季）%</td><td class="num">3.4</td><td class="num">3.7</td><td class="num">3.0</td><td class="num">2.8</td><td class="num">3.2</td><td class="num">3.5</td><td class="num">3.4</td><td class="num">2.2</td></tr><tr class="group"><td colspan="9">资产负债表（季末）</td></tr><tr><td class="row-head">总资产（亿元）</td><td class="num">6727.6</td><td class="num">6493.5</td><td class="num">6680.2</td><td class="num">6723.1</td><td class="num">6825.3</td><td class="num">6428.8</td><td class="num">6277.6</td><td class="num">7832.8</td></tr><tr><td class="row-head">总负债（亿元）</td><td class="num">2003.9</td><td class="num">1565.0</td><td class="num">1713.8</td><td class="num">1594.2</td><td class="num">2124.3</td><td class="num">1566.1</td><td class="num">1463.1</td><td class="num">2274.0</td></tr><tr><td class="row-head">净资产（归母）（亿元）</td><td class="num">3971.2</td><td class="num">4149.8</td><td class="num">4195.6</td><td class="num">4331.1</td><td class="num">4015.2</td><td class="num">4160.9</td><td class="num">4091.1</td><td class="num">4809.0</td></tr><tr><td class="row-head">货币资金（亿元）</td><td class="num">1869.4</td><td class="num">1651.3</td><td class="num">1438.5</td><td class="num">1554.0</td><td class="num">1615.8</td><td class="num">1244.2</td><td class="num">967.7</td><td class="num">1185.8</td></tr><tr><td class="row-head">存货（亿元）</td><td class="num">139.1</td><td class="num">113.6</td><td class="num">126.7</td><td class="num">123.1</td><td class="num">132.4</td><td class="num">136.6</td><td class="num">118.5</td><td class="num">107.9</td></tr><tr><td class="row-head">应收账款（亿元）</td><td class="num">125.6</td><td class="num">130.1</td><td class="num">125.7</td><td class="num">133.0</td><td class="num">131.2</td><td class="num">119.8</td><td class="num">132.2</td><td class="num">133.1</td></tr><tr><td class="row-head">有息负债（亿元）</td><td class="num">312.8</td><td class="num">301.5</td><td class="num">364.9</td><td class="num">353.8</td><td class="num">330.2</td><td class="num">306.6</td><td class="num">286.8</td><td class="num">1163.7</td></tr><tr><td class="row-head">商誉（亿元）</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">0.0</td></tr><tr class="group"><td colspan="9">股本结构（季末）</td></tr><tr><td class="row-head">普通股数量（亿股）</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td><td class="num">216.89</td></tr><tr><td class="row-head">优先股数量（亿股）</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td><td class="num">0.00</td></tr><tr class="group"><td colspan="9">股东回报</td></tr><tr><td class="row-head">股息率 %</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr></tbody></table></div>
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
+
+    <div class="sub-title">业务收入构成（近两年季度）</div>
+<div class="seg-row"><div class="seg-block"><div class="seg-block-title">收入（亿元）</div><table class="dense"><thead><tr><th class="name">业务条线</th><th>24Q2</th><th>24Q3</th><th>24Q4</th><th>25Q1</th><th>25Q2</th><th>25Q3</th><th>25Q4</th><th>26Q1</th></tr></thead><tbody><tr><td class="row-head"><span class="seg-dot" style="background:#378ADD"></span>煤炭业务</td><td class="num">540</td><td class="num">530</td><td class="num">560</td><td class="num">550</td><td class="num">545</td><td class="num">538</td><td class="num">555</td><td class="num">550</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#E24B4A"></span>电力业务</td><td class="num">195</td><td class="num">190</td><td class="num">200</td><td class="num">198</td><td class="num">196</td><td class="num">194</td><td class="num">202</td><td class="num">200</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#BA7517"></span>运输业务</td><td class="num">70</td><td class="num">68</td><td class="num">72</td><td class="num">70</td><td class="num">69</td><td class="num">68</td><td class="num">71</td><td class="num">70</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#888780"></span>煤化工业务</td><td class="num">35</td><td class="num">34</td><td class="num">36</td><td class="num">35</td><td class="num">34</td><td class="num">34</td><td class="num">35</td><td class="num">35</td></tr></tbody></table></div><div class="seg-block"><div class="seg-block-title">毛利率（%）</div><table class="dense"><thead><tr><th class="name">业务条线</th><th>24Q2</th><th>24Q3</th><th>24Q4</th><th>25Q1</th><th>25Q2</th><th>25Q3</th><th>25Q4</th><th>26Q1</th></tr></thead><tbody><tr><td class="row-head"><span class="seg-dot" style="background:#378ADD"></span>煤炭业务</td><td class="num">45.2</td><td class="num">44.8</td><td class="num">46.1</td><td class="num">45.8</td><td class="num">45.0</td><td class="num">44.5</td><td class="num">46.3</td><td class="num">45.8</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#E24B4A"></span>电力业务</td><td class="num">15.2</td><td class="num">14.8</td><td class="num">15.6</td><td class="num">15.3</td><td class="num">15.0</td><td class="num">14.6</td><td class="num">15.8</td><td class="num">15.5</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#BA7517"></span>运输业务</td><td class="num">28.5</td><td class="num">28.0</td><td class="num">29.2</td><td class="num">28.8</td><td class="num">28.3</td><td class="num">28.0</td><td class="num">29.0</td><td class="num">28.6</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#888780"></span>煤化工业务</td><td class="num">12.3</td><td class="num">12.0</td><td class="num">12.8</td><td class="num">12.5</td><td class="num">12.2</td><td class="num">12.0</td><td class="num">12.6</td><td class="num">12.4</td></tr></tbody></table></div></div><div class="seg-bar"><div class="seg" style="width:64.3%;background:#378ADD"></div><div class="seg" style="width:23.4%;background:#E24B4A"></div><div class="seg" style="width:8.2%;background:#BA7517"></div><div class="seg" style="width:4.1%;background:#888780"></div></div><div class="seg-legend-row"><span class="seg-legend"><span class="seg-dot" style="background:#378ADD"></span>煤炭业务 64.3%</span><span class="seg-legend"><span class="seg-dot" style="background:#E24B4A"></span>电力业务 23.4%</span><span class="seg-legend"><span class="seg-dot" style="background:#BA7517"></span>运输业务 8.2%</span><span class="seg-legend"><span class="seg-dot" style="background:#888780"></span>煤化工业务 4.1%</span><span class="seg-note">（最新季度收入占比）</span></div>
+    <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">估值与市场 <span class="hint">机构一致预期</span></div>
+    <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
+    <div class="val-grid">
+      <div class="val-item">
+        <div class="lbl">市盈率 PE（TTM）</div>
+        <div class="v">13.2<small>x</small></div>
+        <div class="pct pct-low">近10年分位 35% · 偏低</div>
+      </div>
+      <div class="val-item">
+        <div class="lbl">市净率 PB（MRQ）</div>
+        <div class="v">1.45<small>x</small></div>
+        <div class="pct">近10年分位 40% · 合理</div>
+      </div>
+      <div class="val-item">
+        <div class="lbl">股息率</div>
+        <div class="v" style="color:var(--up)">6.1<small>%</small></div>
+        <div class="pct pct-low">近10年分位 85% · 高位</div>
+      </div>
+    </div>
+
+    <div class="market-row">
+      <div class="price-range">
+        <div class="pr-title">52周价格区间（元）</div>
+        <div class="pr-bar"><div class="pr-marker" style="left:43%"></div></div>
+        <div class="pr-labels">
+          <span>52周最低 <b>38.5</b></span>
+          <span>现价 <b>41.8</b></span>
+          <span>52周最高 <b>46.2</b></span>
+        </div>
+      </div>
+      <div class="consensus">
+        <div>机构目标价（<b>28</b> 家覆盖，单位：元）</div>
+        <div class="tp-grid">
+          <div class="tp-cell"><div class="k">最高</div><div class="v">52.0</div></div>
+          <div class="tp-cell"><div class="k">最低</div><div class="v">38.0</div></div>
+          <div class="tp-cell"><div class="k">平均</div><div class="v">45.0</div></div>
+          <div class="tp-cell"><div class="k">中位</div><div class="v">44.5</div></div>
+        </div>
+        <div class="rating-bar">
+          <div class="seg" style="width:43%;background:#c0392b"></div>
+          <div class="seg" style="width:36%;background:#e8a09b"></div>
+          <div class="seg" style="width:18%;background:#a9c2d4"></div>
+          <div class="seg" style="width:3%;background:#8fbfa0"></div>
+        </div>
+        <div class="rating-legend"><span>买入 12</span><span>增持 10</span><span>中性 5</span><span>减持 1</span></div>
+      </div>
+    </div>
+
+    <div class="graham">
+      <div class="g-title">格雷厄姆质量体检</div>
+      <div class="g-row"><span>资产负债率</span><b>23.5% · 优秀</b></div>
+      <div class="g-row"><span>流动比率</span><b>2.1 · 稳健</b></div>
+      <div class="g-row"><span>盈利稳定性（5年）</span><b>连续正盈利</b></div>
+      <div class="g-row"><span>净现金 / 有息负债</span><b>净现金状态</b></div>
+      <div class="g-score">综合质量评分：<b>8.2 / 10</b>（防御型及格线 6.5）</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">投资逻辑</div>
+    <ul class="thesis">
+      <li>一体化「煤电路港航」协同，长协煤占比高，盈利穿越煤价周期、波动显著低于纯煤企。</li>
+      <li>高分红承诺：分红率长期不低于 60%，当前股息率 6%+，具备类债券收息属性。</li>
+      <li>资产负债表干净，低负债 + 净现金，符合格雷厄姆式财务稳健与安全边际要求。</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">风险提示</div>
+    <ul class="risk">
+      <li>动力煤现货价超预期下行，长协价重谈带来盈利下修压力。</li>
+      <li>宏观经济复苏不及预期，压制电力需求与发电量。</li>
+      <li>资本开支加大或分红率下调，削弱收息逻辑。</li>
+    </ul>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
+    <div class="disclaim">以下为第三方机构代表性观点，非本人立场。</div>
+    <div class="bull-bear">
+      <div class="bb-col bull">
+        <div class="bb-title">看多观点（买入 / 增持）</div>
+        <ul>
+          <li>长协煤占比超七成，盈利穿越煤价周期、波动显著小于纯煤企。</li>
+          <li>高股息 + 低估值，红利资产稀缺性凸显，险资长线配置需求。</li>
+          <li>煤电一体化对冲周期，充沛现金流支撑高分红可持续。</li>
+        </ul>
+      </div>
+      <div class="bb-col bear">
+        <div class="bb-title">看空观点（中性偏空 / 减持）</div>
+        <ul>
+          <li>动力煤需求中长期见顶，煤价中枢面临逐步下移。</li>
+          <li>新能源替代加速，火电利用小时数与电价承压。</li>
+          <li>分红率已处高位，进一步提升空间有限。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">财务造假检测 <span class="hint">算法打磨中</span></div>
+    <div class="fraud">
+      <div class="f-row"><span>M-Score（Beneish）</span><b class="ok">-2.8 · 安全</b></div>
+      <div class="f-row"><span>经营现金流 / 净利润</span><b class="ok">1.5 · 健康</b></div>
+      <div class="f-row"><span>应收增速 vs 营收增速</span><b class="ok">背离 -3% · 正常</b></div>
+      <div class="f-row"><span>存货 / 营收比异常</span><b class="ok">无异常</b></div>
+      <div class="f-row"><span>审计意见</span><b>标准无保留</b></div>
+      <div class="f-score">综合造假风险：<b class="ok">低</b></div>
+    </div>
+    <div style="font-size:10px;color:var(--faint);margin-top:5px;">检测算法与阈值待打磨，当前为占位示例。</div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">季度复盘 <span class="hint">上季假设 → 实际 → 验证</span></div>
+    <div class="review">
+      <div class="r-title"><span class="dot"></span>2026 Q2 复盘</div>
+      <div class="r-row"><span class="k">上季假设：</span>Q2 煤价企稳，长协价维持，盈利环比基本持平。</div>
+      <div class="r-row"><span class="k">实际：</span>现货煤价小幅反弹，长协履约稳定，归母净利略超预期。</div>
+      <div class="r-row verified"><span class="k">验证 ✓：</span>「盈利穿越周期」主逻辑成立。</div>
+      <div class="r-row refuted"><span class="k">打脸 ✗：</span>Q2 火电发电量低于预期，第二曲线贡献仍需观察。</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="sec-title">数据校验记录</div>
+    <div class="verify">
+      <div><b>数据来源：</b>AKShare（主） + 东方财富（备用）</div>
+      <div><b>财务口径：</b>以公司财报 / Wind 一致预期为准</div>
+      <div><b>机构数据：</b>目标价与评级截至报告日，家数可能变动</div>
+      <div><b>校验日期：</b>2026-08-20</div>
+      <div><b>校验人：</b>李潇</div>
+      <div><b>备注：</b>本页为模板演示，数据为示例值，正式发布前需逐项核对。</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构目标价与多空观点均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
+  </div>
+
+</div>
+</body>
+</html>
