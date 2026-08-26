@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 from .cninfo import download_annual_report
-from .pdf_parser import PDF_TO_FIELD, parse_financials_by_year, parse_key_financials, to_yuan
+from .pdf_parser import PDF_FIELD_ALIASES, parse_financials_by_year, parse_key_financials
 
 TOLERANCE_PCT = 0.1  # 容差 0.1%
 
@@ -51,7 +51,7 @@ def _compare(golden: dict, api_row: dict | None) -> tuple[list, int]:
     """
     items = []
     passed = 0
-    for field in PDF_TO_FIELD.values():
+    for field in PDF_FIELD_ALIASES.keys():
         g = golden.get(field)
         if g is None:
             items.append({"field": field, "label": _FIELD_LABEL[field],
@@ -63,15 +63,14 @@ def _compare(golden: dict, api_row: dict | None) -> tuple[list, int]:
             continue
 
         a_base = _to_base(api_row[field])
-        # 重述口径：取「重述后/重述前」中更接近接口值的一个
+        # 重述口径：取「重述后/重述前」中更接近接口值的一个（golden 已是「元」）
         candidates = (g.get("restated"), g.get("original")) if isinstance(g, dict) else (g,)
         diff_pct = None
         matched_val = None
         for c in candidates:
             if c is None:
                 continue
-            c_base = to_yuan(c, field)
-            d = abs(c_base - a_base) / c_base * 100 if c_base else None
+            d = abs(c - a_base) / c * 100 if c else None
             if d is not None and (diff_pct is None or d < diff_pct):
                 diff_pct = d
                 matched_val = c
@@ -159,9 +158,12 @@ def format_report(result: dict) -> str:
     for it in result["items"]:
         label = it["label"]
         if it["status"] == "一致":
-            lines.append(f"  ✓ {label}: 官方 {it['golden']:,.2f} vs 接口 {it['api']:,.2f}（差 {it['diff_pct']:.4f}%）")
+            # golden 是「元」，转「亿元」显示；api 已是「亿元」
+            g_yi = it["golden"] / 1e8 if it["golden"] is not None else None
+            lines.append(f"  ✓ {label}: 官方 {g_yi:,.2f}亿 vs 接口 {it['api']:,.2f}亿（差 {it['diff_pct']:.4f}%）")
         elif it["status"] == "差异":
-            lines.append(f"  ✗ {label}: 官方 {it['golden']:,.2f} vs 接口 {it['api']:,.2f}（差 {it['diff_pct']:.2f}%）")
+            g_yi = it["golden"] / 1e8 if it["golden"] is not None else None
+            lines.append(f"  ✗ {label}: 官方 {g_yi:,.2f}亿 vs 接口 {it['api']:,.2f}亿（差 {it['diff_pct']:.2f}%）")
         else:
             lines.append(f"  - {label}: {it['status']}")
     return "\n".join(lines)

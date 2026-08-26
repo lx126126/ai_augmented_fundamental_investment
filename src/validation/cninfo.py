@@ -39,7 +39,8 @@ def _get_org_id(code: str) -> str:
     if df is None or df.empty:
         raise RuntimeError(f"未查到 {code} 的公告，无法获取 orgId")
     link = str(df.iloc[0]["公告链接"])
-    m = re.search(r"orgId=(\d+)", link)
+    # orgId 格式不一：早期上市公司为纯数字（9900003701），部分为市场前缀+代码（gssh0600519/gssz0000651）
+    m = re.search(r"orgId=([^&]+)", link)
     if not m:
         raise RuntimeError(f"公告链接中未找到 orgId: {link}")
     return m.group(1)
@@ -62,8 +63,10 @@ def query_annual_reports(code: str) -> list[dict]:
     reports = []
     for a in anns:
         title = a.get("announcementTitle", "")
-        # 只要年报正文，排除「摘要」
+        # 只要中文版年报正文，排除「摘要」「英文版」
         if "摘要" in title or "年度报告" not in title:
+            continue
+        if "英文" in title:
             continue
         adjunct = a.get("adjunctUrl") or ""
         pdf_url = f"{_PDF_BASE}/{adjunct}" if adjunct else ""
