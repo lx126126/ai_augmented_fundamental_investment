@@ -6,6 +6,13 @@
 """
 from __future__ import annotations
 
+import os
+
+# 环境变量可能有 Veee 代理残留（15236），AKShare 拉国内站点（东财/新浪/百度/腾讯）
+# 必须禁用代理直连，否则接口可能超时或返回空数据。
+for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
+    os.environ.pop(_k, None)
+
 import akshare as ak
 import pandas as pd
 

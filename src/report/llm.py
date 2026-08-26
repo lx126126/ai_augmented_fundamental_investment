@@ -69,10 +69,10 @@ ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 {seg_text}
 
 === 估值 ===
-PE：{data.get('valuation', {}).get('pe', 'N/A')}
-PB：{data.get('valuation', {}).get('pb', 'N/A')}
-PE 近10年分位：{data.get('valuation', {}).get('pe_pctile', 'N/A')}%
-PB 近10年分位：{data.get('valuation', {}).get('pb_pctile', 'N/A')}%
+PE：{(data.get('valuation') or {}).get('pe', 'N/A')}
+PB：{(data.get('valuation') or {}).get('pb', 'N/A')}
+PE 近10年分位：{(data.get('valuation') or {}).get('pe_pctile', 'N/A')}%
+PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 
 请输出以下 JSON（不要输出任何 JSON 之外的内容，所有文字用中文）：
 
