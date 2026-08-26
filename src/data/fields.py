@@ -81,6 +81,8 @@ BALANCE_SHEET_MAP = {
     "BORROW_FUND": "borrowings",                  # 借款（有息负债核心）
     "LONG_LOAN": "long_term_loan",                # 长期借款
     "SHORT_LOAN": "short_term_loan",              # 短期借款
+    "SHARE_CAPITAL": "share_capital",             # 股本（普通股，面值1元，总股本）
+    "PREFERRED_SHARES": "preferred_shares",       # 优先股
 }
 
 # ---------------------------------------------------------------------------

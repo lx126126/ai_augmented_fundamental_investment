@@ -305,6 +305,45 @@ def build_bull_bear() -> str:
     )
 
 
+def build_verify() -> str:
+    """数据校验记录：运行 validate()，与巨潮官方年报 PDF 逐项对比。"""
+    from datetime import date
+    today = date.today().isoformat()
+
+    year = YEARS[-1] if YEARS else None
+    if not year or not _HAS_DATA:
+        return ('<div class="verify">'
+                '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）</div>'
+                '<div><b>校验状态：</b>待运行（需 parquet 数据 + 官方年报）</div>'
+                f'<div><b>校验日期：</b>{today}</div>'
+                "</div>")
+
+    try:
+        from src.validation import validate
+        result = validate(COMPANY_CODE, year)
+        marks = {"一致": "✓", "差异": "✗", "缺失": "—", "接口缺失": "—"}
+        rows = []
+        for it in result["items"]:
+            mark = marks.get(it["status"], "—")
+            note = "一致" if it["status"] == "一致" else it["status"]
+            rows.append(f'<div><b>{mark} {it["label"]}</b>：{note}</div>')
+        return (
+            '<div class="verify">'
+            '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div>'
+            f'<div><b>校验结果：</b>{result["passed"]}/{result["total"]} 项与官方年报一致（容差 &lt;0.1%）</div>'
+            + "".join(rows)
+            + f'<div><b>校验日期：</b>{today}</div>'
+            '<div><b>校验人：</b>李潇</div>'
+            "</div>"
+        )
+    except Exception as e:
+        return ('<div class="verify">'
+                '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）</div>'
+                f'<div><b>校验状态：</b>未运行（{type(e).__name__}）</div>'
+                f'<div><b>校验日期：</b>{today}</div>'
+                "</div>")
+
+
 # ============ CSS ============
 CSS = """
 :root {
@@ -563,14 +602,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">数据校验记录</div>
-    <div class="verify">
-      <div><b>数据来源：</b>AKShare（主） + 东方财富（备用）</div>
-      <div><b>财务口径：</b>以公司财报 / Wind 一致预期为准</div>
-      <div><b>机构数据：</b>目标价与评级截至报告日，家数可能变动</div>
-      <div><b>校验日期：</b>2026-08-20</div>
-      <div><b>校验人：</b>李潇</div>
-      <div><b>备注：</b>本页为模板演示，数据为示例值，正式发布前需逐项核对。</div>
-    </div>
+@@VERIFY@@
   </div>
 
   <div class="footer">
@@ -646,6 +678,7 @@ def build(code: str = "601088") -> None:
         .replace("@@RISKS@@", build_risks())
         .replace("@@REVIEW@@", build_review())
         .replace("@@BULL_BEAR@@", build_bull_bear())
+        .replace("@@VERIFY@@", build_verify())
         .replace("@@COMPANY_NAME@@", COMPANY_NAME)
         .replace("@@COMPANY_CODE@@", COMPANY_CODE)
         .replace("@@INDUSTRY@@", industry)

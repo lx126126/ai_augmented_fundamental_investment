@@ -134,19 +134,22 @@ def build_template_data(code: str) -> dict:
     annual = build_annual_financials(raw)
     quarter = build_quarter_financials(raw)
 
-    # 股本转亿股 + 优先股默认 0
+    # 股本（share_capital 已是亿股，面值 1 元）+ 优先股默认 0
     latest_shares = None
-    if "total_shares" in annual.columns:
-        latest_shares = annual["total_shares"].iloc[-1]
+    if "share_capital" in annual.columns:
+        latest_shares = annual["share_capital"].iloc[-1]  # 亿股
 
     annual = annual.copy()
-    if "total_shares" in annual.columns:
-        annual["total_shares_yi"] = annual["total_shares"] / 1e8
-    annual["preferred_shares_yi"] = 0.0  # A 股极少发优先股，默认 0
+    if "share_capital" in annual.columns:
+        annual["total_shares_yi"] = annual["share_capital"]  # 已是亿股
+    if "preferred_shares" in annual.columns:
+        annual["preferred_shares_yi"] = annual["preferred_shares"]  # 已是亿股（面值1元）
+    else:
+        annual["preferred_shares_yi"] = 0.0
 
     quarter = quarter.copy()
     if latest_shares is not None:
-        quarter["total_shares_yi"] = latest_shares / 1e8  # 股本变动不频繁，用最新值近似
+        quarter["total_shares_yi"] = latest_shares  # 股本变动不频繁，用最新值近似
     quarter["preferred_shares_yi"] = 0.0
 
     years = [d.year for d in annual["report_date"].tolist()]
@@ -172,7 +175,7 @@ def build_template_data(code: str) -> dict:
 
     # 估值面板（百度估值算分位 + 腾讯行情精确当前值，可选）
     valuation = None
-    if "valuation" in raw and "total_shares" in annual.columns:
+    if "valuation" in raw and "share_capital" in annual.columns:
         valuation = build_valuation(raw["valuation"], annual)
         # 腾讯行情提供精确的当前 PE/PB/52周/市值，覆盖百度估值稀疏采样
         if "quote" in raw and valuation is not None:

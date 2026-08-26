@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import pandas as pd
 
-# 金额字段（元 → 亿元）
+# 金额字段（元 → 亿元；股本面值 1 元，故 share_capital 转后即「亿股」）
 _MONEY_FIELDS = {
     "operating_revenue", "operating_cost", "net_profit_parent", "ocf",
     "total_assets", "total_liabilities", "total_equity",
     "monetary_funds", "inventory", "accounts_receivable",
     "borrowings", "goodwill", "interest_bearing_debt",
     "long_term_loan", "short_term_loan",
+    "share_capital", "preferred_shares",
 }
 
 
@@ -48,6 +49,8 @@ def _with_interest_debt(bs_df: pd.DataFrame) -> pd.DataFrame:
         df["interest_bearing_debt"] = df[loan_cols].sum(axis=1, min_count=1)
     if "goodwill" in df.columns:
         df["goodwill"] = df["goodwill"].fillna(0.0)
+    if "preferred_shares" in df.columns:
+        df["preferred_shares"] = df["preferred_shares"].fillna(0.0)
     return df
 
 
@@ -85,7 +88,8 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     cf_cols = key + [c for c in ["ocf"] if c in cf.columns]
     bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
                                  "monetary_funds", "inventory", "accounts_receivable",
-                                 "interest_bearing_debt", "goodwill"] if c in bs.columns]
+                                 "interest_bearing_debt", "goodwill",
+                                 "share_capital", "preferred_shares"] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",
                                  "debt_ratio_pct", "revenue_yoy_pct", "net_profit_yoy_pct",
                                  "ocf_to_profit_pct", "current_ratio", "quick_ratio"] if c in fi.columns]
@@ -95,15 +99,16 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     merged = merged.merge(bs[bs_cols], on=key, how="left")
     merged = merged.merge(fi[fi_cols], on=key, how="left")
 
-    # 分红数据：每股派息、股息率、总股本（普通股数量）
+    # 分红数据：每股派息、股息率（股本改用资产负债表 share_capital，分红接口 total_shares 有 bug）
     if "dividend" in data:
         dv = _annual_dividend(data["dividend"])
-        dv_cols = key + [c for c in ["dividend_per_10", "dividend_yield_pct", "total_shares"] if c in dv.columns]
+        dv_cols = key + [c for c in ["dividend_per_10", "dividend_yield_pct"] if c in dv.columns]
         merged = merged.merge(dv[dv_cols], on=key, how="left")
 
     # 分红比例（股利支付率）= 分红总额 / 归母净利润 × 100
-    if "dividend_per_10" in merged.columns and "total_shares" in merged.columns:
-        merged["dividend_total"] = merged["dividend_per_10"] / 10 * merged["total_shares"] / 1e8  # 分红总额(亿元)
+    # share_capital 已换算为「亿股」（面值 1 元），故分红总额 = 每股派息 × 总股数
+    if "dividend_per_10" in merged.columns and "share_capital" in merged.columns:
+        merged["dividend_total"] = merged["dividend_per_10"] / 10 * merged["share_capital"]  # 分红总额(亿元)
     if "dividend_total" in merged.columns and "net_profit_parent" in merged.columns:
         merged["dividend_payout_pct"] = merged["dividend_total"] / merged["net_profit_parent"] * 100
 
@@ -268,7 +273,7 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     if "dividend_yield_pct" in annual.columns:
         dividend_yield = annual["dividend_yield_pct"].iloc[-1]
 
-    total_shares_yi = annual["total_shares"].iloc[-1] / 1e8 if "total_shares" in annual.columns else None
+    total_shares_yi = annual["share_capital"].iloc[-1] if "share_capital" in annual.columns else None  # 已是亿股
 
     # 52周股价区间（近一年市值 ÷ 总股本）
     one_year = mcap[mcap["report_date"] >= (mcap["report_date"].max() - pd.DateOffset(years=1))]

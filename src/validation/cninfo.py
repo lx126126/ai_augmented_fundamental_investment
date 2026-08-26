@@ -31,8 +31,9 @@ def _get_org_id(code: str) -> str:
     """从披露公告链接解析 orgId（巨潮 hisAnnouncement/query 需要）。"""
     import akshare as ak
 
+    # 注意：此接口的 category 参数是中文键（如「年报」），非 category 代码
     df = ak.stock_zh_a_disclosure_report_cninfo(
-        symbol=code, market="沪深京", category=CATEGORY_ANNUAL,
+        symbol=code, market="沪深京", keyword="", category="年报",
         start_date="20100101", end_date="20991231",
     )
     if df is None or df.empty:
@@ -77,7 +78,8 @@ def query_annual_reports(code: str) -> list[dict]:
 
 
 def _extract_year(title: str) -> int | None:
-    m = re.search(r"(\d{4})年年度报告", title)
+    """从公告标题提取年份，兼容「中国神华2025年度报告」和「2019年年度报告」两种格式。"""
+    m = re.search(r"(20\d{2})", title)
     return int(m.group(1)) if m else None
 
 
