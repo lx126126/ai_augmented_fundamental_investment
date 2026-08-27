@@ -34,3 +34,6 @@ Thumbs.db
 
 # WorkBuddy 本地记忆（含隐私，严禁入库）
 .workbuddy/
+
+# 投研日记（内部操作层：买卖/仓位/成本/决策心理，严禁入库）
+journal/

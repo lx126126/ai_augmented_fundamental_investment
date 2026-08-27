@@ -29,6 +29,13 @@ try:
 except Exception:
     _HAS_LLM = False
 
+# 尝试导入复盘层（假设台账，可选）
+try:
+    from src.review.ledger import VERDICT_LABEL, load_latest, load_period, prev_period
+    _HAS_REVIEW = True
+except Exception:
+    _HAS_REVIEW = False
+
 # 示例数据（仅降级用；真实渲染用 adapter 从 parquet 读取）
 from _sample_data import (
     SAMPLE_YEARS,
@@ -277,16 +284,63 @@ def build_risks() -> str:
 
 
 def build_review() -> str:
+    """季度复盘：读假设台账，渲染「上季假设 → 实际 → 验证/打脸」闭环。"""
+    if _HAS_REVIEW:
+        ledger = load_latest(COMPANY_CODE)
+        if ledger:
+            period = ledger["period"]
+            reviews = ledger.get("reviews", [])
+            hypotheses = ledger.get("hypotheses", [])
+            parts = []
+
+            # 1. 上季复盘（验证/打脸）
+            if reviews:
+                prev = load_period(COMPANY_CODE, prev_period(period))
+                prev_hyps = {h["id"]: h for h in prev.get("hypotheses", [])} if prev else {}
+                rows = []
+                for rv in reviews:
+                    h = prev_hyps.get(rv.get("id"), {})
+                    statement = h.get("statement", rv.get("id", "?"))
+                    verdict = rv.get("verdict", "")
+                    cls = {"verified": "verified", "refuted": "refuted"}.get(verdict, "")
+                    mark = {"verified": "✓ 验证", "refuted": "✗ 打脸",
+                            "partial": "◐ 部分验证"}.get(verdict, "待填")
+                    actual = rv.get("actual", "")
+                    why = rv.get("why", "")
+                    row = f'<div class="r-row {cls}"><span class="k">{mark}</span> {statement}'
+                    if actual:
+                        row += f' <span style="color:var(--muted);">→ 实际：{actual}</span>'
+                    if why:
+                        row += f' <span style="color:var(--faint);">（{why}）</span>'
+                    row += "</div>"
+                    rows.append(row)
+                parts.append('<div class="r-title"><span class="dot"></span>上季假设 → 实际 → 验证/打脸</div>' + "".join(rows))
+
+            # 2. 本季假设（待下季验证）
+            if hypotheses:
+                hyps = []
+                for h in hypotheses:
+                    line = f'<div class="r-row"><span class="k" style="color:var(--accent);">·</span> {h.get("statement", "")}'
+                    metric = h.get("metric", "")
+                    if metric:
+                        line += f' <span style="color:var(--faint);">[{metric}]</span>'
+                    line += "</div>"
+                    hyps.append(line)
+                title = "本季假设（待下季验证）" if reviews else "本季假设（首期 · 下季起验证）"
+                parts.append(f'<div class="r-title"><span class="dot"></span>{title}</div>' + "".join(hyps))
+
+            if parts:
+                return '<div class="review">' + "".join(parts) + "</div>"
+
+    # 降级：无台账时回退 LLM 数据观察，或占位
     obs = _narr(["review", "observation"], "")
-    if not obs:
-        return '<div class="review"><div class="r-row" style="color:var(--faint);">复盘待 LLM 生成 + 人工积累</div></div>'
-    return (
-        '<div class="review">'
-        '<div class="r-title"><span class="dot"></span>最新季度观察</div>'
-        f'<div class="r-row">{obs}</div>'
-        '<div class="r-row" style="color:var(--faint);font-size:10px;margin-top:4px;">复盘层需人工持续跟踪积累（上季假设→实际→验证），当前为 LLM 数据观察。</div>'
-        "</div>"
-    )
+    if obs:
+        return ('<div class="review">'
+                '<div class="r-title"><span class="dot"></span>最新季度观察</div>'
+                f'<div class="r-row">{obs}</div>'
+                '<div class="r-row" style="color:var(--faint);font-size:10px;margin-top:4px;">复盘台账尚未建立，可运行 scripts/review.py 生成假设。</div>'
+                "</div>")
+    return '<div class="review"><div class="r-row" style="color:var(--faint);">复盘待积累（运行 scripts/review.py 建假设）</div></div>'
 
 
 def build_bull_bear() -> str:
