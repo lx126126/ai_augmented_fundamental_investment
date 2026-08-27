@@ -12,6 +12,7 @@ from pathlib import Path
 import pandas as pd
 
 from .cleaner import build_annual_financials, build_quarter_financials, build_segments, build_valuation
+from ..analysis.fraud import fraud_check
 
 
 # 业务条线调色板（按收入降序循环分配，适配任意条线数）
@@ -203,6 +204,9 @@ def build_template_data(code: str) -> dict:
     # 格雷厄姆体检（从年度财务数据算）
     graham = _build_graham(annual)
 
+    # 财务造假检测（Beneish M-Score + 现金流背离 + 应收异常）
+    fraud = fraud_check(annual)
+
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code)
 
@@ -217,6 +221,7 @@ def build_template_data(code: str) -> dict:
         "valuation": valuation,
         "graham": graham,
         "rating": rating,
+        "fraud": fraud,
         "company_name": company_name,
         "narrative_data": narrative_data,
     }

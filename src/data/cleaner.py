@@ -11,12 +11,13 @@ import pandas as pd
 
 # 金额字段（元 → 亿元；股本面值 1 元，故 share_capital 转后即「亿股」）
 _MONEY_FIELDS = {
-    "operating_revenue", "operating_cost", "net_profit_parent", "ocf",
+    "operating_revenue", "operating_cost", "net_profit", "net_profit_parent", "ocf",
     "total_assets", "total_liabilities", "total_equity",
-    "monetary_funds", "inventory", "accounts_receivable",
+    "current_assets", "monetary_funds", "inventory", "accounts_receivable",
     "borrowings", "goodwill", "interest_bearing_debt",
     "long_term_loan", "short_term_loan",
     "share_capital", "preferred_shares",
+    "sell_expense", "admin_expense", "depreciation",
 }
 
 
@@ -84,10 +85,10 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     key = ["symbol", "report_date"]
 
-    ps_cols = key + [c for c in ["operating_revenue", "net_profit_parent", "gross_margin_pct"] if c in ps.columns]
-    cf_cols = key + [c for c in ["ocf"] if c in cf.columns]
+    ps_cols = key + [c for c in ["operating_revenue", "net_profit", "net_profit_parent", "gross_margin_pct", "sell_expense", "admin_expense"] if c in ps.columns]
+    cf_cols = key + [c for c in ["ocf", "depreciation"] if c in cf.columns]
     bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
-                                 "monetary_funds", "inventory", "accounts_receivable",
+                                 "current_assets", "monetary_funds", "inventory", "accounts_receivable",
                                  "interest_bearing_debt", "goodwill",
                                  "share_capital", "preferred_shares"] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",

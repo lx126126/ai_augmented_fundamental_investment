@@ -62,6 +62,8 @@ PROFIT_SHEET_MAP = {
     "TOTAL_PROFIT": "total_profit",               # 利润总额
     "NETPROFIT": "net_profit",                    # 净利润
     "PARENT_NETPROFIT": "net_profit_parent",      # 归母净利润
+    "SALE_EXPENSE": "sell_expense",               # 销售费用（M-Score SGAI）
+    "MANAGE_EXPENSE": "admin_expense",            # 管理费用（M-Score SGAI）
 }
 
 # ---------------------------------------------------------------------------
@@ -73,6 +75,7 @@ BALANCE_SHEET_MAP = {
     "TOTAL_ASSETS": "total_assets",               # 总资产
     "TOTAL_LIABILITIES": "total_liabilities",     # 总负债
     "TOTAL_PARENT_EQUITY": "total_equity",        # 归母净资产
+    "TOTAL_CURRENT_ASSETS": "current_assets",     # 流动资产（M-Score AQI）
     "MONETARYFUNDS": "monetary_funds",            # 货币资金
     "INVENTORY": "inventory",                     # 存货
     "ACCOUNTS_RECE": "accounts_receivable",       # 应收账款
@@ -94,6 +97,7 @@ CASH_FLOW_MAP = {
     "NETCASH_OPERATE": "ocf",                     # 经营活动现金流净额
     "NETCASH_INVEST": "icf",                      # 投资活动现金流净额
     "NETCASH_FINANCE": "fcf",                     # 筹资活动现金流净额
+    "FA_IR_DEPR": "depreciation",                 # 固定资产折旧（M-Score DEPI）
 }
 
 # ---------------------------------------------------------------------------

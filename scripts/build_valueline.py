@@ -48,6 +48,7 @@ SEGMENTS = SAMPLE_SEGMENTS
 VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
 GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
 RATING = None     # 机构评级分布（真实数据时由 adapter 提供）
+FRAUD = None      # 财务造假检测（真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
@@ -326,6 +327,48 @@ def build_bull_bear() -> str:
         f'<div class="bb-col bear"><div class="bb-title">看空视角</div><ul>{bear_li}</ul></div>'
         "</div>"
     )
+
+
+def build_fraud() -> str:
+    """财务造假检测：Beneish M-Score + 现金流背离 + 应收异常（客观算法）。"""
+    if not FRAUD:
+        return '<div class="fraud"><div class="f-row"><span>造假检测</span><b>数据待接入</b></div></div>'
+    f = FRAUD
+    rows = []
+
+    m = f.get("mscore")
+    if m:
+        val = m["mscore"]
+        risk = m["risk"]
+        cls = "bad" if risk == "high" else "ok"
+        label = "高风险" if risk == "high" else "安全"
+        rows.append(f'<div class="f-row"><span>M-Score（Beneish）</span><b class="{cls}">{val:.2f} · {label}</b></div>')
+    else:
+        rows.append('<div class="f-row"><span>M-Score（Beneish）</span><b>数据不足</b></div>')
+
+    cf = f.get("cashflow")
+    if cf:
+        ratios = " / ".join(f"{x:.1f}" if x is not None else "—" for x in cf["ratios"])
+        cls = "bad" if cf["warning"] else "ok"
+        txt = "背离" if cf["warning"] else "健康"
+        rows.append(f'<div class="f-row"><span>经营现金流 / 净利润（近3年）</span><b class="{cls}">{ratios} · {txt}</b></div>')
+
+    rc = f.get("receivable")
+    if rc:
+        cls = "bad" if rc["warning"] else "ok"
+        txt = "背离" if rc["warning"] else "正常"
+        rows.append(f'<div class="f-row"><span>应收增速 vs 营收增速</span><b class="{cls}">应收 {rc["ar_yoy"]:.1f}% vs 营收 {rc["rev_yoy"]:.1f}% · {txt}</b></div>')
+
+    rows.append(f'<div class="f-row"><span>审计意见</span><b>{f.get("audit_opinion", "标准无保留")}</b></div>')
+
+    overall = f.get("overall_risk", "low")
+    cls = {"low": "ok", "medium": "warn", "high": "bad"}.get(overall, "ok")
+    label = {"low": "低", "medium": "中", "high": "高"}.get(overall, "低")
+    flags = f.get("flags", [])
+    flag_txt = "（" + "、".join(flags) + "）" if flags else ""
+    rows.append(f'<div class="f-score">综合造假风险：<b class="{cls}">{label}</b>{flag_txt}</div>')
+
+    return '<div class="fraud">' + "".join(rows) + "</div>"
 
 
 def build_verify() -> str:
@@ -608,16 +651,9 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">财务造假检测 <span class="hint">算法打磨中</span></div>
-    <div class="fraud">
-      <div class="f-row"><span>M-Score（Beneish）</span><b class="ok">-2.8 · 安全</b></div>
-      <div class="f-row"><span>经营现金流 / 净利润</span><b class="ok">1.5 · 健康</b></div>
-      <div class="f-row"><span>应收增速 vs 营收增速</span><b class="ok">背离 -3% · 正常</b></div>
-      <div class="f-row"><span>存货 / 营收比异常</span><b class="ok">无异常</b></div>
-      <div class="f-row"><span>审计意见</span><b>标准无保留</b></div>
-      <div class="f-score">综合造假风险：<b class="ok">低</b></div>
-    </div>
-    <div style="font-size:10px;color:var(--faint);margin-top:5px;">检测算法与阈值待打磨，当前为占位示例。</div>
+    <div class="sec-title">财务造假检测 <span class="hint">Beneish M-Score</span></div>
+@@FRAUD@@
+    <div style="font-size:10px;color:var(--faint);margin-top:5px;">M-Score 阈值 -1.78（Beneish 1999 模型），基于近两年财报计算，仅供参考，不构成投资建议。</div>
   </div>
 
   <div class="section">
@@ -647,7 +683,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -661,6 +697,7 @@ def build(code: str = "601088") -> None:
         VALUATION = real["valuation"]
         GRAHAM = real["graham"]
         RATING = real.get("rating")
+        FRAUD = real.get("fraud")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -699,6 +736,7 @@ def build(code: str = "601088") -> None:
         .replace("@@RISKS@@", build_risks())
         .replace("@@BULL_BEAR@@", build_bull_bear())
         .replace("@@VERIFY@@", build_verify())
+        .replace("@@FRAUD@@", build_fraud())
         .replace("@@COMPANY_NAME@@", COMPANY_NAME)
         .replace("@@COMPANY_CODE@@", COMPANY_CODE)
         .replace("@@INDUSTRY@@", industry)
