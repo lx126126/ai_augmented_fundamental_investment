@@ -107,6 +107,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
 .consensus b { color: var(--ink); }
+.rating-bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.rating-bar span { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; white-space: nowrap; }
 .tp-grid { display: flex; gap: 8px; margin: 7px 0; }
 .tp-cell { flex: 1; text-align: center; padding: 7px 4px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
 .tp-cell .k { font-size: 9.5px; color: var(--faint); }
@@ -185,7 +187,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="header-right">
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
-        <span class="badge lynch">林奇分类：稳健成长</span>
+        <span class="badge lynch">林奇分类：稳健成长（高ROE+高分红）</span>
         <span class="badge graham">格雷厄姆质量：高（低负债·净现金）</span>
       </div>
     </div>
@@ -193,7 +195,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠茅台酒销售，占比85.7%，系列酒为辅。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自茅台酒，毛利率92.3%，贡献绝大部分利润。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">白酒行业龙头，品牌力极强，高端市场主导。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">品牌护城河深厚，资源稀缺，工艺独特，定价权强。</div></div></div>
+<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠茅台酒销售，占比85.7%，毛利率92.3%，为核心盈利来源。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自茅台酒，毛利率92.3%，贡献绝大部分利润；系列酒毛利率73.6%，占比14.3%。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">白酒行业龙头，品牌力极强，市场地位稳固，但具体份额未披露。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">品牌护城河深厚，资源禀赋独特（赤水河产区），规模优势显著，定价权强。</div></div></div>
   </div>
 
   <div class="section">
@@ -212,24 +214,24 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算</span></div>
     <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
 <div class="val-grid"><div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">20.0<small>x</small></div><div class="pct ">近10年分位 39%</div></div><div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">6.48<small>x</small></div><div class="pct pct-low">近10年分位 8%</div></div><div class="val-item"><div class="lbl">股息率</div><div class="v" style="color:var(--up)">4.0<small>%</small></div><div class="pct">最新报告期</div></div></div>
-<div class="market-row"><div class="price-range"><div class="pr-title">52周价格区间（元）</div><div class="pr-bar"><div class="pr-marker" style="left:49.5%"></div></div><div class="pr-labels"><span>52周最低 <b>1173.60</b></span><span>现价 <b>1302.80</b></span><span>52周最高 <b>1434.40</b></span></div></div><div class="consensus"><div>机构目标价（<b>数据待接入</b>）</div><div style="font-size:10px;color:var(--faint);margin-top:5px;">机构目标价与评级数据源受网络限制暂未接入，后续补齐。</div></div></div>
+<div class="market-row"><div class="price-range"><div class="pr-title">52周价格区间（元）</div><div class="pr-bar"><div class="pr-marker" style="left:49.5%"></div></div><div class="pr-labels"><span>52周最低 <b>1173.60</b></span><span>现价 <b>1302.80</b></span><span>52周最高 <b>1434.40</b></span></div></div><div class="consensus"><div>机构评级（近6个月 · <b>46家</b>）</div><div class="rating-bar"><span style="background:#c0392b;width:80.4%">买入 37</span><span style="background:#e67e22;width:19.6%">增持 9</span></div><div style="margin-top:5px;">预测每股收益：2025 65.85 / 2026 67.91 / 2027 71.83 / 2028 75.24 元</div><div style="font-size:10px;color:var(--faint);margin-top:5px;">第三方机构观点汇总，非本人建议。</div></div></div>
 <div class="graham"><div class="g-title">格雷厄姆质量体检</div><div class="g-row"><span>资产负债率</span><b>16.4%</b></div><div class="g-row"><span>流动比率</span><b>5.09</b></div><div class="g-row"><span>盈利稳定性（5年）</span><b>连续正盈利</b></div><div class="g-row"><span>净现金 / 有息负债</span><b>—</b></div></div>
   </div>
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>高毛利率91.2%和净利率50.5%，盈利质量极高。</li><li>ROE 33.65%，资产负债率仅16.4%，财务稳健。</li><li>分红比例79.1%，股息率4.0%，股东回报丰厚。</li></ul>
+<ul class="thesis"><li>高ROE达33.65%，盈利能力强，且资产负债率仅16.4%，财务稳健。</li><li>分红比例79.1%，股息率4.0%，高分红提供安全边际，适合长期持有。</li><li>PE处于近10年39%分位，估值合理，PB仅8%分位，具备估值修复空间。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>2025年营收和净利同比下滑，增长放缓。</li><li>高端白酒需求受宏观经济影响，存在波动。</li><li>系列酒毛利率较低，占比提升可能拉低整体盈利。</li></ul>
+<ul class="risk"><li>2025年营收和净利均下滑，增长放缓，需关注需求端变化。</li><li>系列酒毛利率73.6%，与茅台酒差距大，产品结构变化可能拉低整体盈利。</li><li>其他业务毛利率为负，存在亏损，需关注其规模是否扩大。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
     <div class="disclaim">以下为 AI 基于财务数据生成的多空分析视角，非机构观点、非本人投资建议。</div>
-<div class="bull-bear"><div class="bb-col bull"><div class="bb-title">看多视角</div><ul><li>PE 20倍处于历史低位，估值有吸引力。</li><li>高分红高股息，防御性强。</li><li>品牌护城河稳固，长期竞争力不变。</li></ul></div><div class="bb-col bear"><div class="bb-title">看空视角</div><ul><li>营收净利双降，成长性存疑。</li><li>PE分位39%不算极低，仍有下行空间。</li><li>系列酒增长乏力，产品结构单一。</li></ul></div></div>
+<div class="bull-bear"><div class="bb-col bull"><div class="bb-title">看多视角</div><ul><li>高分红+低估值，股息率4.0%，PE20倍，防御性强。</li><li>品牌护城河稳固，毛利率91.2%，净利率50.5%，盈利质量极高。</li><li>资产负债率16.4%，账上现金充裕，抗风险能力强。</li></ul></div><div class="bb-col bear"><div class="bb-title">看空视角</div><ul><li>营收和净利首次下滑，增长逻辑受质疑，可能进入成熟期。</li><li>PE20倍虽不高，但盈利下滑，估值可能面临戴维斯双杀。</li><li>其他业务亏损，多元化尝试可能拖累整体盈利。</li></ul></div></div>
   </div>
 
   <div class="section">

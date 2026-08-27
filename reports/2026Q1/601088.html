@@ -107,6 +107,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
 .consensus b { color: var(--ink); }
+.rating-bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.rating-bar span { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; white-space: nowrap; }
 .tp-grid { display: flex; gap: 8px; margin: 7px 0; }
 .tp-cell { flex: 1; text-align: center; padding: 7px 4px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
 .tp-cell .k { font-size: 9.5px; color: var(--faint); }
@@ -193,7 +195,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">煤炭销售为主，发电为辅，运输及煤化工补充，煤炭收入占比60.5%。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自煤炭业务，发电业务贡献稳定，运输及其他业务占比较小。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">国内煤炭行业龙头，拥有大规模一体化运营能力，但具体排名不披露。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">资源禀赋（煤炭储量）、一体化产业链（煤电路港航）、规模优势及高分红政策。</div></div></div>
+<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要靠煤炭销售（占60.5%）和发电业务（占28%）获取收入。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自煤炭业务，尽管收入占比下降，但仍是核心盈利来源；发电业务贡献稳定利润。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">作为国内煤炭行业龙头，拥有规模优势和一体化产业链，但具体排名不在此列。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">护城河在于煤炭资源禀赋、运输网络和电力一体化，形成成本与协同优势。</div></div></div>
   </div>
 
   <div class="section">
@@ -212,7 +214,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算</span></div>
     <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
 <div class="val-grid"><div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">19.9<small>x</small></div><div class="pct pct-high">近10年分位 99%</div></div><div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">2.14<small>x</small></div><div class="pct pct-high">近10年分位 98%</div></div><div class="val-item"><div class="lbl">股息率</div><div class="v" style="color:var(--up)">4.7<small>%</small></div><div class="pct">最新报告期</div></div></div>
-<div class="market-row"><div class="price-range"><div class="pr-title">52周价格区间（元）</div><div class="pr-bar"><div class="pr-marker" style="left:51.0%"></div></div><div class="pr-labels"><span>52周最低 <b>42.45</b></span><span>现价 <b>47.26</b></span><span>52周最高 <b>51.89</b></span></div></div><div class="consensus"><div>机构目标价（<b>数据待接入</b>）</div><div style="font-size:10px;color:var(--faint);margin-top:5px;">机构目标价与评级数据源受网络限制暂未接入，后续补齐。</div></div></div>
+<div class="market-row"><div class="price-range"><div class="pr-title">52周价格区间（元）</div><div class="pr-bar"><div class="pr-marker" style="left:51.0%"></div></div><div class="pr-labels"><span>52周最低 <b>42.45</b></span><span>现价 <b>47.26</b></span><span>52周最高 <b>51.89</b></span></div></div><div class="consensus"><div>机构评级（近6个月 · <b>23家</b>）</div><div class="rating-bar"><span style="background:#c0392b;width:78.3%">买入 18</span><span style="background:#e67e22;width:21.7%">增持 5</span></div><div style="margin-top:5px;">预测每股收益：2025 2.44 / 2026 2.73 / 2027 2.85 / 2028 2.96 元</div><div style="font-size:10px;color:var(--faint);margin-top:5px;">第三方机构观点汇总，非本人建议。</div></div></div>
 <div class="graham"><div class="g-title">格雷厄姆质量体检</div><div class="g-row"><span>资产负债率</span><b>23.3%</b></div><div class="g-row"><span>流动比率</span><b>1.65</b></div><div class="g-row"><span>盈利稳定性（5年）</span><b>连续正盈利</b></div><div class="g-row"><span>净现金 / 有息负债</span><b>净现金</b></div></div>
   </div>
 
@@ -223,13 +225,13 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>煤炭价格下行压缩毛利率，营收连续下滑。</li><li>新能源替代长期压制煤炭需求，成长性不足。</li><li>估值处于历史高位，PE/PB分位均超98%。</li></ul>
+<ul class="risk"><li>煤炭价格下行压缩利润空间。</li><li>营收连续下滑，2025年同比降13.2%。</li><li>估值处于历史高位，PE分位99%。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
     <div class="disclaim">以下为 AI 基于财务数据生成的多空分析视角，非机构观点、非本人投资建议。</div>
-<div class="bull-bear"><div class="bb-col bull"><div class="bb-title">看多视角</div><ul><li>高股息率4.7%+高分红比例，吸引长期资金。</li><li>低负债率23.3%，财务稳健，安全边际高。</li><li>一体化模式平滑周期波动，盈利稳定性强。</li></ul></div><div class="bb-col bear"><div class="bb-title">看空视角</div><ul><li>营收连续两年下滑，成长性堪忧。</li><li>PE 19.9倍处于历史高位，估值透支。</li><li>煤炭需求长期受新能源冲击，行业景气度下行。</li></ul></div></div>
+<div class="bull-bear"><div class="bb-col bull"><div class="bb-title">看多视角</div><ul><li>高股息率4.7%，在低利率环境下具吸引力。</li><li>低负债率23.3%，财务安全边际高。</li><li>一体化模式平滑周期波动，盈利稳定。</li></ul></div><div class="bb-col bear"><div class="bb-title">看空视角</div><ul><li>营收连续下滑，成长性不足。</li><li>PE和PB均处历史高位，估值透支。</li><li>煤炭需求长期受新能源替代影响。</li></ul></div></div>
   </div>
 
   <div class="section">

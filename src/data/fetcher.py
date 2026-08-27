@@ -163,6 +163,47 @@ def fetch_quote(code: str) -> pd.DataFrame | None:
     }])
 
 
+def fetch_rating(code: str) -> pd.DataFrame | None:
+    """东财盈利预测 + 机构评级（近6个月买入/增持/中性/减持/卖出）。
+
+    数据源 stock_profit_forecast_em（全市场），筛出单只股票后标准化列名。
+    返回单行 DataFrame：rating_* 评级分布 + eps_{year} 未来3年预测每股收益。
+    """
+    try:
+        df = ak.stock_profit_forecast_em()
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+    row = df[df["代码"] == code.zfill(6)]
+    if row.empty:
+        return None
+
+    eps_cols = [c for c in df.columns if "预测每股收益" in str(c)]
+    keep = [
+        "代码", "名称", "研报数",
+        "机构投资评级(近六个月)-买入", "机构投资评级(近六个月)-增持",
+        "机构投资评级(近六个月)-中性", "机构投资评级(近六个月)-减持",
+        "机构投资评级(近六个月)-卖出",
+    ] + eps_cols
+    row = row[keep].copy()
+
+    rename = {
+        "代码": "symbol", "名称": "name", "研报数": "rating_total",
+        "机构投资评级(近六个月)-买入": "rating_buy",
+        "机构投资评级(近六个月)-增持": "rating_overweight",
+        "机构投资评级(近六个月)-中性": "rating_neutral",
+        "机构投资评级(近六个月)-减持": "rating_underweight",
+        "机构投资评级(近六个月)-卖出": "rating_sell",
+    }
+    for c in eps_cols:
+        year = str(c).replace("预测每股收益", "").strip()
+        rename[c] = f"eps_{year}"
+    row = row.rename(columns=rename)
+    row["symbol"] = code.zfill(6)
+    return row.reset_index(drop=True)
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     """一次拉取全部表，返回 {表名: DataFrame}。"""
     data = {
@@ -179,4 +220,7 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     quote = fetch_quote(code)
     if quote is not None:
         data["quote"] = quote
+    rating = fetch_rating(code)
+    if rating is not None:
+        data["rating"] = rating
     return data

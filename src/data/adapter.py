@@ -110,7 +110,7 @@ def _q_label(dt) -> str:
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
     """读 parquet 原始数据（含分业务构成 + 估值，最多 7 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -190,6 +190,11 @@ def build_template_data(code: str) -> dict:
             if q.get("price"):
                 valuation["price_now"] = q["price"]
 
+    # 机构评级（东财盈利预测 + 评级分布，可选）
+    rating = None
+    if "rating" in raw:
+        rating = _build_rating(raw["rating"])
+
     # 公司名（腾讯行情）
     company_name = None
     if "quote" in raw:
@@ -211,9 +216,32 @@ def build_template_data(code: str) -> dict:
         "segments": segments,
         "valuation": valuation,
         "graham": graham,
+        "rating": rating,
         "company_name": company_name,
         "narrative_data": narrative_data,
     }
+
+
+def _build_rating(raw_rating: pd.DataFrame) -> dict | None:
+    """机构评级分布 + 未来3年预测每股收益（东财盈利预测口径）。"""
+    if raw_rating is None or raw_rating.empty:
+        return None
+    r = raw_rating.iloc[0]
+    rating = {
+        "total": _clean(r.get("rating_total")),
+        "buy": _clean(r.get("rating_buy")),
+        "overweight": _clean(r.get("rating_overweight")),
+        "neutral": _clean(r.get("rating_neutral")),
+        "underweight": _clean(r.get("rating_underweight")),
+        "sell": _clean(r.get("rating_sell")),
+        "eps_forecast": [],
+    }
+    for col in raw_rating.columns:
+        if str(col).startswith("eps_"):
+            val = _clean(r.get(col))
+            if val is not None:
+                rating["eps_forecast"].append({"year": str(col)[4:], "eps": val})
+    return rating
 
 
 def _build_graham(annual: pd.DataFrame) -> dict:

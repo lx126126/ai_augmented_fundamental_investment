@@ -47,6 +47,7 @@ SEGMENT_LABELS = SAMPLE_QUARTER_LABELS  # 示例时分业务用季度标签；�
 SEGMENTS = SAMPLE_SEGMENTS
 VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
 GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
+RATING = None     # 机构评级分布（真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
@@ -205,10 +206,45 @@ def build_market_row() -> str:
         f'<span>现价 <b>{now:.2f}</b></span>'
         f'<span>52周最高 <b>{high:.2f}</b></span>'
         "</div></div>"
+        + build_consensus()
+        + "</div>"
+    )
+
+
+def build_consensus() -> str:
+    """机构评级分布 + 预测每股收益（客观第三方数据）。"""
+    if not RATING:
+        return ('<div class="consensus">'
+                '<div>机构评级（<b>数据待接入</b>）</div>'
+                '<div style="font-size:10px;color:var(--faint);margin-top:4px;">机构评级与盈利预测数据源待接入。</div>'
+                "</div>")
+    r = RATING
+    total = r.get("total") or 0
+    cats = [
+        ("买入", r.get("buy"), "#c0392b"),
+        ("增持", r.get("overweight"), "#e67e22"),
+        ("中性", r.get("neutral"), "#95a5a6"),
+        ("减持", r.get("underweight"), "#2ecc71"),
+        ("卖出", r.get("sell"), "#1e8e5a"),
+    ]
+    segs = []
+    for label, val, color in cats:
+        v = int(val) if val is not None else 0
+        if v > 0:
+            pct = v / total * 100 if total else 0
+            segs.append(f'<span style="background:{color};width:{pct:.1f}%">{label} {v}</span>')
+    bar = '<div class="rating-bar">' + "".join(segs) + "</div>" if segs else ""
+
+    eps = r.get("eps_forecast", [])
+    eps_txt = " / ".join(f"{e['year']} {e['eps']:.2f}" for e in eps if e.get("eps") is not None)
+    eps_line = f'<div style="margin-top:5px;">预测每股收益：{eps_txt} 元</div>' if eps_txt else ""
+
+    return (
         '<div class="consensus">'
-        '<div>机构目标价（<b>数据待接入</b>）</div>'
-        '<div style="font-size:10px;color:var(--faint);margin-top:5px;">机构目标价与评级数据源受网络限制暂未接入，后续补齐。</div>'
-        "</div></div>"
+        f'<div>机构评级（近6个月 · <b>{int(total)}家</b>）</div>'
+        + bar + eps_line
+        + '<div style="font-size:10px;color:var(--faint);margin-top:5px;">第三方机构观点汇总，非本人建议。</div>'
+        "</div>"
     )
 
 
@@ -435,6 +471,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
 .consensus b { color: var(--ink); }
+.rating-bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0; }
+.rating-bar span { display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; white-space: nowrap; }
 .tp-grid { display: flex; gap: 8px; margin: 7px 0; }
 .tp-cell { flex: 1; text-align: center; padding: 7px 4px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
 .tp-cell .k { font-size: 9.5px; color: var(--faint); }
@@ -609,7 +647,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -622,6 +660,7 @@ def build(code: str = "601088") -> None:
             SEGMENTS = real["segments"]
         VALUATION = real["valuation"]
         GRAHAM = real["graham"]
+        RATING = real.get("rating")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
