@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.adapter import build_template_data
+from src.review.ledger import load_latest
 
 JOURNAL_DIR = Path(__file__).resolve().parent.parent / "journal"
 
@@ -60,6 +61,24 @@ def _snapshot(real: dict) -> str:
     return "\n".join(lines)
 
 
+def _hypotheses_section(code: str) -> str:
+    """从假设台账读本季假设，生成「假设复盘」栏（下季验证用）。"""
+    ledger = load_latest(code)
+    hyps = (ledger or {}).get("hypotheses", [])
+    lines = ["## 假设复盘（本季假设，下季逐条验证）"]
+    if not hyps:
+        lines.append("- （暂无假设，可运行 scripts/review.py 生成）")
+    else:
+        for h in hyps:
+            line = f"- {h.get('statement', '')}"
+            if h.get("metric"):
+                line += f" 【{h['metric']}】"
+            if h.get("basis"):
+                line += f"（依据：{h['basis']}）"
+            lines.append(line)
+    return "\n".join(lines) + "\n"
+
+
 _TEMPLATE_TAIL = """
 ## 操作
 - （待填：日期 + 方向 + 价格 + 仓位，未成交也记）
@@ -85,7 +104,7 @@ def generate(code: str, force: bool = False) -> Path:
         return path
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    content = f"# {ym} {name}\n\n" + _snapshot(real) + _TEMPLATE_TAIL
+    content = f"# {ym} {name}\n\n" + _snapshot(real) + "\n\n" + _hypotheses_section(code) + _TEMPLATE_TAIL
     path.write_text(content, encoding="utf-8")
     print(f"已生成: {path}")
     return path
