@@ -12,12 +12,21 @@ import pandas as pd
 # 金额字段（元 → 亿元；股本面值 1 元，故 share_capital 转后即「亿股」）
 _MONEY_FIELDS = {
     "operating_revenue", "operating_cost", "net_profit", "net_profit_parent", "ocf",
-    "total_assets", "total_liabilities", "total_equity",
+    "total_profit", "income_tax", "interest_expense",
+    "total_assets", "total_liabilities", "total_equity", "total_equity_all",
     "current_assets", "monetary_funds", "inventory", "accounts_receivable",
     "borrowings", "goodwill", "interest_bearing_debt",
     "long_term_loan", "short_term_loan",
     "share_capital", "preferred_shares",
     "sell_expense", "admin_expense", "depreciation",
+    # ValueLine 补充字段（元 → 亿元）
+    "current_liabilities", "accounts_payable", "other_current_assets",
+    "other_current_liabilities", "noncurrent_liab_1y", "retained_profit",
+    "bond_payable", "long_payable", "lease_liabilities", "short_bond_payable",
+    "noncurrent_liabilities",
+    "capital_expenditure", "amortize_intangible", "amortize_lpe",
+    "depre_invest_realestate", "depre_oilgas_bio", "amortize_useright",
+    "long_term_debt", "total_debt",
 }
 
 
@@ -43,11 +52,31 @@ def _with_interest_debt(bs_df: pd.DataFrame) -> pd.DataFrame:
 
     东财资产负债表的 BORROW_FUND 字段对部分公司为空，而有息负债的
     核心是长期借款 + 短期借款，故补算 interest_bearing_debt 字段。
+
+    ValueLine 口径（本函数同时补算）：
+    - long_term_debt：长期借款 + 应付债券 + 长期应付款 + 租赁负债
+    - total_debt：短期借款 + 一年内到期非流动负债 + 长期借款 + 应付债券
+                  + 长期应付款 + 租赁负债 + 应付短期债券（完整有息负债）
     """
     df = bs_df.copy()
     loan_cols = [c for c in ("long_term_loan", "short_term_loan") if c in df.columns]
     if loan_cols:
         df["interest_bearing_debt"] = df[loan_cols].sum(axis=1, min_count=1)
+
+    def _sum_cols(names):
+        cols = [c for c in names if c in df.columns]
+        return df[cols].sum(axis=1, min_count=1) if cols else None
+
+    lt_cols = ["long_term_loan", "bond_payable", "long_payable", "lease_liabilities"]
+    td_cols = ["short_term_loan", "noncurrent_liab_1y", "long_term_loan",
+               "bond_payable", "long_payable", "lease_liabilities", "short_bond_payable"]
+    lt = _sum_cols(lt_cols)
+    if lt is not None:
+        df["long_term_debt"] = lt
+    td = _sum_cols(td_cols)
+    if td is not None:
+        df["total_debt"] = td
+
     if "goodwill" in df.columns:
         df["goodwill"] = df["goodwill"].fillna(0.0)
     if "preferred_shares" in df.columns:
@@ -85,12 +114,19 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     key = ["symbol", "report_date"]
 
-    ps_cols = key + [c for c in ["operating_revenue", "net_profit", "net_profit_parent", "gross_margin_pct", "sell_expense", "admin_expense"] if c in ps.columns]
-    cf_cols = key + [c for c in ["ocf", "depreciation"] if c in cf.columns]
-    bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
+    ps_cols = key + [c for c in ["operating_revenue", "net_profit", "net_profit_parent", "gross_margin_pct", "sell_expense", "admin_expense", "income_tax", "interest_expense", "total_profit"] if c in ps.columns]
+    cf_cols = key + [c for c in ["ocf", "depreciation", "capital_expenditure",
+                                 "amortize_intangible", "amortize_lpe",
+                                 "depre_invest_realestate", "depre_oilgas_bio", "amortize_useright"] if c in cf.columns]
+    bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity", "total_equity_all",
                                  "current_assets", "monetary_funds", "inventory", "accounts_receivable",
                                  "interest_bearing_debt", "goodwill",
-                                 "share_capital", "preferred_shares", "audit_opinion"] if c in bs.columns]
+                                 "share_capital", "preferred_shares", "audit_opinion",
+                                 "current_liabilities", "accounts_payable", "other_current_assets",
+                                 "other_current_liabilities", "noncurrent_liab_1y", "retained_profit",
+                                 "bond_payable", "long_payable", "lease_liabilities",
+                                 "short_bond_payable", "noncurrent_liabilities",
+                                 "long_term_debt", "total_debt"] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",
                                  "debt_ratio_pct", "revenue_yoy_pct", "net_profit_yoy_pct",
                                  "ocf_to_profit_pct", "current_ratio", "quick_ratio"] if c in fi.columns]
@@ -112,6 +148,38 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         merged["dividend_total"] = merged["dividend_per_10"] / 10 * merged["share_capital"]  # 分红总额(亿元)
     if "dividend_total" in merged.columns and "net_profit_parent" in merged.columns:
         merged["dividend_payout_pct"] = merged["dividend_total"] / merged["net_profit_parent"] * 100
+
+    # —— ValueLine 派生指标（组件均已换算为亿元）——
+    # 营运资本 = 流动资产 - 流动负债
+    if "current_assets" in merged.columns and "current_liabilities" in merged.columns:
+        merged["working_capital"] = merged["current_assets"] - merged["current_liabilities"]
+
+    # 折旧与摊销总额 = 固定资产折旧 + 投资性房地产折旧 + 油气生物折旧
+    #                  + 无形资产摊销 + 长期待摊摊销 + 使用权资产摊销（缺失项按 0）
+    dpr_cols = [c for c in ("depreciation", "depre_invest_realestate", "depre_oilgas_bio",
+                            "amortize_intangible", "amortize_lpe", "amortize_useright") if c in merged.columns]
+    if dpr_cols:
+        merged["depreciation_amortization"] = merged[dpr_cols].fillna(0.0).sum(axis=1)
+
+    # 所得税率 = 所得税费用 / 利润总额 × 100
+    if "income_tax" in merged.columns and "total_profit" in merged.columns:
+        tp = merged["total_profit"].astype(float)
+        merged["income_tax_rate"] = merged["income_tax"] / tp.where(tp != 0) * 100
+
+    # 留存收益 / 普通股权益 = 未分配利润 / 归母净资产 × 100
+    if "retained_profit" in merged.columns and "total_equity" in merged.columns:
+        te = merged["total_equity"].astype(float)
+        merged["retained_to_equity"] = merged["retained_profit"] / te.where(te != 0) * 100
+
+    # 总资本回报率 ROTC = 净利润 /（全部股东权益 + 有息负债）× 100
+    if "net_profit" in merged.columns and "total_debt" in merged.columns:
+        eq = merged["total_equity_all"] if "total_equity_all" in merged.columns else merged["total_equity"]
+        capital = eq.astype(float) + merged["total_debt"].astype(float)
+        merged["rotc"] = merged["net_profit"] / capital.where(capital != 0) * 100
+
+    # 每股股息 = 每10股派息 / 10
+    if "dividend_per_10" in merged.columns:
+        merged["dividend_per_share"] = merged["dividend_per_10"] / 10
 
     return merged
 

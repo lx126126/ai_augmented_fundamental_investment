@@ -51,6 +51,8 @@ RATING = None     # 机构评级分布（真实数据时由 adapter 提供）
 FRAUD = None      # 财务造假检测（真实数据时由 adapter 提供）
 COMPETITION = None  # 竞争地位（行业排名/营收份额，真实数据时由 adapter 提供）
 BUSINESS_MAP = None  # 业务版图（主营业务一句话 + 各业务收入占比，真实数据时由 adapter 提供）
+CURRENT_POSITION = None  # 流动状况（流动资产 vs 流动负债明细，ValueLine Current Position）
+ANNUAL_RATES = None      # 年增长率（销售/现金流/盈利/股息/账面价值 CAGR，ValueLine Annual Rates）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
@@ -273,6 +275,70 @@ def build_graham() -> str:
         f'<div class="g-row"><span>盈利稳定性（5年）</span><b>{stable}</b></div>'
         f'<div class="g-row"><span>净现金 / 有息负债</span><b>{net_cash}</b></div>'
         "</div>"
+    )
+
+
+def build_current_position() -> str:
+    """流动状况（ValueLine Current Position）：流动资产 vs 流动负债明细（最新年报时点）。"""
+    if not CURRENT_POSITION:
+        return ""
+    cp = CURRENT_POSITION
+    year = cp.get("year")
+    assets = cp.get("assets") or []
+    liabs = cp.get("liabilities") or []
+    wc = cp.get("working_capital")
+
+    def _row(label, val, bold=False):
+        v = f"{val:.1f}" if val is not None else "—"
+        cls = ' class="total"' if bold else ""
+        return f'<div class="cp-row{cls}"><span>{label}</span><b>{v}</b></div>'
+
+    def _col(title, items, total_label):
+        rows = [_row(label, val, bold=(label == total_label)) for label, val in items]
+        return f'<div class="cp-col"><div class="cp-col-title">{title}</div>{"".join(rows)}</div>'
+
+    wc_txt = f"{wc:.1f}" if wc is not None else "—"
+    wc_cls = "pos" if (wc is not None and wc > 0) else "neg"
+
+    return (
+        '<div class="current-pos">'
+        f'<div class="cp-title">流动状况（Current Position）<span class="cp-note">{year} 年报 · 单位：亿元</span></div>'
+        '<div class="cp-grid">'
+        + _col("流动资产", assets, "流动资产合计")
+        + _col("流动负债", liabs, "流动负债合计")
+        + "</div>"
+        f'<div class="cp-wc">营运资本（流动资产 − 流动负债）：<b class="{wc_cls}">{wc_txt}</b> 亿元</div>'
+        "</div>"
+    )
+
+
+def build_annual_rates() -> str:
+    """年增长率（ValueLine Annual Rates）：销售/现金流/盈利/股息/账面价值 CAGR。"""
+    if not ANNUAL_RATES:
+        return ""
+    labels = [
+        ("sales", "销售收入"),
+        ("cash_flow", "经营现金流"),
+        ("earnings", "净利润"),
+        ("dividends", "每股股息"),
+        ("book_value", "账面价值（净资产）"),
+    ]
+    rows = []
+    for key, label in labels:
+        r = ANNUAL_RATES.get(key)
+        if not r:
+            continue
+        c5 = f"{r['cagr5'] * 100:+.1f}%" if r.get("cagr5") is not None else "—"
+        c10 = f"{r['cagr10'] * 100:+.1f}%" if r.get("cagr10") is not None else "—"
+        rows.append(f'<div class="ar-row"><span>{label}</span><b>{c5}</b><b>{c10}</b></div>')
+    if not rows:
+        return ""
+    return (
+        '<div class="annual-rates">'
+        '<div class="ar-title">年增长率（Annual Rates）<span class="ar-note">复合年增长率 CAGR</span></div>'
+        '<div class="ar-row ar-head"><span></span><b>近5年</b><b>近10年</b></div>'
+        + "".join(rows)
+        + "</div>"
     )
 
 
@@ -633,6 +699,32 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .graham .g-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
 .graham .g-score b { color: var(--down); }
 
+/* ValueLine 统计：流动状况 + 年增长率 */
+.current-pos { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.cp-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
+.cp-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.cp-grid { display: flex; gap: 16px; }
+.cp-col { flex: 1; }
+.cp-col-title { font-size: 11px; font-weight: 700; color: var(--muted); margin-bottom: 5px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.cp-row { display: flex; justify-content: space-between; font-size: 11px; padding: 3px 0; color: var(--muted); }
+.cp-row b { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cp-row.total { border-top: 1px dashed var(--line); margin-top: 3px; padding-top: 5px; }
+.cp-row.total span { font-weight: 600; color: var(--ink); }
+.cp-row.total b { font-weight: 700; color: var(--accent-2); }
+.cp-wc { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--muted); }
+.cp-wc b { font-variant-numeric: tabular-nums; }
+.cp-wc b.pos { color: var(--down); }
+.cp-wc b.neg { color: var(--up); }
+
+.annual-rates { margin-top: 12px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
+.ar-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.ar-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.ar-row { display: grid; grid-template-columns: 1fr 80px 80px; font-size: 11px; padding: 3px 0; color: var(--muted); }
+.ar-row span { color: #33404f; }
+.ar-row b { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+.ar-row.ar-head { color: var(--faint); font-size: 10px; border-bottom: 1px solid var(--line-soft); margin-bottom: 3px; }
+.ar-row.ar-head b { color: var(--faint); font-weight: 500; }
+
 /* 财务造假检测 */
 .fraud { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
 .fraud .f-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; color: var(--muted); }
@@ -707,6 +799,12 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
+    <div class="sec-title">经营统计（ValueLine 口径） <span class="hint">流动状况 · 年增长率</span></div>
+@@CURRENT_POSITION@@
+@@ANNUAL_RATES@@
+  </div>
+
+  <div class="section">
     <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算</span></div>
     <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
 @@VAL_GRID@@
@@ -757,7 +855,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -774,6 +872,8 @@ def build(code: str = "601088") -> None:
         FRAUD = real.get("fraud")
         COMPETITION = real.get("competition")
         BUSINESS_MAP = real.get("business_map")
+        CURRENT_POSITION = real.get("current_position")
+        ANNUAL_RATES = real.get("annual_rates")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -810,6 +910,8 @@ def build(code: str = "601088") -> None:
         .replace("@@BUSINESS_MAP@@", build_business_map())
         .replace("@@BIZ@@", build_business_model())
         .replace("@@COMPETITION@@", build_competition())
+        .replace("@@CURRENT_POSITION@@", build_current_position())
+        .replace("@@ANNUAL_RATES@@", build_annual_rates())
         .replace("@@THESIS@@", build_thesis())
         .replace("@@RISKS@@", build_risks())
         .replace("@@VERIFY@@", build_verify())

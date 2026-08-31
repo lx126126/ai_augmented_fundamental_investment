@@ -29,22 +29,30 @@ ANNUAL_SPEC = [
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
     (None, "经营现金流净额（亿元）", "ocf", 1),
+    (None, "折旧与摊销（亿元）", "depreciation_amortization", 1),
+    (None, "资本开支（亿元）", "capital_expenditure", 1),
+    (None, "所得税率 %", "income_tax_rate", 1),
     (None, "ROE（摊薄）%", "roe_pct", 1),
+    (None, "ROTC（总资本回报）%", "rotc", 1),
     ("资产负债表", None, None, None),
     (None, "总资产（亿元）", "total_assets", 1),
     (None, "总负债（亿元）", "total_liabilities", 1),
     (None, "净资产（归母）（亿元）", "total_equity", 1),
+    (None, "营运资本（亿元）", "working_capital", 1),
     (None, "货币资金（亿元）", "monetary_funds", 1),
     (None, "存货（亿元）", "inventory", 1),
     (None, "应收账款（亿元）", "accounts_receivable", 1),
-    (None, "有息负债（亿元）", "interest_bearing_debt", 1),
+    (None, "长期债务（亿元）", "long_term_debt", 1),
+    (None, "总债务（有息）（亿元）", "total_debt", 1),
     (None, "商誉（亿元）", "goodwill", 1),
     ("股本结构", None, None, None),
     (None, "普通股数量（亿股）", "total_shares_yi", 2),
     (None, "优先股数量（亿股）", "preferred_shares_yi", 2),
     ("股东回报", None, None, None),
+    (None, "每股股息（元）", "dividend_per_share", 2),
     (None, "分红比例 %", "dividend_payout_pct", 1),
     (None, "股息率 %", "dividend_yield_pct", 1),
+    (None, "留存收益/普通股权益 %", "retained_to_equity", 1),
 ]
 
 QUARTER_SPEC = [
@@ -228,6 +236,10 @@ def build_template_data(code: str) -> dict:
     # 财务造假检测（Beneish M-Score + 现金流背离 + 应收异常）
     fraud = fraud_check(annual)
 
+    # ValueLine 统计：流动状况（Current Position）+ 年增长率（Annual Rates）
+    current_position = _build_current_position(annual)
+    annual_rates = _build_annual_rates(annual)
+
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
     if business_map:
@@ -248,6 +260,8 @@ def build_template_data(code: str) -> dict:
         "company_name": company_name,
         "competition": competition,
         "business_map": business_map,
+        "current_position": current_position,
+        "annual_rates": annual_rates,
         "narrative_data": narrative_data,
     }
 
@@ -337,6 +351,83 @@ def _build_graham(annual: pd.DataFrame) -> dict:
         "profit_stable": stable,
         "net_cash": _clean(net_cash),
     }
+
+
+def _build_current_position(annual: pd.DataFrame) -> dict | None:
+    """流动状况（ValueLine Current Position）：最新年报流动资产 vs 流动负债明细。"""
+    if annual.empty:
+        return None
+    latest = annual.iloc[-1]
+
+    def _v(col):
+        v = latest.get(col) if col in annual.columns else None
+        return None if (v is None or pd.isna(v)) else float(v)
+
+    assets = [
+        ("现金资产", _v("monetary_funds")),
+        ("应收账款", _v("accounts_receivable")),
+        ("存货", _v("inventory")),
+        ("其他流动资产", _v("other_current_assets")),
+        ("流动资产合计", _v("current_assets")),
+    ]
+    liabs = [
+        ("应付账款", _v("accounts_payable")),
+        ("一年内到期债务", _v("noncurrent_liab_1y")),
+        ("其他流动负债", _v("other_current_liabilities")),
+        ("流动负债合计", _v("current_liabilities")),
+    ]
+    wc = _v("working_capital")
+
+    # 核心字段全缺失视为无数据
+    if all(v is None for _, v in assets) and all(v is None for _, v in liabs):
+        return None
+
+    return {
+        "year": int(latest["report_date"].year),
+        "assets": assets,
+        "liabilities": liabs,
+        "working_capital": wc,
+    }
+
+
+def _cagr(vals, n_years):
+    """CAGR：vals 已按时间升序，取末 n_years+1 个点，跨 n_years 年。"""
+    if vals is None or len(vals) < n_years + 1:
+        return None
+    window = vals[-(n_years + 1):]
+    first, last = window[0], window[-1]
+    if first is None or last is None or first <= 0 or last <= 0:
+        return None
+    return (last / first) ** (1 / n_years) - 1
+
+
+def _build_annual_rates(annual: pd.DataFrame) -> dict | None:
+    """年增长率（ValueLine Annual Rates）：销售/现金流/盈利/股息/账面价值 CAGR。"""
+    if annual.empty:
+        return None
+
+    def _series(col):
+        if col not in annual.columns:
+            return None
+        s = annual[col].astype(float).tolist()
+        return [None if (v is None or pd.isna(v)) else v for v in s]
+
+    series_map = {
+        "sales": _series("operating_revenue"),
+        "cash_flow": _series("ocf"),
+        "earnings": _series("net_profit_parent"),
+        "dividends": _series("dividend_per_share"),
+        "book_value": _series("total_equity"),
+    }
+
+    out = {}
+    for key, vals in series_map.items():
+        cagr5 = _cagr(vals, 5)
+        cagr10 = _cagr(vals, 10)
+        if cagr5 is not None or cagr10 is not None:
+            out[key] = {"cagr5": cagr5, "cagr10": cagr10}
+
+    return out if out else None
 
 
 def _build_narrative_data(annual, segments, valuation, company_name, code, competition=None) -> dict:

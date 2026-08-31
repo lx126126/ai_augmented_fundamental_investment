@@ -64,6 +64,8 @@ PROFIT_SHEET_MAP = {
     "PARENT_NETPROFIT": "net_profit_parent",      # 归母净利润
     "SALE_EXPENSE": "sell_expense",               # 销售费用（M-Score SGAI）
     "MANAGE_EXPENSE": "admin_expense",            # 管理费用（M-Score SGAI）
+    "INCOME_TAX": "income_tax",                   # 所得税费用
+    "FE_INTEREST_EXPENSE": "interest_expense",    # 财务费用-利息费用（长期利息近似）
 }
 
 # ---------------------------------------------------------------------------
@@ -75,6 +77,7 @@ BALANCE_SHEET_MAP = {
     "TOTAL_ASSETS": "total_assets",               # 总资产
     "TOTAL_LIABILITIES": "total_liabilities",     # 总负债
     "TOTAL_PARENT_EQUITY": "total_equity",        # 归母净资产
+    "TOTAL_EQUITY": "total_equity_all",           # 全部股东权益（含少数股东，ROTC 用）
     "TOTAL_CURRENT_ASSETS": "current_assets",     # 流动资产（M-Score AQI）
     "MONETARYFUNDS": "monetary_funds",            # 货币资金
     "INVENTORY": "inventory",                     # 存货
@@ -87,6 +90,18 @@ BALANCE_SHEET_MAP = {
     "SHARE_CAPITAL": "share_capital",             # 股本（普通股，面值1元，总股本）
     "PREFERRED_SHARES": "preferred_shares",       # 优先股
     "OPINION_TYPE": "audit_opinion",              # 审计意见（年报行有值，如 标准无保留意见）
+    # —— ValueLine 补充：流动状况 + 债务结构 + 留存收益 ——
+    "TOTAL_CURRENT_LIAB": "current_liabilities",  # 流动负债合计
+    "ACCOUNTS_PAYABLE": "accounts_payable",       # 应付账款
+    "OTHER_CURRENT_ASSET": "other_current_assets",# 其他流动资产
+    "OTHER_CURRENT_LIAB": "other_current_liabilities",  # 其他流动负债
+    "NONCURRENT_LIAB_1YEAR": "noncurrent_liab_1y",      # 一年内到期非流动负债
+    "UNASSIGN_RPOFIT": "retained_profit",         # 未分配利润（留存收益）
+    "BOND_PAYABLE": "bond_payable",               # 应付债券
+    "LONG_PAYABLE": "long_payable",               # 长期应付款
+    "LEASE_LIAB": "lease_liabilities",            # 租赁负债
+    "SHORT_BOND_PAYABLE": "short_bond_payable",   # 应付短期债券
+    "TOTAL_NONCURRENT_LIAB": "noncurrent_liabilities",  # 非流动负债合计
 }
 
 # ---------------------------------------------------------------------------
@@ -99,6 +114,13 @@ CASH_FLOW_MAP = {
     "NETCASH_INVEST": "icf",                      # 投资活动现金流净额
     "NETCASH_FINANCE": "fcf",                     # 筹资活动现金流净额
     "FA_IR_DEPR": "depreciation",                 # 固定资产折旧（M-Score DEPI）
+    # —— ValueLine 补充：资本开支 + 折旧摊销明细 ——
+    "CONSTRUCT_LONG_ASSET": "capital_expenditure",      # 购建固定资产等（资本开支）
+    "IA_AMORTIZE": "amortize_intangible",               # 无形资产摊销
+    "LPE_AMORTIZE": "amortize_lpe",                     # 长期待摊费用摊销
+    "IR_DEPR": "depre_invest_realestate",               # 投资性房地产折旧
+    "OILGAS_BIOLOGY_DEPR": "depre_oilgas_bio",          # 油气/生物资产折旧
+    "USERIGHT_ASSET_AMORTIZE": "amortize_useright",     # 使用权资产摊销
 }
 
 # ---------------------------------------------------------------------------
