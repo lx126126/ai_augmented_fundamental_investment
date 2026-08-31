@@ -125,20 +125,6 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .graham .g-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
 .graham .g-score b { color: var(--down); }
 
-/* 机构观点分歧（两列横排） */
-.bull-bear { display: flex; gap: 12px; }
-.bb-col { flex: 1; border-radius: 8px; padding: 12px 14px; border: 1px solid var(--line-soft); }
-.bb-col.bull { border-left: 3px solid var(--up); background: #fdf7f6; }
-.bb-col.bear { border-left: 3px solid var(--down); background: #f4faf6; }
-.bb-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-.bb-col.bull .bb-title { color: var(--up); }
-.bb-col.bear .bb-title { color: var(--down); }
-.bb-col ul { list-style: none; }
-.bb-col li { font-size: 11px; line-height: 1.7; color: #33404f; padding: 3px 0 3px 14px; position: relative; }
-.bb-col li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; border-radius: 50%; }
-.bb-col.bull li::before { background: var(--up); }
-.bb-col.bear li::before { background: var(--down); }
-
 /* 财务造假检测 */
 .fraud { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
 .fraud .f-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; color: var(--muted); }
@@ -155,15 +141,6 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .thesis li:last-child, .risk li:last-child { border-bottom: none; }
 .thesis li::before { content: ""; position: absolute; left: 3px; top: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); }
 .risk li::before { content: "!"; position: absolute; left: 3px; top: 6px; font-size: 11px; font-weight: 700; color: var(--warn); }
-
-/* 复盘层 */
-.review { background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 8px; padding: 13px 15px; }
-.review .r-title { font-size: 13px; font-weight: 700; color: #7a5c0a; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
-.review .r-title .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
-.review .r-row { font-size: 11.5px; line-height: 1.7; padding: 3px 0; }
-.review .r-row .k { font-weight: 600; color: #7a5c0a; margin-right: 4px; }
-.review .r-row.verified .k { color: var(--down); }
-.review .r-row.refuted .k { color: var(--up); }
 
 /* 数据校验 */
 .verify { font-size: 11px; color: var(--faint); line-height: 1.8; }
@@ -188,14 +165,14 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
         <span class="badge lynch">林奇分类：稳健成长型</span>
-        <span class="badge graham">格雷厄姆质量：高（低负债·净现金）</span>
+        <span class="badge graham">格雷厄姆质量：高（低负债·高盈利）</span>
       </div>
     </div>
   </div>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠茅台酒销售，占比85.7%，毛利率92.3%，系列酒补充。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自茅台酒，毛利率高，贡献绝大部分利润。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">白酒行业龙头，品牌力强，高端市场主导。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">品牌护城河深厚，资源稀缺，工艺独特，定价权强。</div></div></div>
+<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠茅台酒销售，占比85.7%，毛利率92.3%，为核心盈利来源。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自茅台酒，贡献绝大部分毛利，系列酒毛利率73.6%，占比小。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">白酒行业龙头，高端白酒代表性品牌，具有显著品牌溢价。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">品牌护城河深厚，独特酿造工艺和产地资源，形成强定价权。</div></div></div>
   </div>
 
   <div class="section">
@@ -220,18 +197,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>高ROE达33.65%，盈利能力强，财务稳健。</li><li>分红比例79.1%，股息率4.0%，股东回报优厚。</li><li>资产负债率仅16.4%，现金流充沛，抗风险能力强。</li></ul>
+<ul class="thesis"><li>高ROE达33.65%，盈利能力强，现金流充沛，经营现金流615亿。</li><li>分红比例79.1%，股息率4.0%，股东回报优厚，防御属性强。</li><li>PE处于近十年39%分位，PB处于8%分位，估值相对合理偏低。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>2025年营收和净利同比下滑，增长放缓。</li><li>系列酒毛利率73.6%，与茅台酒差距大，结构影响盈利。</li><li>PE分位39%，估值不低，安全边际有限。</li></ul>
-  </div>
-
-  <div class="section">
-    <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
-    <div class="disclaim">以下为 AI 基于财务数据生成的多空分析视角，非机构观点、非本人投资建议。</div>
-<div class="bull-bear"><div class="bb-col bull"><div class="bb-title">看多视角</div><ul><li>PE20倍处于历史低位，估值有吸引力。</li><li>高分红高股息，防御属性强。</li><li>品牌护城河稳固，长期竞争力不变。</li></ul></div><div class="bb-col bear"><div class="bb-title">看空视角</div><ul><li>营收净利双降，成长性存疑。</li><li>白酒行业竞争加剧，系列酒增长乏力。</li><li>宏观经济影响高端消费，需求可能疲软。</li></ul></div></div>
+<ul class="risk"><li>2025年营收净利微降，增长放缓，可能面临需求疲软。</li><li>系列酒毛利率较低，若占比提升，整体毛利率或承压。</li><li>宏观经济波动影响高端消费，政策风险需关注。</li></ul>
   </div>
 
   <div class="section">
@@ -242,11 +213,11 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">数据校验记录</div>
-<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>6/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>— 总负债</b>：缺失</div><div><b>✓ 总股本</b>：一致</div><div><b>校验日期：</b>2026-08-27</div><div><b>校验人：</b>李潇</div></div>
+<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>6/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>— 总负债</b>：缺失</div><div><b>✓ 总股本</b>：一致</div><div><b>校验日期：</b>2026-08-31</div><div><b>校验人：</b>李潇</div></div>
   </div>
 
   <div class="footer">
-    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构目标价与多空观点均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
+    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构评级与盈利预测均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
   </div>
 
 </div>

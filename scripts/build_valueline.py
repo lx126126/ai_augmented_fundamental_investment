@@ -313,22 +313,6 @@ def build_risks() -> str:
     return '<ul class="risk">' + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
 
 
-def build_bull_bear() -> str:
-    bb = NARRATIVE.get("bull_bear", {}) if NARRATIVE else {}
-    bulls = bb.get("bull", []) or []
-    bears = bb.get("bear", []) or []
-    if not bulls and not bears:
-        return '<div class="bull-bear"><div class="bb-col" style="color:var(--faint);">多空视角待 LLM 生成</div></div>'
-    bull_li = "".join(f"<li>{t}</li>" for t in bulls) or "<li>（待生成）</li>"
-    bear_li = "".join(f"<li>{t}</li>" for t in bears) or "<li>（待生成）</li>"
-    return (
-        '<div class="bull-bear">'
-        f'<div class="bb-col bull"><div class="bb-title">看多视角</div><ul>{bull_li}</ul></div>'
-        f'<div class="bb-col bear"><div class="bb-title">看空视角</div><ul>{bear_li}</ul></div>'
-        "</div>"
-    )
-
-
 def build_fraud() -> str:
     """财务造假检测：Beneish M-Score + 现金流背离 + 应收异常（客观算法）。"""
     if not FRAUD:
@@ -532,20 +516,6 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .graham .g-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
 .graham .g-score b { color: var(--down); }
 
-/* 机构观点分歧（两列横排） */
-.bull-bear { display: flex; gap: 12px; }
-.bb-col { flex: 1; border-radius: 8px; padding: 12px 14px; border: 1px solid var(--line-soft); }
-.bb-col.bull { border-left: 3px solid var(--up); background: #fdf7f6; }
-.bb-col.bear { border-left: 3px solid var(--down); background: #f4faf6; }
-.bb-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
-.bb-col.bull .bb-title { color: var(--up); }
-.bb-col.bear .bb-title { color: var(--down); }
-.bb-col ul { list-style: none; }
-.bb-col li { font-size: 11px; line-height: 1.7; color: #33404f; padding: 3px 0 3px 14px; position: relative; }
-.bb-col li::before { content: ""; position: absolute; left: 2px; top: 10px; width: 6px; height: 6px; border-radius: 50%; }
-.bb-col.bull li::before { background: var(--up); }
-.bb-col.bear li::before { background: var(--down); }
-
 /* 财务造假检测 */
 .fraud { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
 .fraud .f-row { display: flex; justify-content: space-between; font-size: 11px; padding: 4px 0; color: var(--muted); }
@@ -562,15 +532,6 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .thesis li:last-child, .risk li:last-child { border-bottom: none; }
 .thesis li::before { content: ""; position: absolute; left: 3px; top: 12px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-2); }
 .risk li::before { content: "!"; position: absolute; left: 3px; top: 6px; font-size: 11px; font-weight: 700; color: var(--warn); }
-
-/* 复盘层 */
-.review { background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 8px; padding: 13px 15px; }
-.review .r-title { font-size: 13px; font-weight: 700; color: #7a5c0a; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
-.review .r-title .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
-.review .r-row { font-size: 11.5px; line-height: 1.7; padding: 3px 0; }
-.review .r-row .k { font-weight: 600; color: #7a5c0a; margin-right: 4px; }
-.review .r-row.verified .k { color: var(--down); }
-.review .r-row.refuted .k { color: var(--up); }
 
 /* 数据校验 */
 .verify { font-size: 11px; color: var(--faint); line-height: 1.8; }
@@ -645,12 +606,6 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">机构观点分歧 <span class="hint">多 vs 空</span></div>
-    <div class="disclaim">以下为 AI 基于财务数据生成的多空分析视角，非机构观点、非本人投资建议。</div>
-@@BULL_BEAR@@
-  </div>
-
-  <div class="section">
     <div class="sec-title">财务造假检测 <span class="hint">Beneish M-Score</span></div>
 @@FRAUD@@
     <div style="font-size:10px;color:var(--faint);margin-top:5px;">M-Score 阈值 -1.78（Beneish 1999 模型），基于近两年财报计算，仅供参考，不构成投资建议。</div>
@@ -662,7 +617,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="footer">
-    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构目标价与多空观点均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
+    本页为个人投研研究记录，仅供学习交流，不构成任何投资建议或买卖依据。52周价格、机构评级与盈利预测均为公开市场数据及第三方机构观点，非本人建议。数据可能存在误差或滞后，请以公司官方披露及监管文件为准。公开版遵循「完全去操作」原则，不含本人操作建议。
   </div>
 
 </div>
@@ -734,7 +689,6 @@ def build(code: str = "601088") -> None:
         .replace("@@BIZ@@", build_business_model())
         .replace("@@THESIS@@", build_thesis())
         .replace("@@RISKS@@", build_risks())
-        .replace("@@BULL_BEAR@@", build_bull_bear())
         .replace("@@VERIFY@@", build_verify())
         .replace("@@FRAUD@@", build_fraud())
         .replace("@@COMPANY_NAME@@", COMPANY_NAME)
