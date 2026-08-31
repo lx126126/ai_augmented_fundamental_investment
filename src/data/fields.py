@@ -86,6 +86,7 @@ BALANCE_SHEET_MAP = {
     "SHORT_LOAN": "short_term_loan",              # 短期借款
     "SHARE_CAPITAL": "share_capital",             # 股本（普通股，面值1元，总股本）
     "PREFERRED_SHARES": "preferred_shares",       # 优先股
+    "OPINION_TYPE": "audit_opinion",              # 审计意见（年报行有值，如 标准无保留意见）
 }
 
 # ---------------------------------------------------------------------------

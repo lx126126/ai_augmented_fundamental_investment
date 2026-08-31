@@ -391,7 +391,13 @@ def build_fraud() -> str:
         txt = "背离" if rc["warning"] else "正常"
         rows.append(f'<div class="f-row"><span>应收增速 vs 营收增速</span><b class="{cls}">应收 {rc["ar_yoy"]:.1f}% vs 营收 {rc["rev_yoy"]:.1f}% · {txt}</b></div>')
 
-    rows.append(f'<div class="f-row"><span>审计意见</span><b>{f.get("audit_opinion", "标准无保留")}</b></div>')
+    audit_op = f.get("audit_opinion")
+    audit_level = f.get("audit_level")
+    if audit_op:
+        cls = {"clean": "ok", "watch": "warn", "high": "bad"}.get(audit_level, "")
+        rows.append(f'<div class="f-row"><span>审计意见</span><b class="{cls}">{audit_op}</b></div>')
+    else:
+        rows.append('<div class="f-row"><span>审计意见</span><b>数据待接入</b></div>')
 
     overall = f.get("overall_risk", "low")
     cls = {"low": "ok", "medium": "warn", "high": "bad"}.get(overall, "ok")

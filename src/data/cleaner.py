@@ -90,7 +90,7 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
                                  "current_assets", "monetary_funds", "inventory", "accounts_receivable",
                                  "interest_bearing_debt", "goodwill",
-                                 "share_capital", "preferred_shares"] if c in bs.columns]
+                                 "share_capital", "preferred_shares", "audit_opinion"] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",
                                  "debt_ratio_pct", "revenue_yoy_pct", "net_profit_yoy_pct",
                                  "ocf_to_profit_pct", "current_ratio", "quick_ratio"] if c in fi.columns]

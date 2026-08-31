@@ -141,11 +141,41 @@ def _receivable_divergence(annual: pd.DataFrame) -> dict | None:
     return {"ar_yoy": ar_yoy, "rev_yoy": rev_yoy, "gap": gap, "warning": gap > 10}
 
 
+def _audit_risk(opinion) -> dict:
+    """审计意见风险判定（东财 OPINION_TYPE，仅年报有值）。
+
+    分级：
+      clean —— 标准无保留意见（正常）
+      watch —— 带强调事项段 / 持续经营重大不确定性段的无保留意见（提示）
+      high  —— 保留意见 / 无法表示意见 / 否定意见（非标，重大红旗）
+    """
+    if opinion is None:
+        return {"opinion": None, "level": None}
+    if isinstance(opinion, float) and pd.isna(opinion):
+        return {"opinion": None, "level": None}
+    op = str(opinion).strip()
+    if not op or op.lower() == "nan":
+        return {"opinion": None, "level": None}
+
+    if op == "标准无保留意见":
+        level = "clean"
+    elif "无保留" in op:
+        level = "watch"   # 带强调事项段 / 持续经营重大不确定性段的无保留意见
+    else:
+        level = "high"    # 保留 / 无法表示 / 否定意见
+    return {"opinion": op, "level": level}
+
+
 def fraud_check(annual: pd.DataFrame) -> dict:
-    """综合造假检测：M-Score + 现金流背离 + 应收异常 → 风险评级。"""
+    """综合造假检测：M-Score + 现金流背离 + 应收异常 + 审计意见 → 风险评级。"""
     mscore = compute_mscore(annual)
     cashflow = _cashflow_divergence(annual)
     receivable = _receivable_divergence(annual)
+
+    # 审计意见（最新年报，来自资产负债表 OPINION_TYPE）
+    audit = _audit_risk(
+        annual["audit_opinion"].iloc[-1] if "audit_opinion" in annual.columns else None
+    )
 
     flags = []
     if mscore and mscore["risk"] == "high":
@@ -154,8 +184,15 @@ def fraud_check(annual: pd.DataFrame) -> dict:
         flags.append("现金流背离")
     if receivable and receivable["warning"]:
         flags.append("应收增速背离")
+    if audit["level"] == "high":
+        flags.append("非标审计意见")
+    elif audit["level"] == "watch":
+        flags.append("审计意见含强调事项")
 
-    if len(flags) >= 2:
+    # 非标审计意见（保留/无法表示/否定）一票否决 → 高风险
+    if audit["level"] == "high":
+        overall = "high"
+    elif len(flags) >= 2:
         overall = "high"
     elif len(flags) == 1:
         overall = "medium"
@@ -166,7 +203,8 @@ def fraud_check(annual: pd.DataFrame) -> dict:
         "mscore": mscore,
         "cashflow": cashflow,
         "receivable": receivable,
-        "audit_opinion": "标准无保留",  # 占位：审计意见数据源待接入
+        "audit_opinion": audit["opinion"],
+        "audit_level": audit["level"],
         "overall_risk": overall,
         "flags": flags,
     }
