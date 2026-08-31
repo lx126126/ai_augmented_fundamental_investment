@@ -109,9 +109,9 @@ def _q_label(dt) -> str:
 
 
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
-    """读 parquet 原始数据（含分业务构成 + 估值，最多 7 张表）。"""
+    """读 parquet 原始数据（含分业务构成 + 估值，最多 8 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating", "competition"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -196,6 +196,11 @@ def build_template_data(code: str) -> dict:
     if "rating" in raw:
         rating = _build_rating(raw["rating"])
 
+    # 竞争地位（东财业绩报表 → 行业排名 + 营收份额，可选）
+    competition = None
+    if "competition" in raw:
+        competition = _build_competition(raw["competition"], code)
+
     # 公司名（腾讯行情）
     company_name = None
     if "quote" in raw:
@@ -208,7 +213,7 @@ def build_template_data(code: str) -> dict:
     fraud = fraud_check(annual)
 
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
-    narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code)
+    narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
 
     return {
         "years": years,
@@ -223,6 +228,7 @@ def build_template_data(code: str) -> dict:
         "rating": rating,
         "fraud": fraud,
         "company_name": company_name,
+        "competition": competition,
         "narrative_data": narrative_data,
     }
 
@@ -247,6 +253,44 @@ def _build_rating(raw_rating: pd.DataFrame) -> dict | None:
             if val is not None:
                 rating["eps_forecast"].append({"year": str(col)[4:], "eps": val})
     return rating
+
+
+def _build_competition(raw_comp: pd.DataFrame, code: str) -> dict | None:
+    """竞争地位：行业营收排名 + 营收份额 + 同行对比（东财业绩报表口径）。"""
+    if raw_comp is None or raw_comp.empty:
+        return None
+    df = raw_comp.dropna(subset=["revenue_yi"]).copy()
+    if df.empty:
+        return None
+    df = df.sort_values("revenue_yi", ascending=False).reset_index(drop=True)
+    industry = df["industry"].iloc[0] if "industry" in df.columns else None
+    report_year = int(df["report_date"].iloc[0].year) if "report_date" in df.columns else None
+
+    self_row = df[df["symbol"] == code.zfill(6)]
+    if self_row.empty:
+        return None
+    rank = int(self_row.index[0]) + 1  # 营收降序后行号即名次
+    peers_count = len(df)
+    revenue_yi = _clean(self_row.iloc[0].get("revenue_yi"))
+    industry_revenue = float(df["revenue_yi"].sum())
+    share_pct = (revenue_yi / industry_revenue * 100) if (revenue_yi and industry_revenue) else None
+
+    top_peers = [
+        {"name": row["name"], "revenue_yi": _clean(row["revenue_yi"]),
+         "is_self": row["symbol"] == code.zfill(6)}
+        for _, row in df.head(5).iterrows()
+    ]
+
+    return {
+        "industry": industry,
+        "report_year": report_year,
+        "rank": rank,
+        "peers_count": peers_count,
+        "revenue_yi": _clean(revenue_yi),
+        "industry_revenue": _clean(industry_revenue),
+        "share_pct": _clean(share_pct),
+        "top_peers": top_peers,
+    }
 
 
 def _build_graham(annual: pd.DataFrame) -> dict:
@@ -276,7 +320,7 @@ def _build_graham(annual: pd.DataFrame) -> dict:
     }
 
 
-def _build_narrative_data(annual, segments, valuation, company_name, code) -> dict:
+def _build_narrative_data(annual, segments, valuation, company_name, code, competition=None) -> dict:
     """LLM 叙事层的事实摘要（纯数据，无文字）。"""
     latest = annual.iloc[-1]
     latest_year = int(latest["report_date"].year)
@@ -337,4 +381,5 @@ def _build_narrative_data(annual, segments, valuation, company_name, code) -> di
         "dividend_payout": _round(_g("dividend_payout_pct"), 1),
         "dividend_yield": _round(_g("dividend_yield_pct"), 1),
         "valuation": val_summary,
+        "competition": competition,
     }

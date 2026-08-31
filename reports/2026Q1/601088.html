@@ -78,6 +78,23 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .biz-k { flex: 0 0 78px; font-weight: 700; color: var(--accent); }
 .biz-v { flex: 1; color: #33404f; }
 
+/* 竞争地位（客观数据） */
+.competition { margin-top: 14px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
+.comp-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
+.comp-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.comp-grid { display: flex; gap: 12px; margin: 10px 0; }
+.comp-item { flex: 1; padding: 9px 12px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
+.comp-item .lbl { font-size: 10px; color: var(--muted); }
+.comp-item .v { font-size: 17px; font-weight: 700; color: var(--ink); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.peer-list { display: flex; flex-direction: column; gap: 4px; }
+.peer-row { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--muted); }
+.peer-row.self { color: var(--accent-2); font-weight: 600; }
+.peer-name { flex: 0 0 72px; text-align: right; overflow: hidden; white-space: nowrap; }
+.peer-track { flex: 1; height: 8px; background: #eef1f5; border-radius: 4px; overflow: hidden; }
+.peer-bar { height: 100%; background: #aebccb; border-radius: 4px; }
+.peer-row.self .peer-bar { background: var(--accent-2); }
+.peer-val { flex: 0 0 56px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+
 /* 业务收入构成 */
 .seg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; }
@@ -172,7 +189,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">以煤炭销售为主（占比60.5%），发电业务为辅（28%），运输及其他业务补充。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自煤炭板块，凭借一体化运营，发电和运输业务贡献稳定收益，平滑周期波动。</div></div><div class="biz-row"><div class="biz-k">竞争地位</div><div class="biz-v">国内煤炭行业龙头，拥有大规模资源储备和一体化产业链，具备显著规模优势。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">资源禀赋（煤炭储量丰富）、一体化运营（煤电路港航）、政策壁垒（采矿权）及成本优势。</div></div></div>
+<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠煤炭销售（占比60.5%）和发电业务（28%）获取收入，煤化工和运输为辅。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">煤炭业务贡献主要利润，发电业务提供稳定补充，运输和煤化工占比较小，整体盈利来源集中。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">行业营收排名第一，规模优势显著，一体化运营（煤电路港航）降低成本，资源禀赋和运输网络构成壁垒。</div></div></div>
+<div class="competition"><div class="comp-title">竞争地位 · 煤炭开采（2025 年报）<span class="comp-note">营收口径：东财业绩报表</span></div><div class="comp-grid"><div class="comp-item"><div class="lbl">营收排名</div><div class="v">第 1 / 26</div></div><div class="comp-item"><div class="lbl">营收份额</div><div class="v" style="color:var(--accent-2)">27.1%</div></div><div class="comp-item"><div class="lbl">营收</div><div class="v">2949 亿</div></div></div><div class="peer-list"><div class="peer-row self"><span class="peer-name">中国神华</span><div class="peer-track"><div class="peer-bar" style="width:100.0%"></div></div><span class="peer-val">2949</span></div><div class="peer-row"><span class="peer-name">陕西煤业</span><div class="peer-track"><div class="peer-bar" style="width:53.6%"></div></div><span class="peer-val">1582</span></div><div class="peer-row"><span class="peer-name">中煤能源</span><div class="peer-track"><div class="peer-bar" style="width:50.2%"></div></div><span class="peer-val">1481</span></div><div class="peer-row"><span class="peer-name">兖矿能源</span><div class="peer-track"><div class="peer-bar" style="width:49.1%"></div></div><span class="peer-val">1449</span></div><div class="peer-row"><span class="peer-name">淮北矿业</span><div class="peer-track"><div class="peer-bar" style="width:14.0%"></div></div><span class="peer-val">412</span></div></div></div>
   </div>
 
   <div class="section">
@@ -197,12 +215,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>高分红比例75.6%，股息率4.7%，防御属性突出，适合低利率环境。</li><li>资产负债率仅23.3%，经营现金流净额750.6亿，财务稳健，抗风险能力强。</li><li>煤电一体化平滑周期，2025年营收下滑但净利降幅较小，盈利韧性显现。</li></ul>
+<ul class="thesis"><li>高分红比例75.6%，股息率4.7%，防御属性强。</li><li>资产负债率仅23.3%，经营现金流净额750.6亿，财务稳健。</li><li>行业龙头地位稳固，营收份额27.1%，规模效应明显。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>煤炭价格下行将直接压缩盈利，2025年营收已同比下滑，需关注需求疲软。</li><li>PE和PB处于近10年高位，估值回调风险较大，安全边际不足。</li><li>新能源替代加速，长期煤炭需求可能萎缩，影响公司成长性。</li></ul>
+<ul class="risk"><li>煤炭价格波动影响盈利，近5年营收净利下滑趋势明显。</li><li>PE和PB处于近10年高位，估值回调风险。</li><li>新能源替代长期压制煤炭需求，成长性受限。</li></ul>
   </div>
 
   <div class="section">

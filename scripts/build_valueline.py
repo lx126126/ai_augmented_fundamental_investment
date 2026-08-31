@@ -49,6 +49,7 @@ VALUATION = None  # 估值面板（真实数据时由 adapter 提供）
 GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
 RATING = None     # 机构评级分布（真实数据时由 adapter 提供）
 FRAUD = None      # 财务造假检测（真实数据时由 adapter 提供）
+COMPETITION = None  # 竞争地位（行业排名/营收份额，真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
@@ -291,12 +292,59 @@ def build_business_model() -> str:
     bm = NARRATIVE.get("business_model", {}) if NARRATIVE else {}
     rows = []
     for key, label in [("revenue_source", "盈利来源"), ("profit_structure", "盈利结构"),
-                       ("competitive_position", "竞争地位"), ("moat", "护城河")]:
+                       ("moat", "护城河")]:
         val = bm.get(key, "")
         rows.append(f'<div class="biz-row"><div class="biz-k">{label}</div><div class="biz-v">{val}</div></div>')
-    if not any(bm.get(k) for k in ("revenue_source", "profit_structure", "competitive_position", "moat")):
+    if not any(bm.get(k) for k in ("revenue_source", "profit_structure", "moat")):
         return '<div class="biz"><div class="biz-v" style="color:var(--faint);">商业模式待 LLM 生成</div></div>'
     return '<div class="biz">' + "".join(rows) + "</div>"
+
+
+def build_competition() -> str:
+    """竞争地位（客观数据）：行业营收排名 + 份额 + 同行对比。"""
+    if not COMPETITION:
+        return ""
+    c = COMPETITION
+    industry = c.get("industry") or "—"
+    year = c.get("report_year")
+    rank = c.get("rank")
+    peers = c.get("peers_count")
+    share = c.get("share_pct")
+    revenue = c.get("revenue_yi")
+
+    rank_txt = f"第 {rank} / {peers}" if (rank is not None and peers) else "—"
+    share_txt = f"{share:.1f}%" if share is not None else "—"
+    rev_txt = f"{revenue:.0f} 亿" if revenue is not None else "—"
+    title = f"竞争地位 · {industry}" + (f"（{year} 年报）" if year else "")
+
+    top = c.get("top_peers", [])
+    max_rev = max((p.get("revenue_yi") or 0) for p in top) if top else 0
+    bars = []
+    for p in top:
+        name = p.get("name", "")
+        rv = p.get("revenue_yi")
+        is_self = bool(p.get("is_self"))
+        w = (rv / max_rev * 100) if (rv and max_rev) else 0
+        cls = " self" if is_self else ""
+        bars.append(
+            f'<div class="peer-row{cls}">'
+            f'<span class="peer-name">{name}</span>'
+            f'<div class="peer-track"><div class="peer-bar" style="width:{w:.1f}%"></div></div>'
+            f'<span class="peer-val">{rv:.0f}</span>'
+            f'</div>'
+        )
+
+    return (
+        '<div class="competition">'
+        f'<div class="comp-title">{title}<span class="comp-note">营收口径：东财业绩报表</span></div>'
+        '<div class="comp-grid">'
+        f'<div class="comp-item"><div class="lbl">营收排名</div><div class="v">{rank_txt}</div></div>'
+        f'<div class="comp-item"><div class="lbl">营收份额</div><div class="v" style="color:var(--accent-2)">{share_txt}</div></div>'
+        f'<div class="comp-item"><div class="lbl">营收</div><div class="v">{rev_txt}</div></div>'
+        "</div>"
+        f'<div class="peer-list">{"".join(bars)}</div>'
+        "</div>"
+    )
 
 
 def build_thesis() -> str:
@@ -469,6 +517,23 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .biz-k { flex: 0 0 78px; font-weight: 700; color: var(--accent); }
 .biz-v { flex: 1; color: #33404f; }
 
+/* 竞争地位（客观数据） */
+.competition { margin-top: 14px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
+.comp-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
+.comp-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.comp-grid { display: flex; gap: 12px; margin: 10px 0; }
+.comp-item { flex: 1; padding: 9px 12px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
+.comp-item .lbl { font-size: 10px; color: var(--muted); }
+.comp-item .v { font-size: 17px; font-weight: 700; color: var(--ink); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.peer-list { display: flex; flex-direction: column; gap: 4px; }
+.peer-row { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--muted); }
+.peer-row.self { color: var(--accent-2); font-weight: 600; }
+.peer-name { flex: 0 0 72px; text-align: right; overflow: hidden; white-space: nowrap; }
+.peer-track { flex: 1; height: 8px; background: #eef1f5; border-radius: 4px; overflow: hidden; }
+.peer-bar { height: 100%; background: #aebccb; border-radius: 4px; }
+.peer-row.self .peer-bar { background: var(--accent-2); }
+.peer-val { flex: 0 0 56px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+
 /* 业务收入构成 */
 .seg-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
 .seg-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-top: 12px; }
@@ -573,6 +638,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
 @@BIZ@@
+@@COMPETITION@@
   </div>
 
   <div class="section">
@@ -638,7 +704,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -653,6 +719,7 @@ def build(code: str = "601088") -> None:
         GRAHAM = real["graham"]
         RATING = real.get("rating")
         FRAUD = real.get("fraud")
+        COMPETITION = real.get("competition")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -670,7 +737,7 @@ def build(code: str = "601088") -> None:
     segment_range = f"{SEGMENT_LABELS[0]}–{SEGMENT_LABELS[-1]}" if SEGMENT_LABELS else ""
     publish_date = "2026-08-25"
 
-    industry = _narr(["industry"], "行业待接入")
+    industry = (COMPETITION or {}).get("industry") or _narr(["industry"], "行业待接入")
     lynch_type = _narr(["lynch_type"], "待分析")
     graham_badge = _narr(["graham_badge"], "待分析")
 
@@ -687,6 +754,7 @@ def build(code: str = "601088") -> None:
         .replace("@@MARKET_ROW@@", build_market_row())
         .replace("@@GRAHAM@@", build_graham())
         .replace("@@BIZ@@", build_business_model())
+        .replace("@@COMPETITION@@", build_competition())
         .replace("@@THESIS@@", build_thesis())
         .replace("@@RISKS@@", build_risks())
         .replace("@@VERIFY@@", build_verify())

@@ -204,6 +204,45 @@ def fetch_rating(code: str) -> pd.DataFrame | None:
     return row.reset_index(drop=True)
 
 
+def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame | None:
+    """竞争地位：东财业绩报表（全市场营收 + 申万行业）→ 标的所在行业全部公司。
+
+    数据源 stock_yjbb_em，一次返回全市场约 1.1 万只 A 股的营收/净利/所处行业。
+    返回标的所在行业的全部公司（多行，营收降序），列：
+      symbol / name / industry / revenue_yi / net_profit_yi / report_date
+    adapter 据此计算行业排名、营收份额、同行对比。
+    """
+    try:
+        df = ak.stock_yjbb_em(date=report_date)
+    except Exception:
+        return None
+    if df is None or df.empty:
+        return None
+
+    code = code.zfill(6)
+    df = df.copy()
+    df["symbol"] = df["股票代码"].astype(str).str.zfill(6)
+    # 仅保留 A 股（沪 6 / 深 0·3 / 京 4·8），剔除新三板 87 等
+    df = df[df["symbol"].str[0].isin(["6", "0", "3", "4", "8"])]
+
+    self_row = df[df["symbol"] == code]
+    if self_row.empty:
+        return None
+    industry = self_row.iloc[0]["所处行业"]
+    peers = df[df["所处行业"] == industry].copy()
+
+    out = pd.DataFrame({
+        "symbol": peers["symbol"],
+        "name": peers["股票简称"],
+        "industry": peers["所处行业"],
+        "revenue_yi": peers["营业总收入-营业总收入"] / 1e8,
+        "net_profit_yi": peers["净利润-净利润"] / 1e8,
+        "report_date": pd.to_datetime(report_date, format="%Y%m%d"),
+    })
+    out = out.sort_values("revenue_yi", ascending=False, na_position="last").reset_index(drop=True)
+    return out
+
+
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     """一次拉取全部表，返回 {表名: DataFrame}。"""
     data = {
@@ -223,4 +262,12 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     rating = fetch_rating(code)
     if rating is not None:
         data["rating"] = rating
+    # 竞争地位（用利润表最新年报期对齐，保证与年度财务数据同口径）
+    ps = data.get("profit_sheet")
+    if ps is not None and not ps.empty:
+        annual_dates = ps[ps["report_date"].dt.month == 12]["report_date"]
+        if not annual_dates.empty:
+            comp = fetch_competition(code, annual_dates.max().strftime("%Y%m%d"))
+            if comp is not None:
+                data["competition"] = comp
     return data

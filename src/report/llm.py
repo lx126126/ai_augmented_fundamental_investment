@@ -42,6 +42,21 @@ def _build_prompt(data: dict) -> str:
         for item in data.get("recent", [])
     ) or "（无历史数据）"
 
+    comp = data.get("competition") or {}
+    comp_text = ""
+    if comp:
+        top5 = ", ".join(
+            f"{p.get('name', '')} {p.get('revenue_yi', 'N/A')}亿" for p in comp.get("top_peers", [])
+        )
+        comp_text = (
+            f"所属申万行业：{comp.get('industry', 'N/A')}（{comp.get('report_year', '')} 年报）\n"
+            f"营收排名：行业第 {comp.get('rank', 'N/A')} / {comp.get('peers_count', 'N/A')} 家\n"
+            f"营收份额：{comp.get('share_pct', 'N/A')}%（行业营收总额 {comp.get('industry_revenue', 'N/A')} 亿元）\n"
+            f"行业营收前5：{top5}"
+        )
+    else:
+        comp_text = "（无行业竞争地位数据）"
+
     return f"""你是资深 A 股基本面分析师，遵循格雷厄姆（安全边际/财务稳健）+ 彼得林奇（六类公司）方法论。
 
 以下是【真实财务数据】，你的任务是基于这些数据生成投研报告的文字部分。
@@ -68,6 +83,9 @@ ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 === 分业务收入构成（最新报告期）===
 {seg_text}
 
+=== 行业竞争地位（客观数据，来自东财业绩报表）===
+{comp_text}
+
 === 估值 ===
 PE：{(data.get('valuation') or {}).get('pe', 'N/A')}
 PB：{(data.get('valuation') or {}).get('pb', 'N/A')}
@@ -77,14 +95,13 @@ PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 请输出以下 JSON（不要输出任何 JSON 之外的内容，所有文字用中文）：
 
 {{
-  "industry": "所属申万一级行业（2-6字）",
+  "industry": "所属申万行业（2-6字，优先用上述客观行业名）",
   "lynch_type": "彼得林奇六类之一（如 周期型/稳健成长/缓慢增长/快速成长/困境反转/资产富余），可加简短后缀",
   "graham_badge": "格雷厄姆质量评级：高/中/低，括号注明关键依据（如 低负债·净现金）",
   "business_model": {{
     "revenue_source": "盈利来源：靠什么赚钱（一句话，基于分业务数据）",
     "profit_structure": "盈利结构：利润主要来自哪块业务、占比如何",
-    "competitive_position": "竞争地位：基于公开常识的行业地位描述（谨慎，不编造具体排名数字）",
-    "moat": "护城河：竞争壁垒（如资源禀赋/品牌/规模/牌照/一体化）"
+    "moat": "护城河：竞争壁垒（如资源禀赋/品牌/规模/牌照/一体化，可结合上述行业排名）"
   }},
   "thesis": ["投资逻辑1（基于数据）", "投资逻辑2", "投资逻辑3"],
   "risks": ["风险1", "风险2", "风险3"]
@@ -92,7 +109,7 @@ PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 
 要求：
 1. thesis 给 3 条，risks 给 3 条，每条 20-40 字，具体、可证伪，不要空话套话。
-2. business_model 四个字段各 30-60 字，紧扣分业务数据。
+2. business_model 三个字段各 30-60 字，紧扣分业务数据与行业排名。
 3. 不要出现"根据数据""综上"等套话，直接给结论。"""
 
 
