@@ -65,6 +65,7 @@ def _build_prompt(data: dict) -> str:
 === 公司基本信息 ===
 公司名：{data.get('name', '')}
 代码：{data.get('code', '')}
+主营业务：{data.get('main_business', 'N/A')}
 
 === 最新年报关键指标（{data.get('latest_year', '')} 年）===
 营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元

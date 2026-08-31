@@ -111,7 +111,7 @@ def _q_label(dt) -> str:
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
     """读 parquet 原始数据（含分业务构成 + 估值，最多 8 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
-    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating", "competition"]
+    tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating", "competition", "profile"]
     out = {}
     for t in tables:
         p = d / f"{t}.parquet"
@@ -174,6 +174,22 @@ def build_template_data(code: str) -> dict:
             for i, (name, revs, margins) in enumerate(seg_result)
         ]
 
+    # 业务版图（客观）：巨潮主营业务一句话 + 各业务条线最新期收入占比
+    business_map = None
+    if segments:
+        latest_revs = [(s[0], s[2][-1]) for s in segments if s[2] and s[2][-1] is not None]
+        total = sum(v for _, v in latest_revs)
+        if total:
+            seg_pcts = [
+                {"name": name, "pct": round(v / total * 100, 1)}
+                for name, v in sorted(latest_revs, key=lambda x: -x[1])
+            ]
+            main_business = None
+            if "profile" in raw and not raw["profile"].empty:
+                mb = raw["profile"].iloc[0].get("main_business")
+                main_business = str(mb).strip() if mb else None
+            business_map = {"main_business": main_business, "segments": seg_pcts}
+
     # 估值面板（百度估值算分位 + 腾讯行情精确当前值，可选）
     valuation = None
     if "valuation" in raw and "share_capital" in annual.columns:
@@ -214,6 +230,8 @@ def build_template_data(code: str) -> dict:
 
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
+    if business_map:
+        narrative_data["main_business"] = business_map["main_business"]
 
     return {
         "years": years,
@@ -229,6 +247,7 @@ def build_template_data(code: str) -> dict:
         "fraud": fraud,
         "company_name": company_name,
         "competition": competition,
+        "business_map": business_map,
         "narrative_data": narrative_data,
     }
 

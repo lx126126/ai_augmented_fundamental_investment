@@ -50,6 +50,7 @@ GRAHAM = None     # 格雷厄姆体检（真实数据时由 adapter 提供）
 RATING = None     # 机构评级分布（真实数据时由 adapter 提供）
 FRAUD = None      # 财务造假检测（真实数据时由 adapter 提供）
 COMPETITION = None  # 竞争地位（行业排名/营收份额，真实数据时由 adapter 提供）
+BUSINESS_MAP = None  # 业务版图（主营业务一句话 + 各业务收入占比，真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
@@ -288,6 +289,39 @@ def _narr(path, default=""):
     return node if node else default
 
 
+def build_business_map() -> str:
+    """业务版图（客观）：主营业务一句话（巨潮）+ 各业务条线收入占比条（分业务构成）。"""
+    if not BUSINESS_MAP:
+        return ""
+    bm = BUSINESS_MAP
+    main = bm.get("main_business")
+    segs = bm.get("segments") or []
+
+    main_txt = f'<div class="bizmap-main">{main}</div>' if main else ""
+    bars = []
+    for s in segs:
+        name = s.get("name", "")
+        pct = s.get("pct")
+        w = pct if (pct is not None) else 0
+        bars.append(
+            f'<div class="bizmap-row">'
+            f'<span class="bizmap-name">{name}</span>'
+            f'<div class="bizmap-track"><div class="bizmap-bar" style="width:{w:.1f}%"></div></div>'
+            f'<span class="bizmap-val">{pct:.1f}%</span>'
+            f'</div>'
+        )
+    seg_block = '<div class="bizmap-list">' + "".join(bars) + "</div>" if bars else ""
+
+    if not main_txt and not seg_block:
+        return ""
+    return (
+        '<div class="bizmap">'
+        f'<div class="bizmap-title">业务版图 <span class="bizmap-note">主营业务 · 巨潮概况 | 占比 · 分业务收入</span></div>'
+        f'{main_txt}{seg_block}'
+        "</div>"
+    )
+
+
 def build_business_model() -> str:
     bm = NARRATIVE.get("business_model", {}) if NARRATIVE else {}
     rows = []
@@ -523,6 +557,18 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .biz-k { flex: 0 0 78px; font-weight: 700; color: var(--accent); }
 .biz-v { flex: 1; color: #33404f; }
 
+/* 业务版图（客观数据） */
+.bizmap { margin-bottom: 12px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
+.bizmap-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
+.bizmap-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.bizmap-main { font-size: 11.5px; color: var(--ink); line-height: 1.6; margin: 8px 0 10px; }
+.bizmap-list { display: flex; flex-direction: column; gap: 5px; }
+.bizmap-row { display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: var(--muted); }
+.bizmap-name { flex: 0 0 88px; text-align: right; overflow: hidden; white-space: nowrap; }
+.bizmap-track { flex: 1; height: 9px; background: #eef1f5; border-radius: 4px; overflow: hidden; }
+.bizmap-bar { height: 100%; background: var(--accent); border-radius: 4px; }
+.bizmap-val { flex: 0 0 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--ink); }
+
 /* 竞争地位（客观数据） */
 .competition { margin-top: 14px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
 .comp-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
@@ -643,6 +689,7 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
+@@BUSINESS_MAP@@
 @@BIZ@@
 @@COMPETITION@@
   </div>
@@ -710,7 +757,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, COMPANY_NAME, COMPANY_CODE, NARRATIVE
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -726,6 +773,7 @@ def build(code: str = "601088") -> None:
         RATING = real.get("rating")
         FRAUD = real.get("fraud")
         COMPETITION = real.get("competition")
+        BUSINESS_MAP = real.get("business_map")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -759,6 +807,7 @@ def build(code: str = "601088") -> None:
         .replace("@@VAL_GRID@@", build_val_grid())
         .replace("@@MARKET_ROW@@", build_market_row())
         .replace("@@GRAHAM@@", build_graham())
+        .replace("@@BUSINESS_MAP@@", build_business_map())
         .replace("@@BIZ@@", build_business_model())
         .replace("@@COMPETITION@@", build_competition())
         .replace("@@THESIS@@", build_thesis())

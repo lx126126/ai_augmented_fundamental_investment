@@ -204,6 +204,26 @@ def fetch_rating(code: str) -> pd.DataFrame | None:
     return row.reset_index(drop=True)
 
 
+def fetch_profile(code: str) -> pd.DataFrame | None:
+    """巨潮公司概况：主营业务 / 经营范围（业务版图的客观文字支撑）。
+
+    数据源 stock_profile_cninfo（巨潮），单行，提取主营业务一句话 + 经营范围。
+    用于「业务版图」块：一句话说清公司靠什么赚钱，配分业务收入占比。
+    """
+    try:
+        raw = ak.stock_profile_cninfo(symbol=code.zfill(6))
+    except Exception:
+        return None
+    if raw is None or raw.empty:
+        return None
+    r = raw.iloc[0]
+    return pd.DataFrame([{
+        "symbol": code.zfill(6),
+        "main_business": r.get("主营业务"),
+        "business_scope": r.get("经营范围"),
+    }])
+
+
 def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame | None:
     """竞争地位：东财业绩报表（全市场营收 + 申万行业）→ 标的所在行业全部公司。
 
@@ -262,6 +282,9 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     rating = fetch_rating(code)
     if rating is not None:
         data["rating"] = rating
+    profile = fetch_profile(code)
+    if profile is not None:
+        data["profile"] = profile
     # 竞争地位（用利润表最新年报期对齐，保证与年度财务数据同口径）
     ps = data.get("profit_sheet")
     if ps is not None and not ps.empty:
