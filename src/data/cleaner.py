@@ -136,6 +136,13 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     merged = merged.merge(bs[bs_cols], on=key, how="left")
     merged = merged.merge(fi[fi_cols], on=key, how="left")
 
+    # 净利率兜底：东财 financial_indicator 的 net_margin_pct 对银行/金融股大量缺值
+    # （如交通银行仅 2005 年有值），缺失行用 归母净利润 / 营业收入 现算填充（与季度表口径一致）
+    if "net_margin_pct" in merged.columns and {"net_profit_parent", "operating_revenue"}.issubset(merged.columns):
+        rev = merged["operating_revenue"].astype(float)
+        calc_nm = merged["net_profit_parent"] / rev.where(rev != 0) * 100
+        merged["net_margin_pct"] = merged["net_margin_pct"].fillna(calc_nm)
+
     # 分红数据：每股派息、股息率（股本改用资产负债表 share_capital，分红接口 total_shares 有 bug）
     if "dividend" in data:
         dv = _annual_dividend(data["dividend"])
