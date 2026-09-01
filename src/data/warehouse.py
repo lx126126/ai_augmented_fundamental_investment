@@ -56,6 +56,20 @@ def list_codes() -> list[str]:
     return sorted(p.name for p in RAW_DIR.iterdir() if p.is_dir() and p.name.isdigit())
 
 
+def _normalize_datetime(df: pd.DataFrame) -> pd.DataFrame:
+    """把 DataFrame 里所有 datetime 列统一 cast 为 datetime64[ns]。
+
+    根因：东财不同接口写出的 parquet，report_date 有的存成 datetime64[us]、
+    有的 datetime64[ns]（如 competition 表：格力是 [us]，茅台/神华/交行是 [ns]），
+    跨股票 pd.concat 时精度冲突报 ValueError（array size 11 vs 19）。
+    """
+    df = df.copy()
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].astype("datetime64[ns]")
+    return df
+
+
 def load_raw_layer(con: duckdb.DuckDBPyConnection, codes: list[str] | None = None) -> list[str]:
     """挂载 raw 层：把每只股票的 parquet 注册为 raw.{table} 视图（跨股票 UNION）。
 
@@ -74,6 +88,7 @@ def load_raw_layer(con: duckdb.DuckDBPyConnection, codes: list[str] | None = Non
             if not p.exists():
                 continue
             df = pd.read_parquet(p)
+            df = _normalize_datetime(df)
             if "symbol" not in df.columns:
                 df = df.copy()
                 df.insert(0, "symbol", code)
