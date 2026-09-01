@@ -7,119 +7,119 @@
       "label": "货币资金",
       "api_yi": 1410.13,
       "pdf_yi": 967.72,
-      "diff_pct": 45.72
+      "diff_pct": 45.716736246021576
     },
     {
       "field": "accounts_receivable",
       "label": "应收账款",
       "api_yi": 165.66,
       "pdf_yi": 132.25,
-      "diff_pct": 25.26
+      "diff_pct": 25.262759924385637
     },
     {
       "field": "inventory",
       "label": "存货",
       "api_yi": 152.8,
       "pdf_yi": 118.5,
-      "diff_pct": 28.95
+      "diff_pct": 28.945147679324894
     },
     {
       "field": "current_assets",
       "label": "流动资产合计",
       "api_yi": 2087.41,
       "pdf_yi": 1469.69,
-      "diff_pct": 42.03
+      "diff_pct": 42.030632310215076
     },
     {
       "field": "fixed_assets",
       "label": "固定资产",
       "api_yi": 3586.44,
       "pdf_yi": 2721.72,
-      "diff_pct": 31.77
+      "diff_pct": 31.771085930955422
     },
     {
       "field": "total_assets",
       "label": "总资产",
       "api_yi": 9038.3,
       "pdf_yi": 6277.61,
-      "diff_pct": 43.98
+      "diff_pct": 43.976768228673016
     },
     {
       "field": "short_term_loan",
       "label": "短期借款",
       "api_yi": 131.18,
       "pdf_yi": 4.09,
-      "diff_pct": 3107.33
+      "diff_pct": 3107.3349633251833
     },
     {
       "field": "accounts_payable",
       "label": "应付账款",
       "api_yi": 572.17,
       "pdf_yi": 411.76,
-      "diff_pct": 38.96
+      "diff_pct": 38.957159510394405
     },
     {
       "field": "noncurrent_liab_1y",
       "label": "一年内到期非流动负债",
       "api_yi": 301.38,
       "pdf_yi": 93.64,
-      "diff_pct": 221.85
+      "diff_pct": 221.84963690730459
     },
     {
       "field": "current_liabilities",
       "label": "流动负债合计",
       "api_yi": 1710.68,
       "pdf_yi": 892.62,
-      "diff_pct": 91.65
+      "diff_pct": 91.64706145952366
     },
     {
       "field": "long_term_loan",
       "label": "长期借款",
       "api_yi": 729.25,
       "pdf_yi": 282.68,
-      "diff_pct": 157.98
+      "diff_pct": 157.97721805575208
     },
     {
       "field": "lease_liabilities",
       "label": "租赁负债",
       "api_yi": 11.15,
       "pdf_yi": 9.71,
-      "diff_pct": 14.83
+      "diff_pct": 14.830072090628219
     },
     {
       "field": "long_payable",
       "label": "长期应付款",
       "api_yi": 299.46,
       "pdf_yi": 142.5,
-      "diff_pct": 110.15
+      "diff_pct": 110.14736842105263
     },
     {
       "field": "total_liabilities",
       "label": "总负债",
       "api_yi": 3002.03,
       "pdf_yi": 1463.1,
-      "diff_pct": 105.18
+      "diff_pct": 105.18283097532637
     },
     {
       "field": "retained_profit",
       "label": "未分配利润",
       "api_yi": 2203.4,
       "pdf_yi": 2699.81,
-      "diff_pct": 18.39
+      "diff_pct": 18.386849444960944
     },
     {
       "field": "total_equity",
       "label": "归母净资产",
       "api_yi": 5120.16,
       "pdf_yi": 4091.07,
-      "diff_pct": 25.15
+      "diff_pct": 25.15454392127243
     },
     {
       "field": "total_equity_all",
       "label": "股东权益合计",
       "api_yi": 6036.27,
       "pdf_yi": 4814.51,
-      "diff_pct": 25.38
+      "diff_pct": 25.376621919987702
     }
   ]
 }

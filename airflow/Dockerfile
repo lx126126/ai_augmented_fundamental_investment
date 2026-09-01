@@ -6,7 +6,9 @@ USER root
 COPY requirements.txt /requirements.txt
 USER airflow
 
-RUN pip install --no-cache-dir -r /requirements.txt
+# 用国内 pip 镜像源（清华）+ 加长超时/重试，避免国内直连 pypi.org 卡死
+RUN pip install --no-cache-dir --default-timeout=100 --retries 5 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple -r /requirements.txt
 
 # 可选：导出 PNG 长图 / PDF 需要 playwright（镜像会明显变大，按需开启）
 # USER root

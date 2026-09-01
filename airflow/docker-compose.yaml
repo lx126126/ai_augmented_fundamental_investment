@@ -1,7 +1,6 @@
 # ValueLine 一页研报 · Airflow 本地部署（LocalExecutor + Postgres）
 # 用法：cd airflow && docker compose up -d --build
 # 启动后访问 http://localhost:8080 （admin / admin）
-version: '3.8'
 
 x-airflow-common: &airflow-common
   build:
