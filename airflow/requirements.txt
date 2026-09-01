@@ -6,3 +6,5 @@ pyarrow
 pymupdf
 requests
 duckdb
+fastapi
+uvicorn
