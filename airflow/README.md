@@ -1,6 +1,6 @@
 # ValueLine 一页研报 · Airflow 生产级 ETL 编排
 
-把「拉取 → 交叉校验 → 造假检测 → 渲染 → 导出」的脚本流水线，编排为可调度、可告警、血缘可追踪的 Airflow DAG。
+把「拉取 → 交叉校验 → 造假检测 → 渲染 → 数仓落库 → 导出」的脚本流水线，编排为可调度、可告警、血缘可追踪的 Airflow DAG。
 
 ## 目录结构
 
@@ -8,9 +8,9 @@
 airflow/
 ├── docker-compose.yaml       # LocalExecutor + Postgres 本地部署
 ├── Dockerfile                # 基于 apache/airflow + 项目依赖
-├── requirements.txt          # akshare / pandas / pyarrow / pymupdf / requests
+├── requirements.txt          # akshare / pandas / pyarrow / pymupdf / requests / duckdb
 ├── dags/
-│   └── valueline_pipeline.py # DAG：fetch → validate → build → export
+│   └── valueline_pipeline.py # DAG：fetch → validate → build → warehouse → export
 ├── plugins/                  # （空，预留自定义 operator / hook）
 └── logs/                     # 运行日志（gitignore）
 ```
@@ -48,7 +48,14 @@ docker compose up -d --build
 | fetch | `data/raw/{code}/*.parquet` | 原始财报（AKShare/东财/巨潮/腾讯行情） |
 | validate | `data/validation/{code}_{year}_reconcile.json` | PDF 金标准交叉校验覆盖记录 |
 | build | `templates/valueline.html` + `reports/{期}/{code}.html` | 一页研报 |
+| warehouse | `data/warehouse/fqf.duckdb` | 数仓 schema 化（raw / mart 两层），供查询层 SELECT |
 | export | `reports/{期}/{code}.png` / `.pdf` | 高清长图 / A4 PDF（可选） |
+
+## 数仓落库（warehouse 阶段）
+
+- **分层**：`raw`（原始 parquet 挂载，零加工）+ `mart`（报告指标宽表，亿元口径）。
+- **mart 表**：`annual_financials`（年度，含净利率兜底/ROTC/营运资本等派生指标）、`quarter_financials`（近 8 季单季）、`segments`（分业务收入构成长表）。
+- **引擎**：DuckDB 单文件零运维，跨股票 UNION，SQL 直接跨标的对比；FastAPI 查询层直接 `SELECT`，不必每次重算宽表。
 
 ## 数据质量 gate（validate 阶段）
 

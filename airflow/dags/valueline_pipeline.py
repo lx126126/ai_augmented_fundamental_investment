@@ -11,6 +11,9 @@
     build      清洗宽表 + 组装模板结构 + LLM 叙事（只翻译数据不编数）→ 渲染 HTML
                → templates/valueline.html + reports/{报告期}/{code}.html
       ↓
+    warehouse  数仓 schema 化落库：raw parquet → DuckDB（raw / mart 两层）
+               → data/warehouse/fqf.duckdb（供 FastAPI 查询层直接 SELECT）
+      ↓
     export     导出 PNG 长图 / A4 PDF（可选，需 playwright + chromium）
 
 触发方式：
@@ -137,7 +140,25 @@ def build_report(code: str, **context) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# Task 4/4：导出 PNG 长图 / PDF（可选，需 playwright）
+# Task 4/5：数仓 schema 化落库（raw parquet → DuckDB）
+# --------------------------------------------------------------------------- #
+def refresh_warehouse(code: str, **context) -> dict:
+    """刷新 DuckDB 数仓：raw 挂载 + mart 宽表落库。
+
+    全量重建（跨所有已拉取股票），保证数据一致；DuckDB 单文件零运维。
+    供 FastAPI 查询层直接 SELECT，避免每次重算宽表。
+    """
+    os.chdir(PROJECT_ROOT)
+    from src.data.warehouse import build_warehouse
+
+    summary = build_warehouse()
+    mart_counts = summary.get("mart", {})
+    print(f"[warehouse] 数仓已刷新，mart 表行数 = {mart_counts}")
+    return {"code": code, "mart": mart_counts}
+
+
+# --------------------------------------------------------------------------- #
+# Task 5/5：导出 PNG 长图 / PDF（可选，需 playwright）
 # --------------------------------------------------------------------------- #
 def export_report(code: str, **context) -> dict:
     """导出高清 PNG 长图 / A4 PDF（容器未装 playwright 时优雅降级跳过）。"""
@@ -199,7 +220,7 @@ default_args = {
 with DAG(
     dag_id="valueline_pipeline",
     default_args=default_args,
-    description="ValueLine 一页研报 ETL：拉取 → PDF金标准交叉校验+造假检测 → 渲染 → 导出",
+    description="ValueLine 一页研报 ETL：拉取 → PDF金标准交叉校验+造假检测 → 渲染 → 数仓落库 → 导出",
     schedule="0 2 * * *",           # 每日凌晨 2 点；财报季可改为按需手动触发
     start_date=datetime(2026, 8, 1),
     catchup=False,
@@ -228,6 +249,12 @@ with DAG(
         op_kwargs={"code": "{{ params.code }}"},
     )
 
+    warehouse = PythonOperator(
+        task_id="warehouse",
+        python_callable=refresh_warehouse,
+        op_kwargs={"code": "{{ params.code }}"},
+    )
+
     export = PythonOperator(
         task_id="export",
         python_callable=export_report,
@@ -235,5 +262,5 @@ with DAG(
         trigger_rule="all_success",   # build 成功后才导出
     )
 
-    # 血缘：fetch → validate（质量 gate 不过则阻断）→ build → export
-    start >> fetch >> validate >> build >> export
+    # 血缘：fetch → validate（质量 gate 不过则阻断）→ build → warehouse → export
+    start >> fetch >> validate >> build >> warehouse >> export

@@ -5,3 +5,4 @@ pandas
 pyarrow
 pymupdf
 requests
+duckdb
