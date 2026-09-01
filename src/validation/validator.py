@@ -9,10 +9,30 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 from .cninfo import download_annual_report
-from .pdf_parser import PDF_FIELD_ALIASES, parse_financials_by_year, parse_key_financials
+from .pdf_parser import (
+    PDF_FIELD_ALIASES,
+    parse_balance_sheet,
+    parse_financials_by_year,
+    parse_key_financials,
+)
 
 TOLERANCE_PCT = 0.1  # 容差 0.1%
+RECONCILE_TOLERANCE_PCT = 1.0  # 覆盖容差 1%（放宽，避免四舍五入误判）
+
+# 合并资产负债表字段 → 中文标签（用于覆盖记录展示）
+_BS_LABEL = {
+    "monetary_funds": "货币资金", "accounts_receivable": "应收账款", "inventory": "存货",
+    "current_assets": "流动资产合计", "fixed_assets": "固定资产", "total_assets": "总资产",
+    "short_term_loan": "短期借款", "accounts_payable": "应付账款",
+    "noncurrent_liab_1y": "一年内到期非流动负债", "current_liabilities": "流动负债合计",
+    "long_term_loan": "长期借款", "bond_payable": "应付债券", "lease_liabilities": "租赁负债",
+    "long_payable": "长期应付款", "total_liabilities": "总负债",
+    "retained_profit": "未分配利润", "total_equity": "归母净资产",
+    "minority_equity": "少数股东权益", "total_equity_all": "股东权益合计",
+}
 
 _FIELD_LABEL = {
     "operating_revenue": "营业收入",
@@ -185,3 +205,80 @@ def format_history_report(result: dict) -> str:
     else:
         lines.append("✓ 全部年份、全部字段一致（容差 <0.1%）。")
     return "\n".join(lines)
+
+
+def reconcile_balance_sheet(code: str, year: int,
+                            data_dir: str | Path = "data/raw",
+                            pdf_dir: str | Path = "data/validation") -> list[dict]:
+    """用官方年报 PDF 合并资产负债表（金标准）覆盖接口错误字段，写回 parquet。
+
+    背景：东财/新浪等第三方接口同源（同一底层数据供应商），在「同一控制下企业合并
+    追溯重述」等特殊情形下会抓取错误——如神华 2025 年总资产被接口报成 9038 亿（官方
+    6278 亿）、短期借款 131 亿（官方 4 亿）。官方年报 PDF 的合并资产负债表是唯一权威
+    源，本函数逐字段对比，差异超过容差（1%）即用 PDF 值覆盖。
+
+    覆盖后 cleaner 会重新跑（_to_yi + 派生指标重算），故无需重复派生逻辑。
+
+    覆盖记录持久化到 data/validation/{code}_{year}_reconcile.json，供报告「数据校验」区
+    展示（parquet 覆盖后再次对比会一致，故记录须落盘保存）。
+
+    返回覆盖记录列表 [{field, label, api_yi, pdf_yi, diff_pct}]。
+    """
+    import json
+
+    pdf_path = Path(pdf_dir) / f"{code}_{year}年报.pdf"
+    if not pdf_path.exists():
+        pdf_path = download_annual_report(code, year, Path(pdf_dir))
+    golden = parse_balance_sheet(pdf_path)  # {标准字段: 元}
+    if not golden:
+        return []
+
+    bs_path = Path(data_dir) / code / "balance_sheet.parquet"
+    if not bs_path.exists():
+        return []
+    bs = pd.read_parquet(bs_path)
+
+    d = pd.to_datetime(bs["report_date"])
+    mask = (d.dt.year == year) & (d.dt.month == 12)  # 明确筛年报行，避免误取季度行
+    if not mask.any():
+        return []
+    idx = bs[mask].index[0]
+
+    corrections: list[dict] = []
+    for field, pdf_val in golden.items():
+        if field not in bs.columns or pdf_val is None:
+            continue
+        api_val = bs.at[idx, field]
+        if pd.isna(api_val):
+            continue
+        if pdf_val == 0 and api_val == 0:
+            continue
+        diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
+        if diff > RECONCILE_TOLERANCE_PCT:
+            bs.at[idx, field] = pdf_val
+            corrections.append({
+                "field": field, "label": _BS_LABEL.get(field, field),
+                "api_yi": api_val / 1e8, "pdf_yi": pdf_val / 1e8, "diff_pct": diff,
+            })
+
+    if corrections:
+        bs.to_parquet(bs_path, index=False)
+        log_path = Path(pdf_dir) / f"{code}_{year}_reconcile.json"
+        log_path.write_text(json.dumps({"code": code, "year": year, "items": corrections},
+                                       ensure_ascii=False, indent=2), encoding="utf-8")
+    return corrections
+
+
+def load_reconcile_log(code: str, year: int,
+                       pdf_dir: str | Path = "data/validation") -> list[dict]:
+    """读取历史数据交叉校验覆盖记录（parquet 已覆盖后，报告据此展示修正项）。"""
+    import json
+
+    log_path = Path(pdf_dir) / f"{code}_{year}_reconcile.json"
+    if not log_path.exists():
+        return []
+    try:
+        data = json.loads(log_path.read_text(encoding="utf-8"))
+        return data.get("items", [])
+    except (json.JSONDecodeError, OSError):
+        return []

@@ -67,10 +67,17 @@ def _match_field(name: str) -> str | None:
 
 
 def _detect_unit(page_text: str) -> str:
-    """从页面文本识别金额单位，默认「元」。"""
+    """从页面文本识别金额单位，默认「元」。
+
+    兼容「单位：百万元」「金额单位：人民币百万元」等格式。
+    """
     for unit in ("百万元", "万元", "亿元", "元"):
         if f"单位：{unit}" in page_text or f"单位: {unit}" in page_text:
             return unit
+    # 宽松：金额单位：人民币百万元 / 单位：人民币百万元
+    m = re.search(r"单位[:：]\s*[^，。\n]*?(百万元|万元|亿元|元)", page_text)
+    if m:
+        return m.group(1)
     return "元"
 
 
@@ -211,3 +218,139 @@ def _parse_by_text(pdf_path: str | Path) -> dict:
             except ValueError:
                 continue
     return result
+
+
+# 合并资产负债表字段 → 标准字段名（与 cleaner 输出列名对齐）
+BALANCE_SHEET_ITEMS: dict[str, str] = {
+    "货币资金": "monetary_funds",
+    "应收账款": "accounts_receivable",
+    "存货": "inventory",
+    "流动资产合计": "current_assets",
+    "固定资产": "fixed_assets",
+    "资产总计": "total_assets",
+    "短期借款": "short_term_loan",
+    "应付账款": "accounts_payable",
+    "一年内到期的非流动负债": "noncurrent_liab_1y",
+    "流动负债合计": "current_liabilities",
+    "长期借款": "long_term_loan",
+    "应付债券": "bond_payable",
+    "租赁负债": "lease_liabilities",
+    "长期应付款": "long_payable",
+    "负债合计": "total_liabilities",
+    "未分配利润": "retained_profit",
+    "归属于母公司股东权益合计": "total_equity",
+    "少数股东权益": "minority_equity",
+    "股东权益合计": "total_equity_all",
+    "归属于母公司所有者权益合计": "total_equity",
+    "归属于母公司股东的净资产": "total_equity",
+    # 无「合计」后缀的变体（茅台等）
+    "归属于母公司所有者权益": "total_equity",
+    "归属于母公司股东权益": "total_equity",
+    "所有者权益合计": "total_equity_all",
+}
+
+
+def _match_bs_field(name: str) -> str | None:
+    """合并资产负债表字段名 → 标准字段（宽松匹配：去括号后缀、去空格）。"""
+    name = _clean(name)
+    name = re.sub(r"[（(][^）)]*[）)]", "", name)
+    if name in BALANCE_SHEET_ITEMS:
+        return BALANCE_SHEET_ITEMS[name]
+    compact = name.replace(" ", "")
+    for k, v in BALANCE_SHEET_ITEMS.items():
+        if k.replace(" ", "") == compact:
+            return v
+    return None
+
+
+def _parse_balance_sheet_lines(pages_text: list[str]) -> dict[str, float]:
+    """文本行扫描解析合并资产负债表（有边框/无边框通用）。
+
+    结构规律：「字段名 → 附注编号 → 本期值 → 上期值」。附注编号有两种写法：
+    汉字前缀（神华「五、1」）或纯数字（茅台「28」）。跳过附注编号后，
+    取字段名后的第一个有效数值（本期/最新年）。
+
+    字段名用 _match_bs_field 宽松匹配（去括号后缀、去空格）。
+    """
+    full = "\n".join(pages_text)
+    # 合并括号内换行断开的字段名（如「所有者权益（或股东权\n益）合计」）
+    full = re.sub(r"（[^（）\n]*\n[^（）]*）", lambda m: m.group(0).replace("\n", ""), full)
+    unit = _detect_unit(full)
+    mult = _UNIT_MULTIPLIER.get(unit, 1)
+
+    lines = [ln.strip() for ln in full.split("\n")]
+    result: dict[str, float] = {}
+    for i, ln in enumerate(lines):
+        field = _match_bs_field(ln)
+        if field is None:
+            continue
+        nums: list[float] = []
+        note_skipped = False  # 字段名后第一个小整数视为附注编号，只跳一次
+        for j in range(i + 1, min(i + 12, len(lines))):
+            cell = lines[j].replace(",", "").replace("\u200a", "").strip()
+            if re.fullmatch(r"-?\d+(\.\d+)?", cell):
+                v = float(cell)
+                # 纯数字附注编号（1-99 整数）：字段名后第一个小整数，跳过
+                if not note_skipped and v == int(v) and 1 <= v <= 99:
+                    note_skipped = True
+                    continue
+                nums.append(v)
+                if len(nums) == 2:
+                    break
+            elif cell in ("", "-", "-*", "—"):
+                continue
+            elif re.fullmatch(r"[五四三二一0-9]+、\d*", cell) or re.fullmatch(r"五、\d+", cell):
+                continue  # 汉字附注编号
+            else:
+                # 遇到下一个字段名则停止（该字段本期值未披露）
+                if _match_bs_field(cell):
+                    break
+                # 纯中文行（未在映射表中的会计科目名，如「长期应付职工薪酬」「预计负债」）
+                # 也是字段名，说明当前字段未披露，停止扫描避免误取下一个字段的值
+                if re.fullmatch(r"[\u4e00-\u9fa5（）：:、，,]+", cell):
+                    break
+        if nums:
+            result[field] = nums[0] * mult
+    return result
+
+
+def parse_balance_sheet(pdf_path: str | Path) -> dict[str, float]:
+    """解析「合并资产负债表」主表，返回 {标准字段: 最新年值(元)}。
+
+    用于多源交叉校验的金标准：第三方接口（东财/新浪同源）在「同一控制下企业合并
+    追溯重述」等特殊情形下可能抓取错误，官方年报 PDF 的合并资产负债表是唯一权威源。
+
+    解析策略：文本行扫描（「字段名 → 附注 → 本期值 → 上期值」），对合并资产负债表
+    的有边框/无边框排版均适用；不依赖 find_tables（跨页分段时表头丢失、母公司表
+    混入会导致错位）。
+    """
+    doc = fitz.open(str(pdf_path))
+
+    # 定位主表页范围：从「合并资产负债表」标题页开始，到合并表总计行结束。
+    # 结束判定两条路径：
+    #  1. 「负债和…权益总计」（含跨行变体「负债和所有者权益（或…）总计」）出现 → 该页即结束；
+    #  2. 「母公司资产负债表」标题出现 → 合并表已结束，但部分公司（如茅台）合并表
+    #     总计行（少数股东权益/所有者权益合计）与该标题同页，故只保留标题前文本。
+    in_table = False
+    pages_text: list[str] = []
+    for page in doc:
+        txt = page.get_text()
+        if not in_table and "合并资产负债表" in txt and "货币资金" in txt and "流动资产" in txt:
+            in_table = True
+        if not in_table:
+            continue
+        # 母公司资产负债表 = 合并表硬结束：切分标题前的合并表总计行，丢弃母公司表
+        if "母公司资产负债表" in txt:
+            head = txt.split("母公司资产负债表")[0]
+            if head.strip():
+                pages_text.append(head)
+            break
+        pages_text.append(txt)
+        if ("负债和股东权益总计" in txt or "负债和所有者权益总计" in txt
+                or "负债和所有者权益（或" in txt or "负债和股东权益（或" in txt):
+            break
+    doc.close()
+
+    if not pages_text:
+        return {}
+    return _parse_balance_sheet_lines(pages_text)

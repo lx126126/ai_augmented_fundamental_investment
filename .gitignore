@@ -12,6 +12,7 @@ test*.py
 # 本地数据缓存（不提交原始行情/财务数据）
 data/raw/
 data/cache/
+data/validation/
 *.parquet
 *.sqlite
 *.db

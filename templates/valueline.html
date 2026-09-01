@@ -200,6 +200,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 /* 数据校验 */
 .verify { font-size: 11px; color: var(--faint); line-height: 1.8; }
 .verify b { color: var(--muted); font-weight: 600; }
+.reconcile { margin-top: 8px; padding: 8px 10px; background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 6px; color: var(--warn); line-height: 1.7; }
+.reconcile b { color: #8a6d0b; }
 .footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); line-height: 1.7; }
 @media print { body { background: #fff; padding: 0; } .page { box-shadow: none; margin: 0; width: 100%; } }
 </style>
@@ -220,7 +222,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
         <span class="badge lynch">林奇分类：稳健成长型</span>
-        <span class="badge graham">格雷厄姆质量：高（低负债·高现金流）</span>
+        <span class="badge graham">格雷厄姆质量：高（低负债·高ROE）</span>
       </div>
     </div>
   </div>
@@ -228,7 +230,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
 <div class="bizmap"><div class="bizmap-title">业务版图 <span class="bizmap-note">主营业务 · 巨潮概况 | 占比 · 分业务收入</span></div><div class="bizmap-main">空调、干衣机等家用电器。</div><div class="bizmap-list"><div class="bizmap-row"><span class="bizmap-name">消费电器</span><div class="bizmap-track"><div class="bizmap-bar" style="width:78.1%"></div></div><span class="bizmap-val">78.1%</span></div><div class="bizmap-row"><span class="bizmap-name">其他</span><div class="bizmap-track"><div class="bizmap-bar" style="width:11.3%"></div></div><span class="bizmap-val">11.3%</span></div><div class="bizmap-row"><span class="bizmap-name">工业制品及绿色能源</span><div class="bizmap-track"><div class="bizmap-bar" style="width:10.2%"></div></div><span class="bizmap-val">10.2%</span></div><div class="bizmap-row"><span class="bizmap-name">智能装备</span><div class="bizmap-track"><div class="bizmap-bar" style="width:0.4%"></div></div><span class="bizmap-val">0.4%</span></div></div></div>
-<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠消费电器（空调等）销售，收入占比78.1%，毛利率35.3%。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自消费电器，毛利率35.3%，贡献绝大部分利润；其他业务毛利率低，占比小。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">品牌与规模优势，行业营收排名第3，份额15.7%，具有成本与渠道壁垒。</div></div></div>
+<div class="biz"><div class="biz-row"><div class="biz-k">盈利来源</div><div class="biz-v">主要依靠消费电器（空调等）销售，占比78.1%，毛利率35.3%。</div></div><div class="biz-row"><div class="biz-k">盈利结构</div><div class="biz-v">利润主要来自消费电器，毛利率高，其他业务毛利率低，贡献有限。</div></div><div class="biz-row"><div class="biz-k">护城河</div><div class="biz-v">行业第三，规模优势明显，品牌知名度高，渠道网络完善。</div></div></div>
 <div class="competition"><div class="comp-title">竞争地位 · 白色家电（2025 年报）<span class="comp-note">营收口径：东财业绩报表</span></div><div class="comp-grid"><div class="comp-item"><div class="lbl">营收排名</div><div class="v">第 3 / 11</div></div><div class="comp-item"><div class="lbl">营收份额</div><div class="v" style="color:var(--accent-2)">15.7%</div></div><div class="comp-item"><div class="lbl">营收</div><div class="v">1711 亿</div></div></div><div class="peer-list"><div class="peer-row"><span class="peer-name">美的集团</span><div class="peer-track"><div class="peer-bar" style="width:100.0%"></div></div><span class="peer-val">4585</span></div><div class="peer-row"><span class="peer-name">海尔智家</span><div class="peer-track"><div class="peer-bar" style="width:65.9%"></div></div><span class="peer-val">3023</span></div><div class="peer-row self"><span class="peer-name">格力电器</span><div class="peer-track"><div class="peer-bar" style="width:37.3%"></div></div><span class="peer-val">1711</span></div><div class="peer-row"><span class="peer-name">海信家电</span><div class="peer-track"><div class="peer-bar" style="width:19.2%"></div></div><span class="peer-val">879</span></div><div class="peer-row"><span class="peer-name">长虹美菱</span><div class="peer-track"><div class="peer-bar" style="width:6.6%"></div></div><span class="peer-val">304</span></div></div></div>
   </div>
 
@@ -260,12 +262,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>高股息率7.3%，分红比例57.9%，现金流充沛，防御属性强。</li><li>ROE近20%，净利率16.9%，盈利能力稳定，估值PE仅8倍，安全边际高。</li><li>空调主业毛利率35.3%，行业地位稳固，有望受益于更新需求与渠道改革。</li></ul>
+<ul class="thesis"><li>股息率7.3%，分红比例57.9%，高分红提供安全边际。</li><li>ROE 19.87%，净利率16.9%，盈利能力稳定。</li><li>PE 8.0倍，PB 1.53倍，估值处于历史低位。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>营收连续两年下滑，2025年同比降10%，需关注需求疲软风险。</li><li>资产负债率61.7%，有息负债规模需关注，财务费用可能侵蚀利润。</li><li>多元化业务（工业制品、智能装备）毛利率低，发展不及预期或拖累整体盈利。</li></ul>
+<ul class="risk"><li>营收连续下滑，2025年同比降10%，需求疲软。</li><li>资产负债率61.7%，财务杠杆较高。</li><li>多元化业务毛利率低，转型效果待观察。</li></ul>
   </div>
 
   <div class="section">
@@ -276,7 +278,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">数据校验记录</div>
-<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>5/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>— 总负债</b>：缺失</div><div><b>— 总股本</b>：缺失</div><div><b>校验日期：</b>2026-08-31</div><div><b>校验人：</b>李潇</div></div>
+<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>5/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>— 总负债</b>：缺失</div><div><b>— 总股本</b>：缺失</div><div><b>校验日期：</b>2026-09-01</div><div><b>校验人：</b>李潇</div></div>
   </div>
 
   <div class="footer">

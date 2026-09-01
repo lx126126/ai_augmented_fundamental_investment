@@ -56,6 +56,7 @@ ANNUAL_RATES = None      # 年增长率（销售/现金流/盈利/股息/账面�
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
+RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
 
 
 def _fmt(v) -> str:
@@ -531,11 +532,27 @@ def build_verify() -> str:
             mark = marks.get(it["status"], "—")
             note = "一致" if it["status"] == "一致" else it["status"]
             rows.append(f'<div><b>{mark} {it["label"]}</b>：{note}</div>')
+
+        # 数据交叉校验覆盖记录（接口原始值 vs 官方 PDF 金标准）
+        reconcile_rows = ""
+        if RECONCILE_LOG:
+            items = "".join(
+                f'<div>· {c["label"]}：接口 {c["api_yi"]:,.2f}亿 → 官方 {c["pdf_yi"]:,.2f}亿（差 {c["diff_pct"]:.0f}%）</div>'
+                for c in RECONCILE_LOG
+            )
+            reconcile_rows = (
+                '<div class="reconcile">'
+                f'<div><b>⚠ 接口数据修正：</b>第三方接口（东财/新浪同源）在「同一控制下企业合并追溯重述」'
+                f'情形下抓取错误，已用官方年报 PDF 金标准覆盖 {len(RECONCILE_LOG)} 项：</div>'
+                + items + "</div>"
+            )
+
         return (
             '<div class="verify">'
             '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div>'
             f'<div><b>校验结果：</b>{result["passed"]}/{result["total"]} 项与官方年报一致（容差 &lt;0.1%）</div>'
             + "".join(rows)
+            + reconcile_rows
             + f'<div><b>校验日期：</b>{today}</div>'
             '<div><b>校验人：</b>李潇</div>'
             "</div>"
@@ -745,6 +762,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 /* 数据校验 */
 .verify { font-size: 11px; color: var(--faint); line-height: 1.8; }
 .verify b { color: var(--muted); font-weight: 600; }
+.reconcile { margin-top: 8px; padding: 8px 10px; background: var(--amber-bg); border: 1px solid var(--amber-line); border-radius: 6px; color: var(--warn); line-height: 1.7; }
+.reconcile b { color: #8a6d0b; }
 .footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); line-height: 1.7; }
 @media print { body { background: #fff; padding: 0; } .page { box-shadow: none; margin: 0; width: 100%; } }
 """
@@ -843,6 +862,38 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def _reconcile(code: str) -> list[dict]:
+    """生成报告前，用官方年报 PDF 金标准交叉校验并覆盖接口错误字段。
+
+    背景：东财/新浪等第三方接口同源，在「同一控制下企业合并追溯重述」等特殊情形下
+    会抓取错误（如神华 2025 年总资产 9038 亿 vs 官方 6278 亿）。此步骤在渲染前用官方
+    年报 PDF 的合并资产负债表覆盖错误字段，保证报告数据可信。失败则降级跳过。
+    """
+    try:
+        from src.validation import reconcile_balance_sheet, load_reconcile_log
+        import pandas as pd
+        bs_path = Path("data/raw") / code / "balance_sheet.parquet"
+        if not bs_path.exists():
+            return []
+        bs = pd.read_parquet(bs_path)
+        d = pd.to_datetime(bs["report_date"])
+        annual_dates = d[d.dt.month == 12]
+        if annual_dates.empty:
+            return []
+        year = int(annual_dates.dt.year.max())  # 最新年报年份（12-31），非季度
+        corr = reconcile_balance_sheet(code, year)
+        if corr:
+            print(f"[reconcile] {code} {year} 已用官方PDF金标准覆盖 {len(corr)} 个接口错误字段")
+        # 读历史覆盖记录（parquet 已覆盖后本次可能返回空，但记录已落盘）
+        log = load_reconcile_log(code, year)
+        if log:
+            print(f"[reconcile] {code} {year} 历史修正记录 {len(log)} 项（官方PDF金标准）")
+        return log
+    except Exception as e:
+        print(f"[reconcile] 跳过（{type(e).__name__}: {e}）")
+        return []
+
+
 def _load_real_data(code: str) -> dict | None:
     """尝试加载真实数据，失败返回 None。"""
     if not _HAS_DATA:
@@ -855,7 +906,9 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088") -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG
+    # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）
+    RECONCILE_LOG = _reconcile(code) if _HAS_DATA else []
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
