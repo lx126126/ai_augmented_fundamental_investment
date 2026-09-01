@@ -12,10 +12,12 @@ test*.py
 # 本地数据缓存（不提交原始行情/财务数据）
 data/raw/
 data/cache/
-data/validation/
 *.parquet
 *.sqlite
 *.db
+
+# 年报 PDF（巨潮原始文件，可重新下载）；但保留数据校验覆盖记录 json
+data/validation/*.pdf
 
 # 报告输出（可选：如需归档历史报告可放开 reports/）
 # reports/
