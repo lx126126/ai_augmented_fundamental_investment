@@ -157,11 +157,12 @@ def build_segments() -> str:
         f'<div class="seg-block-title">收入（亿元）</div>{rev_table}'
         "</div>"
         '<div class="seg-row">'
-        f'<div class="seg-block"><div class="seg-block-title">毛利率（%）</div>{margin_table}</div>'
+        f'<div class="seg-block"><div class="seg-block-title">利润率（%）</div>{margin_table}</div>'
         f'<div class="seg-block"><div class="seg-block-title">收入占比（%）</div>{share_table}</div>'
         "</div>"
         f'<div class="seg-bar">{bar}</div>'
         f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'
+        f'<div class="seg-note" style="font-size:10px;color:var(--faint);margin-top:5px;">利润率口径随行业而异：金融业为利差率/利润率，制造业为毛利率（数据源披露口径）。</div>'
     )
 
 

@@ -33,7 +33,7 @@ def _load_config() -> tuple[str, str, str] | None:
 def _build_prompt(data: dict) -> str:
     """把财务数据摘要转成 prompt（数据先行，约束 LLM 不编数）。"""
     seg_text = "\n".join(
-        f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 毛利率 {s.get('margin', 'N/A')}%"
+        f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
         for s in data.get("segments", [])
     ) or "  （无分业务数据）"
 
@@ -61,6 +61,7 @@ def _build_prompt(data: dict) -> str:
 
 以下是【真实财务数据】，你的任务是基于这些数据生成投研报告的文字部分。
 **铁律：所有结论必须严格基于以下数据，严禁虚构任何财务数字、行业排名、市场份额。**
+**口径提示：分业务中的「利润率」是数据源口径（金融业为利差率/利润率、制造业为毛利率），请勿擅自改写成「毛利率」或臆断具体口径。**
 
 === 公司基本信息 ===
 公司名：{data.get('name', '')}
@@ -149,7 +150,7 @@ def generate_narrative(data: dict) -> dict | None:
 def _build_hypotheses_prompt(data: dict) -> str:
     """把财务数据摘要转成「可证伪假设」生成 prompt。"""
     seg_text = "\n".join(
-        f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 毛利率 {s.get('margin', 'N/A')}%"
+        f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
         for s in data.get("segments", [])
     ) or "  （无分业务数据）"
 
