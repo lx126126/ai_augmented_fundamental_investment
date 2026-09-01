@@ -80,7 +80,7 @@ def load_raw_layer(con: duckdb.DuckDBPyConnection, codes: list[str] | None = Non
             frames.append(df)
         if not frames:
             continue
-        full = pd.concat(frames, ignore_index=True)
+        full = pd.concat(frames, ignore_index=True, join="outer")
         con.register(f"raw_{table}", full)  # 注册为 raw_{table}（DuckDB 视图）
         # 同时写入持久表 raw.{table}，便于跨连接查询
         con.execute(f"CREATE OR REPLACE TABLE raw.{table} AS SELECT * FROM raw_{table}")
@@ -100,7 +100,7 @@ def _build_mart_annual(codes: list[str]) -> pd.DataFrame:
         if "symbol" not in annual.columns:
             annual.insert(0, "symbol", code)
         frames.append(annual)
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, join="outer") if frames else pd.DataFrame()
 
 
 def _build_mart_quarter(codes: list[str]) -> pd.DataFrame:
@@ -115,7 +115,7 @@ def _build_mart_quarter(codes: list[str]) -> pd.DataFrame:
         if "symbol" not in quarter.columns:
             quarter.insert(0, "symbol", code)
         frames.append(quarter)
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    return pd.concat(frames, ignore_index=True, join="outer") if frames else pd.DataFrame()
 
 
 def _build_mart_segments(codes: list[str]) -> pd.DataFrame:
