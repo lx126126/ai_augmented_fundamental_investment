@@ -208,11 +208,19 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     cf = data["cash_flow"].sort_values("report_date").reset_index(drop=True)
     bs = data["balance_sheet"].sort_values("report_date").reset_index(drop=True)
 
-    ps = _to_single(ps, ["operating_revenue", "operating_cost", "net_profit_parent"])
+    # 累计值差分到单季度（列存在才差分，银行等无营业成本的行业缺 operating_cost）
+    _diff_cols = ["operating_revenue", "net_profit_parent"]
+    if "operating_cost" in ps.columns:
+        _diff_cols.append("operating_cost")
+    ps = _to_single(ps, _diff_cols)
     cf = _to_single(cf, ["ocf"])
 
     # 单季比率
-    ps["gross_margin_pct"] = (ps["operating_revenue"] - ps["operating_cost"]) / ps["operating_revenue"] * 100
+    if "operating_cost" in ps.columns:
+        ps["gross_margin_pct"] = (ps["operating_revenue"] - ps["operating_cost"]) / ps["operating_revenue"] * 100
+    else:
+        # 银行等金融股无营业成本，毛利率不适用
+        ps["gross_margin_pct"] = float("nan")
     ps["net_margin_pct"] = ps["net_profit_parent"] / ps["operating_revenue"] * 100
 
     bs = _with_interest_debt(bs)
@@ -220,9 +228,10 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     key = ["symbol", "report_date"]
     ps_cols = key + ["operating_revenue", "net_profit_parent", "gross_margin_pct", "net_margin_pct"]
     cf_cols = key + ["ocf"]
-    bs_cols = key + ["total_assets", "total_liabilities", "total_equity",
-                     "monetary_funds", "inventory", "accounts_receivable",
-                     "interest_bearing_debt", "goodwill"]
+    # 资产负债表字段按列存在性容错（银行等金融股无 monetary_funds/inventory/interest_bearing_debt）
+    bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
+                                 "monetary_funds", "inventory", "accounts_receivable",
+                                 "interest_bearing_debt", "goodwill"] if c in bs.columns]
 
     merged = ps[ps_cols].merge(cf[cf_cols], on=key, how="left")
     merged = merged.merge(bs[bs_cols], on=key, how="left")
