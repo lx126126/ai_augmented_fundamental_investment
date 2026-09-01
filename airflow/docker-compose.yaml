@@ -1,0 +1,92 @@
+# ValueLine 一页研报 · Airflow 本地部署（LocalExecutor + Postgres）
+# 用法：cd airflow && docker compose up -d --build
+# 启动后访问 http://localhost:8080 （admin / admin）
+version: '3.8'
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  environment: &airflow-common-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    # 演示用固定 Fernet Key（生产环境请改用环境变量注入随机值）
+    AIRFLOW__CORE__FERNET_KEY: 'UKMzEm3yIuFYEq1y3-2FxPNWSVwRASpahmQ9kQfEr8E='
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: 'true'
+    AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: '30'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
+    # 清除宿主机 VPN 代理残留，确保容器内访问国内数据源（东财/新浪/巨潮/腾讯）直连
+    NO_PROXY: '*'
+    no_proxy: '*'
+    HTTP_PROXY: ''
+    HTTPS_PROXY: ''
+    http_proxy: ''
+    https_proxy: ''
+    # 告警 Webhook（可选）：配置后任务失败会推送通知
+    AIRFLOW_ALERT_WEBHOOK: ''
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./logs:/opt/airflow/logs
+    - ./plugins:/opt/airflow/plugins
+    # 挂载项目根目录，让 DAG 内的 task 可 import src 并读写 data/raw、data/validation、reports/
+    - ../:/opt/airflow/project
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+
+  # 一次性任务：初始化数据库 + 创建管理员账号
+  airflow-init:
+    <<: *airflow-common
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db init
+        airflow users create \
+          --username admin --password admin \
+          --firstname Li --lastname Xiao \
+          --role Admin --email xiao@example.com || true
+
+volumes:
+  postgres-db-volume:

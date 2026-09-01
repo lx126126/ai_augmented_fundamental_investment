@@ -1,0 +1,7 @@
+# ValueLine 一页研报 · Airflow 容器依赖
+# 数据源拉取（AKShare）+ 存储（parquet）+ PDF 解析（pymupdf）+ HTTP（腾讯行情/DeepSeek/巨潮）
+akshare
+pandas
+pyarrow
+pymupdf
+requests
