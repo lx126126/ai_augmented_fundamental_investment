@@ -126,14 +126,18 @@ def fetch_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None
     return df
 
 
-def fetch_quote(code: str) -> pd.DataFrame | None:
+def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     """腾讯行情：公司名、现价、PE(TTM)、PB、总市值、52周高低（实时精确）。
 
     走 qt.gtimg.cn（腾讯域名，网络受限时东财 push2 的替代）。
     字段：name/price/pe/pb/market_cap/price_52w_high/price_52w_low
+    market：可选交易所前缀（如港股传 "hk"），默认按 A 股规则推断。
     """
     import requests
-    em = _em_symbol(code).lower()  # sh601088 / sz600519
+    if market:
+        em = f"{market}{code.zfill(5) if market == 'hk' else code.zfill(6)}".lower()
+    else:
+        em = _em_symbol(code).lower()  # sh601088 / sz600519
     try:
         r = requests.get(f"https://qt.gtimg.cn/q={em}", timeout=8)
         r.raise_for_status()

@@ -67,7 +67,7 @@ flowchart TB
 | **文档解析** | 巨潮年报 PDF + pymupdf `find_tables` 抽取「主要会计数据」「合并资产负债表」，支持繁体多语言；XBRL 公开链路已调研 | ✅ |
 | **数据质量校验** | 官方年报 PDF 作金标准，逐字段对比（容差 <0.1%），异常字段自动覆盖；Beneish M-Score + 现金流背离 + 应收背离 + 审计意见（非标一票否决） | ✅ |
 | **数仓设计** | DuckDB 列式数仓（raw/mart 双层 schema 化），`warehouse.py` 从 parquet 宽表落库，供分析查询与 API 直读 | ✅ |
-| **管道编排** | Airflow 五阶段 DAG（拉取→交叉校验+造假检测→渲染→数仓→导出），Docker Compose 容器化，端到端跑通 | ✅ |
+| **管道编排** | Airflow 双 DAG：①财报季 DAG（拉取→交叉校验+造假检测→渲染→数仓→导出，季度）+ ②每日行情 DAG（拉行情/估值/评级→历史快照→轻量重刷估值板块，每交易日），Docker Compose 容器化 | ✅ |
 | **LLM 应用层** | DeepSeek 结构化输出（JSON schema 约束），生成商业模式 / 投资逻辑 / 风险 / 林奇分类；铁律「只翻译数据，不编数」 | ✅ |
 | **后端服务** | FastAPI 查询 API（7 端点），只读 DuckDB mart 层，参数化查询 + 指标白名单防注入 | ✅ |
 | **报告交付** | ValueLine 一页 HTML → PNG @2x 长图 / PDF（Playwright） | ✅ |
@@ -90,6 +90,7 @@ flowchart TB
 ├── scripts/
 │   ├── fetch_stock.py     # 拉取单票数据
 │   ├── build_valueline.py # 渲染 ValueLine 一页报告
+│   ├── build_web_index.py # 生成手机网页版首页（数据驱动）
 │   ├── export.py          # HTML → PNG / PDF
 │   ├── review.py          # 复盘验证引擎
 │   └── journal.py         # 投研日记（内部操作层）
@@ -103,11 +104,13 @@ flowchart TB
 │   ├── architecture.md        # 架构设计
 │   ├── data-validation.md     # 数据验证设计
 │   ├── api.md                 # 查询 API 文档
-│   └── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
+│   ├── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
+│   └── mobile-web.md          # 手机网页版部署（伪小程序）
 ├── sql/
 │   └── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
 ├── reports/                   # 报告归档（按季度）
+├── web/                       # 手机网页版入口（index.html，上下滑动浏览）
 ├── watchlist/                 # 跟踪池 + 假设台账
 └── README.md
 ```

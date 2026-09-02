@@ -592,7 +592,8 @@ body {
   padding: 24px 0;
 }
 .page {
-  width: 1080px;
+  width: 100%;
+  max-width: 1080px;
   margin: 0 auto;
   background: #ffffff;
   box-shadow: 0 2px 16px rgba(15, 61, 110, 0.10);
@@ -767,6 +768,35 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .reconcile b { color: #8a6d0b; }
 .footer { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 10px; color: var(--faint); line-height: 1.7; }
 @media print { body { background: #fff; padding: 0; } .page { box-shadow: none; margin: 0; width: 100%; } }
+
+/* ===== 移动端响应式（手机浏览器直开，上下滑动长图体验） ===== */
+@media (max-width: 768px) {
+  body { padding: 0; background: #fff; }
+  .page { max-width: 100%; box-shadow: none; padding: 18px 14px 22px; }
+  .header { flex-direction: column; gap: 12px; }
+  .header-right { text-align: left; margin-left: 0; align-self: flex-start; }
+  .badges { align-items: flex-start; }
+  .co-name { font-size: 22px; }
+  .co-name .en { display: block; margin-left: 0; margin-top: 3px; }
+
+  /* 横排卡片改纵向堆叠 */
+  .biz-row { flex-direction: column; gap: 2px; }
+  .biz-k { flex: none; }
+  .val-grid, .market-row, .cp-grid, .comp-grid, .seg-row { flex-direction: column; gap: 10px; }
+  .tp-grid { flex-wrap: wrap; }
+
+  /* 业务版图 / 竞争地位 */
+  .bizmap-name { flex-basis: 60px; }
+  .peer-name { flex-basis: 56px; }
+
+  /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
+  table.dense { font-size: 9px; }
+  table.dense th.name, table.dense td.name { width: 88px; }
+
+  .sec-title { font-size: 14px; }
+  .summary { font-size: 12px; }
+  .thesis li, .risk li { font-size: 12px; }
+}
 """
 
 # ============ HTML 骨架（单栏纵向长图） ============
@@ -908,10 +938,11 @@ def _load_real_data(code: str) -> dict | None:
         return None
 
 
-def build(code: str = "601088") -> None:
+def build(code: str = "601088", daily: bool = False) -> None:
     global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG
-    # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）
-    RECONCILE_LOG = _reconcile(code) if _HAS_DATA else []
+    # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）。
+    # 每日行情刷新（--daily）跳过：财务数据未变，PDF 校验/LLM 叙事无需重跑，只更新估值板块。
+    RECONCILE_LOG = ([] if daily else _reconcile(code)) if _HAS_DATA else []
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
@@ -933,9 +964,9 @@ def build(code: str = "601088") -> None:
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
-        # LLM 生成叙事层（数据先行）
+        # LLM 生成叙事层（数据先行）。每日刷新跳过（财务数据未变，叙事不变，省 token）
         NARRATIVE = None
-        if _HAS_LLM and real.get("narrative_data"):
+        if (not daily) and _HAS_LLM and real.get("narrative_data"):
             NARRATIVE = generate_narrative(real["narrative_data"])
         data_src = f"真实数据 {code}"
     else:
@@ -1001,4 +1032,5 @@ def build(code: str = "601088") -> None:
 
 if __name__ == "__main__":
     code = sys.argv[1] if len(sys.argv) > 1 else "601088"
-    build(code)
+    daily = "--daily" in sys.argv
+    build(code, daily=daily)
