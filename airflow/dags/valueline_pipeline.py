@@ -16,12 +16,17 @@
       ↓
     export     导出 PNG 长图 / A4 PDF（可选，需 playwright + chromium）
 
-触发方式：
-    - 手动：Web UI 点击 Trigger DAG，或传参数 {"code": "600519"}
-    - 定时：每日凌晨 2 点（财报季按需改 schedule）
+跟踪池：
+    - 默认读 watchlist/watchlist.json 的 active 标的（全量更新）
+    - 手动触发可用 conf {"codes": ["600519"]} 覆盖为指定股票
+
+调度：
+    - 财报季（1/4/7/10 月的 20 日前后，财报密集披露期）每日凌晨 2 点全量刷新
+    - 非财报季不自动跑，按需手动触发（数据低频变化，避免空跑浪费）
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime, timedelta
@@ -38,9 +43,34 @@ from airflow.operators.empty import EmptyOperator
 
 
 # --------------------------------------------------------------------------- #
-# 跟踪池（默认标的，触发时可用 conf 覆盖 code）
+# 跟踪池（默认读 watchlist.json 的 active 标的，手动触发可用 conf.codes 覆盖）
 # --------------------------------------------------------------------------- #
 DEFAULT_CODE = "601088"
+WATCHLIST_PATH = Path(PROJECT_ROOT) / "watchlist" / "watchlist.json"
+
+
+def resolve_codes(**context) -> list[str]:
+    """解析本次运行要处理的股票代码列表。
+
+    优先级：conf.codes（手动指定）> watchlist.json 的 active 标的 > DEFAULT_CODE。
+    watchlist 里 code 形如「601088.SH」，统一剥成 6 位纯代码（数据层以纯代码为键）。
+    """
+    conf = context.get("params") or {}
+    codes = conf.get("codes")
+    if codes:
+        return [c.split(".")[0] for c in codes]
+
+    if WATCHLIST_PATH.exists():
+        try:
+            data = json.loads(WATCHLIST_PATH.read_text(encoding="utf-8"))
+            stocks = data.get("stocks", [])
+            active = [s["code"] for s in stocks if s.get("status") == "active"]
+            if active:
+                return [c.split(".")[0] for c in active]
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    return [DEFAULT_CODE]
 
 
 # --------------------------------------------------------------------------- #
@@ -181,6 +211,18 @@ def export_report(code: str, **context) -> dict:
 
 
 # --------------------------------------------------------------------------- #
+# Task 6/6：生成手机网页版首页（数据驱动，扫描 reports/ 最新报告）
+# --------------------------------------------------------------------------- #
+def build_web_index(**context) -> dict:
+    """重新生成 web/index.html（扫描 reports/ 归档 + 跟踪池名称映射）。"""
+    os.chdir(PROJECT_ROOT)
+    from scripts.build_web_index import main as _build_index
+
+    _build_index()
+    return {"status": "generated"}
+
+
+# --------------------------------------------------------------------------- #
 # 告警回调：任务失败时记录日志 + 可选 Webhook 推送（钉钉/飞书/Slack）
 # --------------------------------------------------------------------------- #
 def notify_failure(context) -> None:
@@ -220,47 +262,60 @@ default_args = {
 with DAG(
     dag_id="valueline_pipeline",
     default_args=default_args,
-    description="ValueLine 一页研报 ETL：拉取 → PDF金标准交叉校验+造假检测 → 渲染 → 数仓落库 → 导出",
-    schedule="0 2 * * *",           # 每日凌晨 2 点；财报季可改为按需手动触发
+    description="ValueLine 一页研报 ETL：拉取 → PDF金标准交叉校验+造假检测 → 渲染 → 数仓落库 → 导出（跟踪池全量）",
+    # 财报季（1/4/7/10 月的 20-31 日）每日凌晨 2 点全量刷新；非财报季不自动跑，按需手动触发
+    schedule="0 2 20-31 1,4,7,10 *",
     start_date=datetime(2026, 8, 1),
     catchup=False,
     max_active_runs=1,
     tags=["fundamental", "value-investing", "etl", "data-quality"],
-    params={"code": DEFAULT_CODE},
+    params={"codes": []},
 ) as dag:
 
     start = EmptyOperator(task_id="start")
 
-    fetch = PythonOperator(
-        task_id="fetch",
-        python_callable=fetch_data,
-        op_kwargs={"code": "{{ params.code }}"},
-    )
+    # 跟踪池标的（DAG 解析时从 watchlist.json 读取；运行期可用 conf.codes 覆盖）
+    _codes = resolve_codes(params={"codes": []})
 
-    validate = PythonOperator(
-        task_id="validate",
-        python_callable=validate_data,
-        op_kwargs={"code": "{{ params.code }}"},
-    )
-
-    build = PythonOperator(
-        task_id="build",
-        python_callable=build_report,
-        op_kwargs={"code": "{{ params.code }}"},
-    )
+    # 逐票生成 fetch → validate → build → export 链；warehouse 在所有票 build 后统一跑一次
+    last_build = []
+    for code in _codes:
+        fetch = PythonOperator(
+            task_id=f"fetch_{code}",
+            python_callable=fetch_data,
+            op_kwargs={"code": code},
+        )
+        validate = PythonOperator(
+            task_id=f"validate_{code}",
+            python_callable=validate_data,
+            op_kwargs={"code": code},
+        )
+        build = PythonOperator(
+            task_id=f"build_{code}",
+            python_callable=build_report,
+            op_kwargs={"code": code},
+        )
+        export = PythonOperator(
+            task_id=f"export_{code}",
+            python_callable=export_report,
+            op_kwargs={"code": code},
+            trigger_rule="all_success",   # build 成功后才导出
+        )
+        start >> fetch >> validate >> build >> export
+        last_build.append(build)
 
     warehouse = PythonOperator(
         task_id="warehouse",
         python_callable=refresh_warehouse,
-        op_kwargs={"code": "{{ params.code }}"},
+        op_kwargs={"code": "all"},   # warehouse 全量重建，不依赖单票 code
     )
 
-    export = PythonOperator(
-        task_id="export",
-        python_callable=export_report,
-        op_kwargs={"code": "{{ params.code }}"},
-        trigger_rule="all_success",   # build 成功后才导出
-    )
+    # 所有票 build 完成后统一刷新数仓（DuckDB 单文件，全量重建）
+    last_build >> warehouse
 
-    # 血缘：fetch → validate（质量 gate 不过则阻断）→ build → warehouse → export
-    start >> fetch >> validate >> build >> warehouse >> export
+    # 生成手机网页版首页（数据驱动，扫描 reports/ 最新报告）
+    web_index = PythonOperator(
+        task_id="web_index",
+        python_callable=build_web_index,
+    )
+    last_build >> web_index
