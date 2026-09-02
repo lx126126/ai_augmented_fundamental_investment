@@ -499,6 +499,7 @@ def fetch_hk_profile(code: str) -> pd.DataFrame | None:
     r = raw.iloc[0]
     return pd.DataFrame([{
         "symbol": _hk_code(code),
+        "company_name": r.get("公司名称"),
         "industry": r.get("所属行业"),
         "company_intro": r.get("公司介绍"),
     }])

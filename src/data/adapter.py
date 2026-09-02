@@ -257,10 +257,12 @@ def build_template_data(code: str) -> dict:
     if "competition" in raw:
         competition = _build_competition(raw["competition"], code)
 
-    # 公司名（腾讯行情）
+    # 公司名（腾讯行情，失败时兜底港股 profile 的「公司名称」字段）
     company_name = None
-    if "quote" in raw:
+    if "quote" in raw and not raw["quote"].empty:
         company_name = raw["quote"].iloc[0].get("name")
+    if not company_name and "competition" in raw and not raw["competition"].empty:
+        company_name = raw["competition"].iloc[0].get("company_name")
 
     # 格雷厄姆体检（从年度财务数据算）
     graham = _build_graham(annual)

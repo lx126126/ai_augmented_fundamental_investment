@@ -21,6 +21,23 @@ def test_hk_code_case_insensitive():
     assert _hk_code("00700.HK") == "00700"
 
 
+def test_fetch_hk_profile_has_company_name():
+    """港股 profile 提取「公司名称」字段（quote 行情失败时的公司名兜底源）。"""
+    from unittest import mock
+    import src.data.fetcher as ft
+
+    fake = mock.Mock()
+    fake.iloc = [{"公司名称": "腾讯控股有限公司", "所属行业": "软件服务", "公司介绍": "互联网科技公司"}]
+    fake.empty = False
+
+    with mock.patch.object(ft.ak, "stock_hk_company_profile_em", return_value=fake):
+        df = ft.fetch_hk_profile("00700")
+
+    assert df is not None
+    assert df.iloc[0]["company_name"] == "腾讯控股有限公司"
+    assert df.iloc[0]["industry"] == "软件服务"
+
+
 def test_adapter_norm_code_hk():
     """adapter._norm_code 与 fetcher._hk_code 港股规范化对齐（00700.HK→00700）。"""
     from src.data.adapter import _norm_code
