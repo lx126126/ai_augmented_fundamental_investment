@@ -1,6 +1,6 @@
 # AI 增强的基本面投研（FQF）
 
-面向 A 股的**纯客观投研数据工具**：从多源数据接入、财报文档解析、数据清洗入库、DuckDB 数仓、基本面指标分析，到 LLM 驱动的 ValueLine 一页报告与**财务造假/风险检测（排雷）**，全链路自动化。
+面向 **A 股 + 港股**的**纯客观投研数据工具**：从多源数据接入、财报文档解析、数据清洗入库、DuckDB 数仓、基本面指标分析，到 LLM 驱动的 ValueLine 一页报告与**财务造假/风险检测（排雷）**，全链路自动化。
 
 > 这是一个真实在跑的个人投研系统（非 demo）。**报告零「本人」观点**（无本人目标价、多空、买卖建议），专注「数据加工 + 风险检测」，**第三方机构的多空/评级观点照常保留**（客观数据）。核心目的是帮自己做投资决策前先排雷。核心方法论：格雷厄姆流派（安全边际 / 财务稳健）+ 彼得·林奇六类公司分类。
 
@@ -40,9 +40,9 @@ flowchart TB
         E4["FastAPI 查询 API<br/>只读 mart 层"]
     end
 
-    subgraph REVIEW["⑥ 复盘闭环"]
-        F1["假设台账<br/>可证伪判断"]
-        F2["验证 / 打脸<br/>归因沉淀"]
+    subgraph REVIEW["⑥ 投研日记（内部决策辅助）"]
+        F1["基本面快照<br/>+ 林奇分类"]
+        F2["多空视角 + AI 操作建议<br/>（第三方/AI，非本人）"]
     end
 
     A1 --> C1
@@ -63,7 +63,7 @@ flowchart TB
 
 | 能力 | 实现 | 状态 |
 |------|------|------|
-| **多源数据接入** | AKShare 封装东财 / 巨潮 / 腾讯 / 百度，11 类 fetch 接口（财务三表、分红、分业务、估值、行情、机构评级、竞争地位、主营业务） | ✅ |
+| **多源数据接入** | AKShare 封装东财 / 巨潮 / 腾讯 / 百度 / 经济通，覆盖 A 股 + 港股（财务三表、分红、分业务、估值、行情、机构评级、竞争地位、主营业务） | ✅ |
 | **文档解析** | 巨潮年报 PDF + pymupdf `find_tables` 抽取「主要会计数据」「合并资产负债表」，支持繁体多语言；XBRL 公开链路已调研 | ✅ |
 | **数据质量校验** | 官方年报 PDF 作金标准，逐字段对比（容差 <0.1%），异常字段自动覆盖；Beneish M-Score + 现金流背离 + 应收背离 + 审计意见（非标一票否决） | ✅ |
 | **数仓设计** | DuckDB 列式数仓（raw/mart 双层 schema 化），`warehouse.py` 从 parquet 宽表落库，供分析查询与 API 直读 | ✅ |
@@ -97,6 +97,7 @@ flowchart TB
 │   ├── test_cleaner.py        # 清洗层（银行股兼容 / 净利率兜底 / 派生指标）
 │   ├── test_fraud.py          # 造假检测（M-Score / 审计意见非标一票否决）
 │   ├── test_pdf_parser.py     # PDF 金标准三表解析（利润/现金流/资产负债）
+│   ├── test_lynch.py          # 林奇六类分类 + 指标映射
 │   └── test_warehouse.py      # 数仓层（datetime 归一化 / 跨股票 concat）
 ├── templates/valueline.html   # 报告模板（由 build_valueline.py 生成）
 ├── docs/
@@ -127,6 +128,10 @@ python scripts/build_valueline.py 601088
 pip install playwright && playwright install chromium
 python scripts/export.py templates/valueline.html -o reports/2026Q2 -f png pdf
 
+# 生成投研日记（内部决策辅助，gitignore，A 股 + 港股通用）
+python scripts/journal.py 601088          # 中国神华
+python scripts/journal.py 09992 --force   # 泡泡玛特（港股），覆盖重建
+
 # 构建 DuckDB 数仓（raw/mart 双层）
 python -m src.data.warehouse
 
@@ -137,7 +142,7 @@ curl "http://127.0.0.1:8000/compare?metric=roe_pct"   # 跨股对比
 # Airflow 端到端编排（Docker Compose）
 cd airflow && docker compose up -d
 
-# 运行测试（单元 + 集成，27 项）
+# 运行测试（单元 + 集成，50 项）
 pytest tests/ -v
 ```
 
