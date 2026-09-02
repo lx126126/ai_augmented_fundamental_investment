@@ -97,7 +97,10 @@ flowchart TB
 ├── docs/
 │   ├── architecture.md        # 架构设计
 │   ├── data-validation.md     # 数据验证设计
-│   └── api.md                 # 查询 API 文档
+│   ├── api.md                 # 查询 API 文档
+│   └── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
+├── sql/
+│   └── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
 ├── reports/                   # 报告归档（按季度）
 ├── watchlist/                 # 跟踪池 + 假设台账
@@ -145,7 +148,7 @@ cd airflow && docker compose up -d
 | P1 | 数据层：多源接入 + 文档解析 + 清洗入库 + 数据验证 + Airflow 调度 | ✅（剩：全市场批量拉取） |
 | P2 | 分析层：估值分位 / 格雷厄姆体检 / 造假检测 / 竞争地位 | ✅ |
 | P3 | 报告层：数据绑定 + LLM 叙事 + 机构评级 + 业务版图 + DuckDB 数仓 + FastAPI 查询 API | ✅（剩：季度更新引擎） |
-| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案 + 全市场批量拉取 | ⬜ |
+| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案 + 全市场批量拉取 | 🔄 PG schema + 云方案已输出，剩全市场批量拉取 + 实际云部署 |
 
 ## 合规铁律
 

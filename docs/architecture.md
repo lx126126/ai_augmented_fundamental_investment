@@ -196,7 +196,7 @@ Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
 - **数仓**：DuckDB 列式数仓（raw/mart 双层 schema 化），PostgreSQL/Snowflake/BigQuery 为规模化迁移目标
 - **LLM 应用**：DeepSeek 结构化输出（商业模式/投资逻辑/风险/林奇分类），铁律「只翻译数据不编数」✅
 - **后端**：FastAPI 查询 API（7 端点，只读 mart 层，参数化查询 + 白名单防注入）✅
-- **云**：COS / S3 存储；Snowflake / BigQuery 云数仓（规模化迁移目标，待建）
+- **云**：已输出《云部署方案设计》[cloud-deployment.md](cloud-deployment.md)——本地 → GCP（Composer/BigQuery/Cloud Run/Secret Manager）的完整映射 + 分阶段迁移路径 + BigQuery DDL（规模化迁移设计已就绪，待实际部署）
 - 此架构覆盖岗位「源数据接入 + 文档解析 + 数仓 + 编排监控 + LLM 层 + 后端 + 云」全部七块核心能力
 
 ---
@@ -209,7 +209,7 @@ Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
 | P1 | 数据层：多源抓取 + 文档解析（PDF 金标准校验）+ 清洗入库 + parquet 存储 + Airflow 编排 | ✅ 已完成（剩：全市场批量拉取） |
 | P2 | 分析层：指标计算 / 估值分位 / 林奇分类 / 格雷厄姆评分 / 造假检测（Beneish M-Score + 审计意见）/ 竞争地位 | ✅ 已完成 |
 | P3 | 报告层：模板数据绑定 + LLM 文本生成 + DuckDB 数仓（raw/mart）+ FastAPI 查询 API | ✅ 已完成（剩：季度更新引擎、跟踪池全量管理） |
-| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案（GCP/AWS managed）+ 全市场批量拉取 | ⬜ 待建（往后放） |
+| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案（GCP/AWS managed）+ 全市场批量拉取 | 🔄 云方案设计已输出（[cloud-deployment.md](cloud-deployment.md)），剩实际部署 + PG DDL |
 
 ---
 
@@ -221,7 +221,7 @@ Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
 | 数据源 | AKShare（主）+ mootdx/腾讯（备用） |
 | 文档解析 | PDF / HTML（pymupdf 表格抽取，金标准校验） |
 | 调度 | Airflow 五阶段 DAG + Docker Compose |
-| 存储 | DuckDB 数仓（raw/mart，已落地）+ parquet/COS + Snowflake/BigQuery（迁移目标） |
+| 存储 | DuckDB 数仓（raw/mart，已落地）+ PG schema（`sql/schema_postgres.sql`，已输出）+ parquet/COS + Snowflake/BigQuery（云迁移设计） |
 | 数据质量 | 校验 + 告警 + 血缘追踪 |
 | LLM | DeepSeek（deepseek-chat）结构化输出，只翻译数据不编观点 |
 | 后端 | FastAPI 查询 API（只读 mart 层） |
