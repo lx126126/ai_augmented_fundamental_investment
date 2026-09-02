@@ -156,3 +156,75 @@ VALUATION_MAP = {
     "date": "date",
     "value": "value",
 }
+
+# ---------------------------------------------------------------------------
+# 8. 港股三表 stock_financial_hk_report_em（长表：STD_ITEM_CODE + STD_ITEM_NAME + AMOUNT）
+#    用稳定的 STD_ITEM_CODE（数字代码）做映射键，而非繁体中文字段名。
+#    映射到与 A 股一致的标准字段名（snake_case），使 cleaner/adapter/build 全部复用。
+# ---------------------------------------------------------------------------
+HK_PROFIT_SHEET_MAP = {
+    "004001001": "operating_revenue",     # 营业额（≈营业收入）
+    "004005002": "operating_cost",       # 销售成本（≈营业成本）
+    "004010999": "operating_profit",     # 经营溢利（≈营业利润）
+    "004011999": "total_profit",         # 除税前溢利（利润总额）
+    "004012999": "net_profit",           # 除税后溢利（净利润）
+    "004025002": "net_profit_parent",    # 股东应占溢利（归母净利润）
+    "004012001": "income_tax",           # 税项（所得税费用）
+    "004010003": "sell_expense",         # 销售及分销费用（销售费用）
+    "004010004": "admin_expense",        # 行政开支（管理费用）
+    "004011201": "interest_expense",     # 融资成本（利息费用近似）
+    "004027002": "eps",                  # 每股基本盈利
+}
+
+HK_BALANCE_SHEET_MAP = {
+    "004009999": "total_assets",         # 总资产
+    "004025999": "total_liabilities",    # 总负债
+    "004030999": "total_equity",         # 股东权益（归母净资产，不含少数股东）
+    "004028999": "total_equity_all",     # 净资产/总权益（含少数股东，ROTC 用）
+    "004027999": "minority_interest",    # 少数股东权益
+    "004002999": "current_assets",       # 流动资产合计
+    "004011999": "current_liabilities",  # 流动负债合计
+    "004030001": "share_capital_raw",    # 股本（单位特殊，需 EPS 反推校正）
+    "004030004": "retained_profit",      # 保留溢利（留存收益）
+    "004002001": "inventory",            # 存货
+    "004002003": "accounts_receivable",  # 应收帐款
+    "004002010": "monetary_funds",       # 现金及等价物
+    "004011001": "accounts_payable",     # 应付帐款
+    "004020999": "noncurrent_liabilities",  # 非流动负债合计
+}
+
+HK_CASH_FLOW_MAP = {
+    "003999": "ocf",                     # 经营业务现金净额
+    "005999": "icf",                     # 投资业务现金净额
+    "007999": "fcf",                     # 融资业务现金净额
+    "001009": "depreciation",            # 折旧及摊销
+    "005005": "capital_expenditure",     # 购建固定资产（资本开支，取绝对值）
+}
+
+# 港股财务指标 stock_financial_hk_analysis_indicator_em（宽表，英文列名）
+HK_FINANCIAL_INDICATOR_MAP = {
+    "REPORT_DATE": "report_date",
+    "OPERATE_INCOME": "operating_revenue",    # 营业收入（用于净利率兜底/增速）
+    "OPERATE_INCOME_YOY": "revenue_yoy_pct",  # 营收同比增长（接口已是 %）
+    "HOLDER_PROFIT": "net_profit_parent",     # 股东应占溢利
+    "HOLDER_PROFIT_YOY": "net_profit_yoy_pct",
+    "GROSS_PROFIT_RATIO": "gross_margin_pct", # 毛利率（接口已是 %）
+    "NET_PROFIT_RATIO": "net_margin_pct",     # 净利率（接口已是 %）
+    "ROE_AVG": "roe_pct",                     # 平均 ROE（接口已是 %）
+    "ROA": "roa_pct",
+    "DEBT_ASSET_RATIO": "debt_ratio_pct",     # 资产负债率（接口已是 %）
+    "CURRENT_RATIO": "current_ratio",         # 流动比率
+    "BASIC_EPS": "eps",                       # 每股基本盈利
+    "BPS": "bps",                             # 每股净资产
+    "OCF_SALES": "ocf_to_revenue_pct",        # 经营现金流/营收（接口已是 %）
+}
+
+# 港股分红 stock_hk_dividend_payout_em（分红方案为文本，需正则提取）
+# 列：最新公告日期 / 财政年度 / 分红方案 / 分配类型 / 除净日 / 截至过户日 / 发放日
+# 分红方案形如「每股派人民币0.8146元(相当于港币0.8881元)」，优先取人民币口径。
+HK_DIVIDEND_MAP = {
+    "最新公告日期": "announce_date",
+    "财政年度": "fiscal_year",
+    "分红方案": "dividend_text",
+    "分配类型": "dividend_type",
+}

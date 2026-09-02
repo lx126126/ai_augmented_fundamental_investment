@@ -50,15 +50,15 @@ WATCHLIST_PATH = Path(PROJECT_ROOT) / "watchlist" / "watchlist.json"
 
 
 def resolve_codes(**context) -> list[str]:
-    """解析本次运行要处理的股票代码列表。
+    """解析本次运行要处理的股票代码列表（保留市场后缀，如 601088.SH / 09992.HK）。
 
     优先级：conf.codes（手动指定）> watchlist.json 的 active 标的 > DEFAULT_CODE。
-    watchlist 里 code 形如「601088.SH」，统一剥成 6 位纯代码（数据层以纯代码为键）。
+    保留后缀以便 fetch/validate 区分 A 股（fetch_all）与港股（fetch_all_hk）。
     """
     conf = context.get("params") or {}
     codes = conf.get("codes")
     if codes:
-        return [c.split(".")[0] for c in codes]
+        return [str(c) for c in codes]
 
     if WATCHLIST_PATH.exists():
         try:
@@ -66,29 +66,47 @@ def resolve_codes(**context) -> list[str]:
             stocks = data.get("stocks", [])
             active = [s["code"] for s in stocks if s.get("status") == "active"]
             if active:
-                return [c.split(".")[0] for c in active]
+                return [str(c) for c in active]
         except (json.JSONDecodeError, OSError):
             pass
 
     return [DEFAULT_CODE]
 
 
+def _is_hk(code: str) -> bool:
+    """判断是否港股标的（带 .HK 后缀，或 0 开头 5 位码）。"""
+    c = str(code).upper()
+    if c.endswith(".HK"):
+        return True
+    bare = c.split(".")[0]
+    return bare.startswith("0") and len(bare) == 5
+
+
+def _store_code(code: str) -> str:
+    """数据层键：港股剥 .HK 成 5 位码（09992），A 股剥后缀成 6 位码（601088）。"""
+    from src.data.fetcher import _hk_code
+    c = str(code).upper().split(".")[0]
+    return _hk_code(c) if _is_hk(code) else c.zfill(6)
+
+
 # --------------------------------------------------------------------------- #
 # Task 1/4：拉取原始数据
 # --------------------------------------------------------------------------- #
 def fetch_data(code: str, **context) -> dict:
-    """拉取单只股票真实财报 → 存 parquet。"""
+    """拉取单只股票真实财报 → 存 parquet（A 股走 fetch_all，港股走 fetch_all_hk）。"""
     os.chdir(PROJECT_ROOT)
-    from src.data.fetcher import fetch_all
+    from src.data.fetcher import fetch_all, fetch_all_hk
     from src.data.storage import save_all
 
-    print(f"[fetch] 拉取 {code} 财报数据 ...")
-    data = fetch_all(code)
-    paths = save_all(data, code)
+    is_hk = _is_hk(code)
+    store_code = _store_code(code)
+    print(f"[fetch] 拉取 {code} 财报数据（{'港股' if is_hk else 'A股'}）...")
+    data = fetch_all_hk(code) if is_hk else fetch_all(code)
+    paths = save_all(data, store_code)
 
     table_count = len(paths)
     print(f"[fetch] {code} 入库 {table_count} 张表")
-    return {"code": code, "tables": table_count}
+    return {"code": store_code, "tables": table_count}
 
 
 # --------------------------------------------------------------------------- #
@@ -99,6 +117,7 @@ def validate_data(code: str, **context) -> dict:
 
     若造假检测判定高风险（含非标审计意见一票否决），抛异常触发告警回调，
     阻断下游 build，保证「脏数据不出报告」。
+    港股暂无巨潮年报 PDF 金标准，跳过 reconcile，仅做造假检测。
     """
     os.chdir(PROJECT_ROOT)
     import pandas as pd
@@ -107,27 +126,32 @@ def validate_data(code: str, **context) -> dict:
     from src.data.adapter import load_raw
     from src.data.cleaner import build_annual_financials
 
+    is_hk = _is_hk(code)
+    store_code = _store_code(code)
+
     # 1) 官方年报 PDF 金标准交叉校验（覆盖接口错误字段，如神华 2025 总资产 9038→6278 亿）
-    bs_path = Path("data/raw") / code / "balance_sheet.parquet"
+    #    港股暂无巨潮 PDF 金标准链路，跳过此步
     corrections = []
-    if bs_path.exists():
-        bs = pd.read_parquet(bs_path)
-        d = pd.to_datetime(bs["report_date"])
-        annual_dates = d[d.dt.month == 12]
-        if not annual_dates.empty:
-            year = int(annual_dates.dt.year.max())
-            corrections = reconcile_balance_sheet(
-                code, year,
-                data_dir=Path("data/raw"), pdf_dir=Path("data/validation"),
-            )
-            if corrections:
-                print(f"[validate] {code} {year} 用官方 PDF 金标准覆盖 {len(corrections)} 个接口错误字段")
+    if not is_hk:
+        bs_path = Path("data/raw") / store_code / "balance_sheet.parquet"
+        if bs_path.exists():
+            bs = pd.read_parquet(bs_path)
+            d = pd.to_datetime(bs["report_date"])
+            annual_dates = d[d.dt.month == 12]
+            if not annual_dates.empty:
+                year = int(annual_dates.dt.year.max())
+                corrections = reconcile_balance_sheet(
+                    store_code, year,
+                    data_dir=Path("data/raw"), pdf_dir=Path("data/validation"),
+                )
+                if corrections:
+                    print(f"[validate] {store_code} {year} 用官方 PDF 金标准覆盖 {len(corrections)} 个接口错误字段")
 
     # 2) Beneish M-Score + 现金流背离 + 应收背离 + 审计意见
-    raw = load_raw(code)
+    raw = load_raw(store_code)
     required = {"financial_indicator", "profit_sheet", "balance_sheet", "cash_flow"}
     if not required.issubset(raw.keys()):
-        raise FileNotFoundError(f"[validate] {code} 缺 parquet 表，请先运行 fetch")
+        raise FileNotFoundError(f"[validate] {store_code} 缺 parquet 表，请先运行 fetch")
     annual = build_annual_financials(raw)
     fraud = fraud_check(annual)
     risk = fraud.get("overall_risk")
@@ -136,11 +160,11 @@ def validate_data(code: str, **context) -> dict:
     # 3) 质量 gate：高风险 → 阻断 + 告警
     if risk == "high":
         reason = "、".join(flags) or "未知原因"
-        raise ValueError(f"[validate] {code} 财务造假检测高风险（{reason}），阻断下游报告生成")
+        raise ValueError(f"[validate] {store_code} 财务造假检测高风险（{reason}），阻断下游报告生成")
 
-    print(f"[validate] {code} 造假风险={risk}，警示项={flags or '无'}")
+    print(f"[validate] {store_code} 造假风险={risk}，警示项={flags or '无'}")
     return {
-        "code": code,
+        "code": store_code,
         "corrections": len(corrections),
         "fraud_risk": risk,
         "fraud_flags": flags,
@@ -165,8 +189,9 @@ def _run_script(script: str, args: list[str]) -> None:
 # --------------------------------------------------------------------------- #
 def build_report(code: str, **context) -> dict:
     """读 parquet → 清洗宽表 → 组装模板结构 → LLM 叙事 → 渲染 HTML。"""
-    _run_script("scripts/build_valueline.py", [code])
-    return {"code": code, "status": "generated"}
+    store_code = _store_code(code)
+    _run_script("scripts/build_valueline.py", [store_code])
+    return {"code": store_code, "status": "generated"}
 
 
 # --------------------------------------------------------------------------- #
@@ -192,22 +217,23 @@ def refresh_warehouse(code: str, **context) -> dict:
 # --------------------------------------------------------------------------- #
 def export_report(code: str, **context) -> dict:
     """导出高清 PNG 长图 / A4 PDF（容器未装 playwright 时优雅降级跳过）。"""
+    store_code = _store_code(code)
     # 报告期由 build 落盘目录推导：取 reports/ 下最新的 {code}.html
     reports_root = Path(PROJECT_ROOT) / "reports"
-    html_candidates = sorted(reports_root.glob(f"*/{code}.html"), key=lambda p: p.stat().st_mtime)
+    html_candidates = sorted(reports_root.glob(f"*/{store_code}.html"), key=lambda p: p.stat().st_mtime)
     if not html_candidates:
         print("[export] 未找到报告 HTML，跳过")
-        return {"code": code, "status": "no_html"}
+        return {"code": store_code, "status": "no_html"}
 
     html_path = html_candidates[-1]
     out_dir = html_path.parent
     try:
         _run_script("scripts/export.py", [str(html_path), "-o", str(out_dir), "-f", "png", "pdf"])
-        return {"code": code, "status": "exported", "out": str(out_dir)}
+        return {"code": store_code, "status": "exported", "out": str(out_dir)}
     except Exception as e:
         # export.py 缺 playwright 时 sys.exit(1)；容器未装则降级跳过
         print(f"[export] 跳过（{e}）")
-        return {"code": code, "status": "skipped"}
+        return {"code": store_code, "status": "skipped"}
 
 
 # --------------------------------------------------------------------------- #
@@ -280,23 +306,25 @@ with DAG(
     # 逐票生成 fetch → validate → build → export 链；warehouse 在所有票 build 后统一跑一次
     last_build = []
     for code in _codes:
+        # task_id 用无后缀的 store_code（Airflow task_id 不能含 . 等特殊字符）
+        sc = _store_code(code)
         fetch = PythonOperator(
-            task_id=f"fetch_{code}",
+            task_id=f"fetch_{sc}",
             python_callable=fetch_data,
             op_kwargs={"code": code},
         )
         validate = PythonOperator(
-            task_id=f"validate_{code}",
+            task_id=f"validate_{sc}",
             python_callable=validate_data,
             op_kwargs={"code": code},
         )
         build = PythonOperator(
-            task_id=f"build_{code}",
+            task_id=f"build_{sc}",
             python_callable=build_report,
             op_kwargs={"code": code},
         )
         export = PythonOperator(
-            task_id=f"export_{code}",
+            task_id=f"export_{sc}",
             python_callable=export_report,
             op_kwargs={"code": code},
             trigger_rule="all_success",   # build 成功后才导出

@@ -93,14 +93,30 @@ def _to_yi(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _annual_dividend(dv: pd.DataFrame) -> pd.DataFrame:
-    """分红按年度汇总（同一年多次分红加总），report_date 归一到 12-31。"""
+    """分红按年度汇总（同一年多次分红加总），report_date 归一到 12-31。
+
+    统一输出「每股股息」口径 dividend_per_share（元/股）：
+    - A 股：dividend_per_10（每10股派息）÷ 10
+    - 港股：dividend_per_share（每股派息，已是人民币）直接用
+    """
     df = dv.copy()
     df["year"] = df["report_date"].dt.year
-    agg = df.groupby(["symbol", "year"], as_index=False).agg(
-        dividend_per_10=("dividend_per_10", "sum"),          # 年内多次分红加总
-        dividend_yield_pct=("dividend_yield_pct", "sum"),    # 年内累计股息率
-        total_shares=("total_shares", "last"),               # 取最新股本
-    )
+
+    if "dividend_per_share" not in df.columns and "dividend_per_10" in df.columns:
+        df["dividend_per_share"] = df["dividend_per_10"] / 10
+
+    agg_cols = {}
+    if "dividend_per_share" in df.columns:
+        agg_cols["dividend_per_share"] = ("dividend_per_share", "sum")  # 年内多次分红加总
+    if "dividend_yield_pct" in df.columns:
+        agg_cols["dividend_yield_pct"] = ("dividend_yield_pct", "sum")
+    if "total_shares" in df.columns:
+        agg_cols["total_shares"] = ("total_shares", "last")
+
+    if not agg_cols:
+        return pd.DataFrame()
+
+    agg = df.groupby(["symbol", "year"], as_index=False).agg(**agg_cols)
     agg["report_date"] = pd.to_datetime(agg["year"].astype(str) + "-12-31")
     return agg
 
@@ -143,16 +159,17 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         calc_nm = merged["net_profit_parent"] / rev.where(rev != 0) * 100
         merged["net_margin_pct"] = merged["net_margin_pct"].fillna(calc_nm)
 
-    # 分红数据：每股派息、股息率（股本改用资产负债表 share_capital，分红接口 total_shares 有 bug）
+    # 分红数据：每股股息（统一口径 dividend_per_share，元/股）、股息率
     if "dividend" in data:
         dv = _annual_dividend(data["dividend"])
-        dv_cols = key + [c for c in ["dividend_per_10", "dividend_yield_pct"] if c in dv.columns]
-        merged = merged.merge(dv[dv_cols], on=key, how="left")
+        if not dv.empty:
+            dv_cols = key + [c for c in ["dividend_per_share", "dividend_yield_pct"] if c in dv.columns]
+            merged = merged.merge(dv[dv_cols], on=key, how="left")
 
     # 分红比例（股利支付率）= 分红总额 / 归母净利润 × 100
-    # share_capital 已换算为「亿股」（面值 1 元），故分红总额 = 每股派息 × 总股数
-    if "dividend_per_10" in merged.columns and "share_capital" in merged.columns:
-        merged["dividend_total"] = merged["dividend_per_10"] / 10 * merged["share_capital"]  # 分红总额(亿元)
+    # share_capital 已换算为「亿股」（面值 1 元），故分红总额 = 每股股息 × 总股数
+    if "dividend_per_share" in merged.columns and "share_capital" in merged.columns:
+        merged["dividend_total"] = merged["dividend_per_share"] * merged["share_capital"]  # 分红总额(亿元)
     if "dividend_total" in merged.columns and "net_profit_parent" in merged.columns:
         merged["dividend_payout_pct"] = merged["dividend_total"] / merged["net_profit_parent"] * 100
 
@@ -184,21 +201,31 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         capital = eq.astype(float) + merged["total_debt"].astype(float)
         merged["rotc"] = merged["net_profit"] / capital.where(capital != 0) * 100
 
-    # 每股股息 = 每10股派息 / 10
-    if "dividend_per_10" in merged.columns:
-        merged["dividend_per_share"] = merged["dividend_per_10"] / 10
+    # 每股股息已由 _annual_dividend 统一为 dividend_per_share 口径
 
     return merged
 
 
 def _to_single(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
-    """累计值差分得到单季度流量值；Q1（03-31）无上期累计，直接取累计值。"""
+    """累计值差分得到单期流量值。
+
+    独立起点（取累计值本身，不做差分）：
+    - A 股季报：Q1（03-31）是年初累计起点
+    - 港股半年度：中期（06-30）是半年累计起点（港股无 Q1/Q3，披露 H1/FY 两期）
+    判断依据：若数据含 03-31 则按 A 股季度（3 月为起点），否则 6 月为起点（港股半年度）。
+    """
     df = df.copy()
+    has_q1 = (df["report_date"].dt.month == 3).any()
     for c in cols:
         s = df[c].astype(float)
         single = s.diff()
-        is_q1 = df["report_date"].dt.month == 3
-        single[is_q1] = s[is_q1]
+        if has_q1:
+            is_start = df["report_date"].dt.month == 3   # A 股 Q1
+        else:
+            is_start = df["report_date"].dt.month == 6   # 港股 H1（半年报独立累计）
+        # 首行（数据最早起点）diff 为 NaN，也视为独立起点取累计值
+        is_start = is_start | single.isna()
+        single[is_start] = s[is_start]
         df[c] = single
     return df
 

@@ -23,6 +23,11 @@ from .fields import (
     CASH_FLOW_MAP,
     DIVIDEND_MAP,
     SEGMENT_MAP,
+    HK_PROFIT_SHEET_MAP,
+    HK_BALANCE_SHEET_MAP,
+    HK_CASH_FLOW_MAP,
+    HK_FINANCIAL_INDICATOR_MAP,
+    HK_DIVIDEND_MAP,
 )
 
 
@@ -155,16 +160,189 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
             return float(s)
         except (ValueError, TypeError):
             return default
-    return pd.DataFrame([{
+    # 腾讯行情字段布局：A 股与港股不同（港股 f[46] 是英文名而非 PB）。
+    # A 股: f[39]=PE(TTM), f[46]=PB, f[45]=总市值, f[47]=52周高, f[48]=52周低
+    # 港股: f[57]=PE(TTM), f[58]=PB, f[45]=总市值, f[48]=52周高, f[49]=52周低
+    if market == "hk":
+        pe_idx, pb_idx, high_idx, low_idx = 57, 58, 48, 49
+        div_yield_idx = 47  # 港股 f[47]=股息率(%)，与 A 股 f[47]=52周高不同
+    else:
+        pe_idx, pb_idx, high_idx, low_idx = 39, 46, 47, 48
+        div_yield_idx = None  # A 股股息率由分红接口 dividend_yield_pct 提供
+    row = {
         "name": f[1],
         "price": _num(f[3]),
-        "pe": _num(f[39]),
-        "pb": _num(f[46]),
+        "pe": _num(f[pe_idx]),
+        "pb": _num(f[pb_idx]),
         "market_cap": _num(f[45]),
-        "price_52w_high": _num(f[47]),
-        "price_52w_low": _num(f[48]),
+        "price_52w_high": _num(f[high_idx]),
+        "price_52w_low": _num(f[low_idx]),
         "symbol": code.zfill(6),
-    }])
+    }
+    if div_yield_idx is not None:
+        row["dividend_yield"] = _num(f[div_yield_idx])
+    return pd.DataFrame([row])
+
+
+def _hkd_to_cny() -> float:
+    """港币兑人民币汇率（1 HKD = ? CNY），来源：中国外汇交易中心即期报价。
+
+    失败时返回 0（调用方据此跳过换算，保留港币原值并标注）。
+    """
+    try:
+        df = ak.fx_spot_quote()
+        row = df[df["货币对"] == "HKD/CNY"]
+        if not row.empty:
+            v = row["买报价"].iloc[0]
+            return float(v) if pd.notna(v) else 0.0
+    except Exception:
+        pass
+    return 0.0
+
+
+def _hk_code(code: str) -> str:
+    """港股代码规范化：剥 .HK 后缀，去前导零（东财港股接口要 5 位纯数字，如 09992）。"""
+    code = str(code).upper().replace(".HK", "").strip()
+    code = code.zfill(5)
+    return code
+
+
+def _hk_report_to_wide(symbol: str, mapping: dict, code: str) -> pd.DataFrame:
+    """港股三表长表 → 宽表（标准字段名）。
+
+    长表每行一个字段（STD_ITEM_CODE + AMOUNT），按 STD_ITEM_CODE 映射后
+    pivot 成「每报告期一行、每字段一列」的宽表，单位仍为港币元。
+    用 indicator="报告期" 拉半年度（6-30 中期 + 12-31 年报），港股无 Q1/Q3 季报。
+    """
+    hk = _hk_code(code)
+    df = ak.stock_financial_hk_report_em(stock=hk, symbol=symbol, indicator="报告期")
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df = df[df["STD_ITEM_CODE"].isin(mapping.keys())].copy()
+    df["field"] = df["STD_ITEM_CODE"].map(mapping)
+    df["report_date"] = pd.to_datetime(df["REPORT_DATE"])
+    wide = df.pivot_table(index="report_date", columns="field", values="AMOUNT", aggfunc="first")
+    wide = wide.reset_index()
+    wide["symbol"] = hk
+    wide["report_date"] = wide["report_date"].astype("datetime64[us]")
+    return wide
+
+
+def fetch_hk_profit_sheet(code: str) -> pd.DataFrame:
+    """港股利润表（长表→宽表，港币元，标准字段名）。"""
+    return _hk_report_to_wide("利润表", HK_PROFIT_SHEET_MAP, code)
+
+
+def fetch_hk_balance_sheet(code: str) -> pd.DataFrame:
+    """港股资产负债表（长表→宽表，港币元，标准字段名）。"""
+    return _hk_report_to_wide("资产负债表", HK_BALANCE_SHEET_MAP, code)
+
+
+def fetch_hk_cash_flow(code: str) -> pd.DataFrame:
+    """港股现金流量表（长表→宽表，港币元，标准字段名）。"""
+    wide = _hk_report_to_wide("现金流量表", HK_CASH_FLOW_MAP, code)
+    # 资本开支：港股接口「购建固定资产」为流出，接口返回正数，取绝对值对齐 A 股口径
+    if not wide.empty and "capital_expenditure" in wide.columns:
+        wide["capital_expenditure"] = wide["capital_expenditure"].abs()
+    return wide
+
+
+def fetch_hk_financial_indicator(code: str) -> pd.DataFrame:
+    """港股财务指标（宽表，英文列名 → 标准字段名）。"""
+    hk = _hk_code(code)
+    raw = ak.stock_financial_hk_analysis_indicator_em(symbol=hk, indicator="报告期")
+    if raw is None or raw.empty:
+        return pd.DataFrame()
+    df = _remap(raw, HK_FINANCIAL_INDICATOR_MAP).copy()
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    df["symbol"] = hk
+    return df
+
+
+def _extract_hk_dividend(text) -> float | None:
+    """从港股分红方案文本提取每股股息（元/股），优先人民币口径。
+
+    分红方案形如「每股派人民币0.8146元(相当于港币0.8881元)」。
+    """
+    import re
+    s = str(text)
+    # 优先人民币：每股派人民币X.XX元
+    m = re.search(r"人民币\s*([0-9.]+)\s*元", s)
+    if m:
+        return float(m.group(1))
+    # 其次港币：港币X.XX元
+    m = re.search(r"港币\s*([0-9.]+)\s*元", s)
+    if m:
+        return float(m.group(1))
+    # 兜底：每股派X.XX元（无币种，按人民币）
+    m = re.search(r"每股派?[^0-9]*([0-9.]+)\s*元", s)
+    if m:
+        return float(m.group(1))
+    return None
+
+
+def fetch_hk_dividend(code: str) -> pd.DataFrame | None:
+    """港股分红（每股股息），从分红方案文本正则提取人民币口径。
+
+    分红方案形如「每股派人民币0.8146元(相当于港币0.8881元)」，
+    优先提取「人民币」口径（港股股息多以人民币计价），其次「港币」。
+    每股股息（元/股），与 A 股 dividend_per_share 口径一致。
+    """
+    hk = _hk_code(code)
+    try:
+        raw = ak.stock_hk_dividend_payout_em(symbol=hk)
+    except Exception:
+        return None
+    if raw is None or raw.empty:
+        return None
+    df = _remap(raw, HK_DIVIDEND_MAP).copy()
+
+    df["dividend_per_share"] = df["dividend_text"].map(_extract_hk_dividend)
+    df["dividend_per_share"] = pd.to_numeric(df["dividend_per_share"], errors="coerce")
+    # 财政年度 → 报告期（归一到 12-31，与 A 股年度口径一致）
+    df["report_date"] = pd.to_datetime(
+        df["fiscal_year"].astype(str) + "-12-31", errors="coerce"
+    ).astype("datetime64[us]")
+    df["symbol"] = hk
+    # 仅保留年度分配 + 有股息值的行；剔除冗余列（announce_date 为字符串对象类型，且无业务价值）
+    df = df[df["dividend_per_share"].notna()].copy()
+    df = df.drop(columns=["dividend_text", "announce_date", "fiscal_year", "dividend_type"], errors="ignore")
+    df = df[["symbol", "report_date", "dividend_per_share"]].drop_duplicates(
+        subset=["symbol", "report_date"], keep="last"
+    )
+    return df
+
+
+def fetch_hk_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None:
+    """港股百度估值：总市值 + 市净率（长表，date/value 两列，与 A 股结构一致）。"""
+    hk = _hk_code(code)
+    try:
+        mcap = ak.stock_hk_valuation_baidu(symbol=hk, indicator="总市值", period=period)
+        pb = ak.stock_hk_valuation_baidu(symbol=hk, indicator="市净率", period=period)
+    except Exception:
+        return None
+    if mcap is None or mcap.empty or pb is None or pb.empty:
+        return None
+    mcap = mcap.copy()
+    pb = pb.copy()
+    mcap["indicator"] = "market_cap"
+    pb["indicator"] = "pb"
+    df = pd.concat([mcap, pb], ignore_index=True)
+    df = df.rename(columns={"date": "report_date"})
+    df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    df["symbol"] = hk
+    return df
+
+
+def _hkd_to_cny_apply(df: pd.DataFrame, money_cols: set[str]) -> pd.DataFrame:
+    """将港币金额列统一换算为人民币（汇率失败则原样返回，由上层标注）。"""
+    rate = _hkd_to_cny()
+    if rate <= 0:
+        return df
+    df = df.copy()
+    for c in money_cols.intersection(df.columns):
+        df[c] = pd.to_numeric(df[c], errors="coerce") * rate
+    return df
 
 
 def fetch_rating(code: str) -> pd.DataFrame | None:
@@ -297,4 +475,77 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
             comp = fetch_competition(code, annual_dates.max().strftime("%Y%m%d"))
             if comp is not None:
                 data["competition"] = comp
+    return data
+
+
+# 港股三表 + 财务指标中需要「港币 → 人民币」换算的金额列（元/股口径）
+_HK_MONEY_FIELDS = {
+    "operating_revenue", "operating_cost", "operating_profit", "total_profit", "net_profit",
+    "net_profit_parent", "income_tax", "sell_expense", "admin_expense", "interest_expense",
+    "total_assets", "total_liabilities", "total_equity", "total_equity_all",
+    "minority_interest", "current_assets", "current_liabilities", "retained_profit",
+    "inventory", "accounts_receivable", "monetary_funds", "accounts_payable",
+    "noncurrent_liabilities", "ocf", "icf", "fcf", "depreciation", "capital_expenditure",
+}
+
+
+def fetch_all_hk(code: str) -> dict[str, pd.DataFrame]:
+    """港股标的：三表（港币→人民币）+ 财务指标 + 估值 + 分红 + 行情。
+
+    与 A 股 fetch_all 输出同一套标准字段名，cleaner/adapter/build 全部复用。
+    股本不可靠（港股报表股本单位特殊），用 股东应占溢利 / 每股基本盈利 反推。
+    """
+    code = _hk_code(code)
+    rate = _hkd_to_cny()
+    rate_ok = rate > 0
+
+    ps = fetch_hk_profit_sheet(code)
+    bs = fetch_hk_balance_sheet(code)
+    cf = fetch_hk_cash_flow(code)
+    fi = fetch_hk_financial_indicator(code)
+
+    data: dict[str, pd.DataFrame] = {}
+
+    # 港币 → 人民币（三表金额列）
+    if rate_ok and not ps.empty:
+        ps = _hkd_to_cny_apply(ps, _HK_MONEY_FIELDS)
+    if rate_ok and not bs.empty:
+        bs = _hkd_to_cny_apply(bs, _HK_MONEY_FIELDS)
+    if rate_ok and not cf.empty:
+        cf = _hkd_to_cny_apply(cf, _HK_MONEY_FIELDS)
+
+    # 股本反推：share_capital = 股东应占溢利 / 每股基本盈利（人民币元）
+    # cleaner 会再 ÷1e8 转「亿元/亿股」，此处保持「元」口径对齐 A 股 share_capital
+    if not fi.empty and {"net_profit_parent", "eps"}.issubset(fi.columns):
+        hp = pd.to_numeric(fi["net_profit_parent"], errors="coerce")
+        eps = pd.to_numeric(fi["eps"], errors="coerce")
+        shares = (hp / eps.where(eps != 0)).where(eps != 0)  # 股
+        fi["share_capital"] = shares  # 元口径（面值1元，故=股数）
+        # 合并到 balance_sheet 供 cleaner 使用
+        if not bs.empty:
+            sc = fi[["report_date", "share_capital"]].copy()
+            bs = bs.merge(sc, on="report_date", how="left")
+
+    if not ps.empty:
+        data["profit_sheet"] = ps
+    if not bs.empty:
+        data["balance_sheet"] = bs
+    if not cf.empty:
+        data["cash_flow"] = cf
+    if not fi.empty:
+        data["financial_indicator"] = fi
+
+    dv = fetch_hk_dividend(code)
+    if dv is not None and not dv.empty:
+        # 每股股息已从分红文本提取为人民币口径，无需再换算
+        data["dividend"] = dv
+
+    val = fetch_hk_valuation(code)
+    if val is not None:
+        data["valuation"] = val
+
+    quote = fetch_quote(code, market="hk")
+    if quote is not None:
+        data["quote"] = quote
+
     return data

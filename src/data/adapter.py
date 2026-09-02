@@ -116,6 +116,18 @@ def _q_label(dt) -> str:
     return f"{y}Q{q}"
 
 
+def _period_label(dt, half_yearly: bool = False) -> str:
+    """report_date → 报告期标签；half_yearly=True 时 6 月/12 月显示 H1/H2（港股半年度）。"""
+    y = str(dt.year)[2:]
+    m = dt.month
+    if half_yearly and m == 6:
+        return f"{y}H1"
+    if half_yearly and m == 12:
+        return f"{y}H2"
+    q = (m - 1) // 3 + 1
+    return f"{y}Q{q}"
+
+
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
     """读 parquet 原始数据（含分业务构成 + 估值，最多 8 张表）。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
@@ -164,7 +176,9 @@ def build_template_data(code: str) -> dict:
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)
 
-    quarter_labels = [_q_label(d) for d in quarter["report_date"].tolist()]
+    # 港股半年度披露（无 Q1/Q3，只有 6 月/12 月）→ 标签用 H1/H2；A 股季报用 Q1-Q4
+    half_yearly = not (quarter["report_date"].dt.month.isin([3, 9]).any())
+    quarter_labels = [_period_label(d, half_yearly) for d in quarter["report_date"].tolist()]
     quarterly = _extract(quarter, QUARTER_SPEC)
 
     # 报告期 = 最新季度，如 2026Q1（用于 reports/ 归档目录）
@@ -214,6 +228,9 @@ def build_template_data(code: str) -> dict:
                 valuation["price_high"] = q["price_52w_high"]
             if q.get("price"):
                 valuation["price_now"] = q["price"]
+            # 港股：股息率由腾讯行情 f[47] 提供（分红接口无 dividend_yield_pct）
+            if q.get("dividend_yield") and q.get("dividend_yield") > 0:
+                valuation["dividend_yield"] = q["dividend_yield"]
 
     # 机构评级（东财盈利预测 + 评级分布，可选）
     rating = None

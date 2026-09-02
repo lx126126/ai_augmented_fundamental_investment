@@ -57,6 +57,16 @@ COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供�
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
+CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务已换算人民币，股价为港币）
+
+
+def _is_hk(code: str) -> bool:
+    """判断是否港股标的（带 .HK 后缀，或 0 开头 5 位码）。"""
+    c = str(code).upper()
+    if c.endswith(".HK"):
+        return True
+    bare = c.split(".")[0]
+    return bare.startswith("0") and len(bare) == 5
 
 
 def _fmt(v) -> str:
@@ -106,6 +116,9 @@ def build_quarter_table() -> str:
 
 
 def build_segments() -> str:
+    if not SEGMENTS:
+        return ('<div style="font-size:11px;color:var(--faint);padding:8px 0;">'
+                '分业务收入构成数据待接入（当前数据源暂未覆盖该标的）。</div>')
     n_periods = len(SEGMENTS[0][2]) if SEGMENTS else 0
 
     # 各期收入占比（该条线收入 / 当期总收入 × 100）
@@ -605,6 +618,8 @@ body {
 .co-meta { margin-top: 9px; font-size: 12px; color: var(--muted); line-height: 1.8; }
 .co-meta .tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; margin-right: 7px; border: 1px solid var(--line); background: var(--bg-soft); color: var(--muted); }
 .co-meta .code { font-weight: 600; color: var(--ink); }
+.currency-note { margin-top: 4px; font-size: 11px; color: var(--accent); }
+.currency-note:empty { display: none; }
 .header-right { text-align: right; flex-shrink: 0; margin-left: 16px; }
 .quarter { display: inline-block; background: var(--accent); color: #fff; padding: 6px 14px; border-radius: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; }
 .badges { margin-top: 9px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
@@ -818,6 +833,7 @@ TEMPLATE = """<!DOCTYPE html>
         <span class="code">@@COMPANY_CODE@@</span>
         <span class="tag">@@INDUSTRY@@</span>
         <div style="margin-top:3px;">报告期：@@REPORT_PERIOD@@ · 发布日期：@@PUBLISH_DATE@@</div>
+        <div class="currency-note">@@CURRENCY_NOTE@@</div>
       </div>
     </div>
     <div class="header-right">
@@ -939,7 +955,12 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088", daily: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE
+    # 货币口径：港股财务数据已换算人民币，但股价仍为港币，需标注避免误读
+    CURRENCY_NOTE = (
+        "港股标的 · 财务数据已按汇率换算为人民币，股价/市值为港币"
+        if _is_hk(code) else ""
+    )
     # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）。
     # 每日行情刷新（--daily）跳过：财务数据未变，PDF 校验/LLM 叙事无需重跑，只更新估值板块。
     RECONCILE_LOG = ([] if daily else _reconcile(code)) if _HAS_DATA else []
@@ -953,6 +974,10 @@ def build(code: str = "601088", daily: bool = False) -> None:
         if real["segments"]:
             SEGMENT_LABELS = real["segment_labels"]
             SEGMENTS = real["segments"]
+        else:
+            # 无分业务构成数据（如港股标的）时清空，避免 fallback 到神华示例数据
+            SEGMENT_LABELS = []
+            SEGMENTS = []
         VALUATION = real["valuation"]
         GRAHAM = real["graham"]
         RATING = real.get("rating")
@@ -1008,6 +1033,7 @@ def build(code: str = "601088", daily: bool = False) -> None:
         .replace("@@INDUSTRY@@", industry)
         .replace("@@REPORT_PERIOD@@", report_period)
         .replace("@@PUBLISH_DATE@@", publish_date)
+        .replace("@@CURRENCY_NOTE@@", CURRENCY_NOTE)
         .replace("@@LYNCH_TYPE@@", lynch_type)
         .replace("@@GRAHAM_BADGE@@", graham_badge)
     )
