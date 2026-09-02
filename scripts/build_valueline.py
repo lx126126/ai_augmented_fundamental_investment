@@ -17,10 +17,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # 尝试导入数据适配层（可选，无 parquet 数据时降级为示例数据）
 try:
-    from src.data.adapter import build_template_data
+    from src.data.adapter import build_template_data, _norm_code
     _HAS_DATA = True
 except Exception:
     _HAS_DATA = False
+    _norm_code = None
 
 # 尝试导入 LLM 叙事层生成（可选，无 key 时降级为占位）
 try:
@@ -987,6 +988,9 @@ def build(code: str = "601088", daily: bool = False) -> None:
         "港股标的 · 财务数据已按汇率换算为人民币，股价/市值为港币"
         if _is_hk(code) else ""
     )
+    # 代码规范化（港股 00700.HK→00700）：归档文件名与 parquet 目录统一为 5 位纯数字
+    if _norm_code:
+        code = _norm_code(code)
     # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）。
     # 每日行情刷新（--daily）跳过：财务数据未变，PDF 校验/LLM 叙事无需重跑，只更新估值板块。
     RECONCILE_LOG = ([] if daily else _reconcile(code)) if _HAS_DATA else []

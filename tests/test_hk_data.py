@@ -21,6 +21,21 @@ def test_hk_code_case_insensitive():
     assert _hk_code("00700.HK") == "00700"
 
 
+def test_adapter_norm_code_hk():
+    """adapter._norm_code 与 fetcher._hk_code 港股规范化对齐（00700.HK→00700）。"""
+    from src.data.adapter import _norm_code
+    assert _norm_code("00700.HK") == "00700"
+    assert _norm_code("09992.HK") == "09992"
+    assert _norm_code("09992") == "09992"
+
+
+def test_adapter_norm_code_a_share():
+    """A 股代码 zfill 6（601088 不变，688 补零）。"""
+    from src.data.adapter import _norm_code
+    assert _norm_code("601088") == "601088"
+    assert _norm_code("688") == "000688"
+
+
 def test_extract_hk_dividend_rmb_priority():
     # 优先取人民币口径
     assert _extract_hk_dividend("每股派人民币0.8146元(相当于港币0.8881元)") == 0.8146

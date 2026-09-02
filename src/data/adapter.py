@@ -19,6 +19,20 @@ from ..analysis.fraud import fraud_check
 SEGMENT_PALETTE = ["#378ADD", "#E24B4A", "#BA7517", "#888780", "#5B8FF9", "#F6903D", "#61A0A8", "#9270CA"]
 
 
+def _norm_code(code: str) -> str:
+    """代码规范化：港股剥 .HK 后缀 zfill 5（如 00700.HK→00700），A 股 zfill 6（601088）。
+
+    与 fetcher._hk_code 同构，但避免循环导入，独立实现。
+    """
+    c = str(code).upper().strip()
+    if c.endswith(".HK"):
+        return c[:-3].zfill(5)
+    bare = c.split(".")[0]
+    if bare.startswith("0") and len(bare) == 5:
+        return bare.zfill(5)
+    return bare.zfill(6)
+
+
 # ---------------------------------------------------------------------------
 # 字段映射：(分组, 模板指标名, 宽表字段名, 小数位)
 # ---------------------------------------------------------------------------
@@ -146,6 +160,7 @@ def build_template_data(code: str) -> dict:
     返回 keys:
       years, financials, quarter_labels, quarterly
     """
+    code = _norm_code(code)  # 港股 00700.HK→00700，与 fetch_stock 存储目录对齐
     raw = load_raw(code)
     required = {"financial_indicator", "profit_sheet", "balance_sheet", "cash_flow"}
     if not required.issubset(raw.keys()):
