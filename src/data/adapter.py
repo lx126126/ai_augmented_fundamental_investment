@@ -284,7 +284,7 @@ def build_template_data(code: str) -> dict:
 
 
 def _build_rating(raw_rating: pd.DataFrame) -> dict | None:
-    """机构评级分布 + 未来3年预测每股收益（东财盈利预测口径）。"""
+    """机构评级分布 + 未来几年预测每股收益 + 目标价（东财 A 股 / 经济通港股同构）。"""
     if raw_rating is None or raw_rating.empty:
         return None
     r = raw_rating.iloc[0]
@@ -297,6 +297,9 @@ def _build_rating(raw_rating: pd.DataFrame) -> dict | None:
         "sell": _clean(r.get("rating_sell")),
         "eps_forecast": [],
     }
+    # 目标价（港股经济通有；A 股东财盈利预测无此列，返回 None）
+    if "target_price" in raw_rating.columns:
+        rating["target_price"] = _clean(r.get("target_price"))
     for col in raw_rating.columns:
         if str(col).startswith("eps_"):
             val = _clean(r.get(col))
@@ -306,9 +309,35 @@ def _build_rating(raw_rating: pd.DataFrame) -> dict | None:
 
 
 def _build_competition(raw_comp: pd.DataFrame, code: str) -> dict | None:
-    """竞争地位：行业营收排名 + 营收份额 + 同行对比（东财业绩报表口径）。"""
+    """竞争地位：行业营收排名 + 营收份额 + 同行对比（东财业绩报表口径）。
+
+    A 股走东财业绩报表（revenue_yi/name/symbol 多行）→ 算排名/份额/同行；
+    港股走公司概况（industry/company_intro 单行，无营收排名）→ 简化为行业定位。
+    """
     if raw_comp is None or raw_comp.empty:
         return None
+
+    # 港股简化路径：只有行业 + 公司介绍（无全市场营收接口）
+    if "revenue_yi" not in raw_comp.columns:
+        r = raw_comp.iloc[0]
+        industry = r.get("industry")
+        intro = r.get("company_intro")
+        if not industry and not intro:
+            return None
+        return {
+            "industry": str(industry).strip() if industry else None,
+            "report_year": None,
+            "rank": None,
+            "peers_count": None,
+            "revenue_yi": None,
+            "industry_revenue": None,
+            "share_pct": None,
+            "top_peers": [],
+            "company_intro": str(intro).strip() if intro else None,
+            "is_hk": True,
+        }
+
+    # A 股路径：全行业营收排名
     df = raw_comp.dropna(subset=["revenue_yi"]).copy()
     if df.empty:
         return None

@@ -46,3 +46,7 @@ Thumbs.db
 
 # 投研日记（内部操作层：买卖/仓位/成本/决策心理，严禁入库）
 journal/
+
+# 假设台账（主观判断：假设/验证/打脸/归因，严禁入库）
+# 保留 watchlist/watchlist.example.json（跟踪池配置，客观研究范围）
+watchlist/reviews/

@@ -386,6 +386,83 @@ def fetch_rating(code: str) -> pd.DataFrame | None:
     return row.reset_index(drop=True)
 
 
+def fetch_hk_rating(code: str) -> pd.DataFrame | None:
+    """港股机构评级：经济通券商逐条评级 → 聚合为五档分布 + 预测 EPS + 目标价。
+
+    数据源 stock_hk_profit_forecast_et（etnet 经济通，港股券商预测），
+    逐条含 财政年度/纯利/每股盈利/每股派息/证券商/评级/目标价/更新日期。
+    港股评级体系（买入/增持/优于大市/跑赢行业/中性/持有/减持/沽出）映射到
+    与 A 股 fetch_rating 一致的五档（rating_buy/overweight/neutral/underweight/sell），
+    使 adapter._build_rating 直接复用。
+    """
+    try:
+        df = ak.stock_hk_profit_forecast_et(symbol=_hk_code(code), indicator="盈利预测概览")
+    except Exception:
+        return None
+    if df is None or df.empty or "评级" not in df.columns:
+        return None
+
+    df = df.copy()
+    # 剔除无评级样本（"--" 表示券商未给评级）
+    r = df["评级"].astype(str).str.strip()
+    df = df[r != "--"]
+    if df.empty:
+        return None
+
+    # 港股评级 → 标准五档（港股「优于大市/跑赢行业」≈ A 股「增持」）
+    def _bucket(v: str) -> str:
+        v = str(v).strip()
+        if v in ("买入", "强烈买入"):
+            return "buy"
+        if v in ("增持", "优于大市", "跑赢行业", "跑赢大市"):
+            return "overweight"
+        if v in ("持有", "中性", "与大市同步"):
+            return "neutral"
+        if v == "减持":
+            return "underweight"
+        if v in ("沽出", "卖出", "强烈卖出"):
+            return "sell"
+        return None
+
+    df["bucket"] = df["评级"].map(_bucket)
+    df = df[df["bucket"].notna()]
+    if df.empty:
+        return None
+
+    counts = df["bucket"].value_counts().to_dict()
+
+    # 预测 EPS：按财政年度分组取均值（每股盈利单位「分」，即 0.01 元 → 转元）
+    eps_forecast = []
+    if "每股盈利" in df.columns and "财政年度" in df.columns:
+        eps = pd.to_numeric(df["每股盈利"], errors="coerce")
+        for year, grp in df.groupby("财政年度", sort=True):
+            e = eps[grp.index].mean()
+            if pd.notna(e):
+                eps_forecast.append({"year": str(year), "eps": round(float(e) / 100, 3)})
+
+    target_price = None
+    if "目标价" in df.columns:
+        tp = pd.to_numeric(df["目标价"], errors="coerce")
+        if tp.notna().any():
+            target_price = round(float(tp.mean()), 2)
+
+    row = {
+        "symbol": _hk_code(code),
+        "name": "",
+        "rating_total": int(len(df)),
+        "rating_buy": int(counts.get("buy", 0)),
+        "rating_overweight": int(counts.get("overweight", 0)),
+        "rating_neutral": int(counts.get("neutral", 0)),
+        "rating_underweight": int(counts.get("underweight", 0)),
+        "rating_sell": int(counts.get("sell", 0)),
+        "target_price": target_price,
+    }
+    for e in eps_forecast:
+        row[f"eps_{e['year']}"] = e["eps"]
+
+    return pd.DataFrame([row])
+
+
 def fetch_profile(code: str) -> pd.DataFrame | None:
     """巨潮公司概况：主营业务 / 经营范围（业务版图的客观文字支撑）。
 
@@ -403,6 +480,27 @@ def fetch_profile(code: str) -> pd.DataFrame | None:
         "symbol": code.zfill(6),
         "main_business": r.get("主营业务"),
         "business_scope": r.get("经营范围"),
+    }])
+
+
+def fetch_hk_profile(code: str) -> pd.DataFrame | None:
+    """港股公司概况：所属行业（恒生分类）+ 公司介绍（竞争地位/业务版图的客观支撑）。
+
+    数据源 stock_hk_company_profile_em（东财 datacenter，港股 F10）。
+    港股无「全市场营收排名」接口（东财业绩报表 stock_yjbb_em 是 A 股专用），
+    故港股竞争地位降级为「行业定位 + 公司介绍」，不提供行业排名/营收份额。
+    """
+    try:
+        raw = ak.stock_hk_company_profile_em(symbol=_hk_code(code))
+    except Exception:
+        return None
+    if raw is None or raw.empty:
+        return None
+    r = raw.iloc[0]
+    return pd.DataFrame([{
+        "symbol": _hk_code(code),
+        "industry": r.get("所属行业"),
+        "company_intro": r.get("公司介绍"),
     }])
 
 
@@ -547,5 +645,14 @@ def fetch_all_hk(code: str) -> dict[str, pd.DataFrame]:
     quote = fetch_quote(code, market="hk")
     if quote is not None:
         data["quote"] = quote
+
+    rating = fetch_hk_rating(code)
+    if rating is not None:
+        data["rating"] = rating
+
+    # 竞争地位（港股降级：行业定位 + 公司介绍，无营收排名）
+    hk_profile = fetch_hk_profile(code)
+    if hk_profile is not None:
+        data["competition"] = hk_profile
 
     return data

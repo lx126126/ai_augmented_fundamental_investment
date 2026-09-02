@@ -147,8 +147,8 @@ def generate_narrative(data: dict) -> dict | None:
         return None
 
 
-def _build_hypotheses_prompt(data: dict) -> str:
-    """把财务数据摘要转成「可证伪假设」生成 prompt。"""
+def _build_market_view_prompt(data: dict) -> str:
+    """把财务/估值数据转成「市场在交易什么（多空）」生成 prompt。"""
     seg_text = "\n".join(
         f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
         for s in data.get("segments", [])
@@ -159,16 +159,28 @@ def _build_hypotheses_prompt(data: dict) -> str:
         for item in data.get("recent", [])
     ) or "（无历史数据）"
 
+    comp = data.get("competition") or {}
+    comp_text = ""
+    if comp:
+        comp_text = (
+            f"行业第 {comp.get('rank', 'N/A')}/{comp.get('peers_count', 'N/A')} 家，"
+            f"营收份额 {comp.get('share_pct', 'N/A')}%"
+        )
+    else:
+        comp_text = "（无行业竞争地位数据）"
+
     val = data.get("valuation") or {}
 
-    return f"""你是资深 A 股基本面分析师，遵循格雷厄姆（安全边际/财务稳健）+ 彼得林奇（六类公司）方法论。
+    return f"""你是资深 A 股基本面分析师，遵循格雷厄姆 + 彼得林奇方法论。
 
-以下是【真实财务数据】。请基于这些数据生成 2-3 条「可证伪的投研假设」——即复盘层要跟踪的判断。
-**铁律：假设必须可证伪、带量化阈值，严禁编造数据之外的任何数字、行业排名、市场份额。**
+以下是【真实财务数据】。请分析「当前价格下，市场多头和空头分别在交易什么」——
+即为什么现在市场给这个价，看多的人在赌什么、看空的人在担心什么。
+**铁律：只能基于下方数据推演，严禁编造数据之外的任何数字、事件、传闻、目标价。**
 
 === 公司 ===
 公司名：{data.get('name', '')}
 代码：{data.get('code', '')}
+主营业务：{data.get('main_business', 'N/A')}
 
 === 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
 营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
@@ -177,7 +189,6 @@ def _build_hypotheses_prompt(data: dict) -> str:
 净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
 ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 资产负债率：{data.get('latest', {}).get('debt_ratio', 'N/A')}%
-经营现金流净额：{data.get('latest', {}).get('ocf', 'N/A')} 亿元
 
 === 近5年营收/净利趋势 ===
 {recent}
@@ -185,41 +196,37 @@ ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 === 分业务收入构成 ===
 {seg_text}
 
+=== 行业竞争地位 ===
+{comp_text}
+
 === 估值 ===
 PE：{val.get('pe', 'N/A')}（近10年分位 {val.get('pe_pctile', 'N/A')}%）
 PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 股息率：{data.get('dividend_yield', 'N/A')}%
 分红比例：{data.get('dividend_payout', 'N/A')}%
 
-请输出以下 JSON（不要输出 JSON 之外的内容）：
+请输出以下 JSON（不要输出 JSON 之外的内容，所有文字用中文）：
 
 {{
-  "hypotheses": [
-    {{
-      "statement": "可证伪判断（必须带量化阈值或明确方向，如「毛利率守住30%以上」「营收增速转正」）",
-      "metric": "用什么指标验证这条判断（如 销售毛利率 / 营业收入同比）",
-      "confidence": "高 / 中高 / 中",
-      "basis": "判断依据（严格基于上述数据，30字内）"
-    }}
-  ]
+  "bull_case": "多头在交易什么：当前价格下看多方押注的核心逻辑（1-2句，50字内，紧扣估值/成长/分红数据）",
+  "bear_case": "空头在交易什么：当前价格下看空方担心的核心风险（1-2句，50字内，紧扣估值分位/增速/现金流数据）",
+  "watch_points": ["重点关注1", "重点关注2", "重点关注3"]
 }}
 
 要求：
-1. 2-3 条，覆盖不同维度（盈利质量 / 成长性 / 估值 / 现金流），不要重复。
-2. statement 必须可证伪：半年后能明确判定对或错，禁止「长期看好」「有护城河」「质地优良」这类永远正确的空话。
-3. statement 用陈述句断言（如「毛利率守住30%以上」「营收增速转正」），严禁「能否」「是否」等疑问措辞。
-4. 每条 statement 控制在 25 字内，metric 10 字内。
-5. 严禁编造数据之外的数字。"""
+1. bull_case 和 bear_case 各 1-2 句，具体、有数据支撑，不要空话。
+2. watch_points 给 3 条，每条 15-25 字，是「下季度该盯哪些数据/事件」可操作清单。
+3. 严禁编造数据之外的任何数字、目标价、事件。"""
 
 
-def generate_hypotheses(data: dict) -> list[dict] | None:
-    """基于财务数据生成可证伪假设草稿（供人工改）。失败返回 None。"""
+def generate_market_view(data: dict) -> dict | None:
+    """基于数据生成「市场多空视角 + 重点关注」草稿（第三方视角，非本人观点）。失败返回 None。"""
     cfg = _load_config()
     if not cfg:
-        print("[llm] 未配置 DEEPSEEK_API_KEY，跳过假设草稿生成")
+        print("[llm] 未配置 DEEPSEEK_API_KEY，跳过多空视角生成")
         return None
     key, model, base = cfg
-    prompt = _build_hypotheses_prompt(data)
+    prompt = _build_market_view_prompt(data)
     try:
         r = requests.post(
             f"{base}/chat/completions",
@@ -231,14 +238,114 @@ def generate_hypotheses(data: dict) -> list[dict] | None:
                     {"role": "user", "content": prompt},
                 ],
                 "response_format": {"type": "json_object"},
-                "max_tokens": 1200,
+                "max_tokens": 800,
                 "temperature": 0.3,
             },
             timeout=90,
         )
         r.raise_for_status()
         content = r.json()["choices"][0]["message"]["content"]
-        return json.loads(content).get("hypotheses", [])
+        return json.loads(content)
     except Exception as e:
-        print(f"[llm] 生成假设草稿失败: {e}")
+        print(f"[llm] 生成多空视角失败: {e}")
         return None
+
+
+def generate_action_advice(data: dict) -> dict | None:
+    """基于数据生成「AI 操作建议草稿」（私有日记决策参考，非本人操作、非荐股）。失败返回 None。"""
+    cfg = _load_config()
+    if not cfg:
+        print("[llm] 未配置 DEEPSEEK_API_KEY，跳过操作建议生成")
+        return None
+    key, model, base = cfg
+    prompt = _build_action_prompt(data)
+    try:
+        r = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你是资深价值投资者，只输出 JSON，不输出任何其他内容。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": {"type": "json_object"},
+                "max_tokens": 800,
+                "temperature": 0.3,
+            },
+            timeout=90,
+        )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except Exception as e:
+        print(f"[llm] 生成操作建议失败: {e}")
+        return None
+
+
+def _build_action_prompt(data: dict) -> str:
+    """把财务/估值/风险数据转成「AI 操作建议草稿」生成 prompt。
+
+    定位：操作建议是私有投研日记的「决策参考」，由 AI 基于客观数据推演，
+    只供本人（潇姐）参考拍板，绝不进公开报告。铁律：不编数、不给精确买卖点位
+    （只给方向性判断 + 触发条件 + 风险提示），并明确这是 AI 生成、非本人决策。
+    """
+    val = data.get("valuation") or {}
+    comp = data.get("competition") or {}
+
+    comp_text = ""
+    if comp:
+        comp_text = (
+            f"所属行业：{comp.get('industry', 'N/A')}，营收行业第 {comp.get('rank', 'N/A')}"
+            f"/{comp.get('peers_count', 'N/A')} 家，营收份额 {comp.get('share_pct', 'N/A')}%"
+        )
+    else:
+        comp_text = "（无行业竞争地位数据）"
+
+    return f"""你是资深价值投资者，遵循格雷厄姆（安全边际）+ 彼得林奇（六类公司）方法论。
+
+以下是【真实财务数据】。请基于这些数据，为「我本人」生成一份投资决策参考草稿——
+帮我把「读了一页报告」落到「到底该怎么操作」的思考框架。
+
+**铁律：**
+1. 只能基于下方数据推演，严禁编造数据之外的任何数字、事件、目标价。
+2. 不给精确买卖点位（如「XX 元买入」），只给方向性判断 + 触发条件 + 风险提示。
+3. 你是 AI 辅助，你的结论是「参考」不是「指令」，措辞用「可考虑/需警惕/建议关注」而非命令式。
+
+=== 公司 ===
+公司名：{data.get('name', '')}
+代码：{data.get('code', '')}
+主营业务：{data.get('main_business', 'N/A')}
+林奇分类：{data.get('lynch_type', 'N/A')}
+
+=== 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
+营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
+毛利率：{data.get('latest', {}).get('gross_margin', 'N/A')}%
+净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
+ROE：{data.get('latest', {}).get('roe', 'N/A')}%
+资产负债率：{data.get('latest', {}).get('debt_ratio', 'N/A')}%
+
+=== 估值 ===
+PE：{val.get('pe', 'N/A')}（近10年分位 {val.get('pe_pctile', 'N/A')}%）
+PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
+股息率：{data.get('dividend_yield', 'N/A')}%
+
+=== 行业竞争地位 ===
+{comp_text}
+
+请输出以下 JSON（不要输出 JSON 之外的内容，所有文字用中文）：
+
+{{
+  "stance": "一句话结论（如「偏谨慎：估值处于历史高位，等待回调」或「可关注：成长消化估值，逢低分批」），20字内",
+  "trigger_buy": "什么条件下可考虑买入/加仓（量化触发条件，如「PE 分位回到 50% 以下且股息率 >5%」）",
+  "trigger_sell": "什么条件下可考虑卖出/减仓（量化触发条件）",
+  "position_hint": "仓位建议方向（如「轻仓试错」「分批建仓」「观望不追高」，一句话）",
+  "risk_reminder": "最需要警惕的风险（1-2句，紧扣数据）",
+  "next_check": "下次重点复核哪个数据/信号（一句话）"
+}}
+
+要求：
+1. 每条 15-40 字，具体、可执行、可证伪，不要空话套话。
+2. 触发条件必须带量化阈值（基于给出的 PE/PB/股息率/分位等数据），不要「合理价位」「耐心等待」这类模糊表述。
+3. 全程是「参考框架」，帮本人把数据落到决策，不是替本人下单。"""

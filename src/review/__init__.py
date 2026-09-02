@@ -1,20 +1,8 @@
-"""复盘层：假设台账（可证伪判断）的读写与生命周期管理。
+"""投研决策辅助：林奇六类公司 → 该看什么核心指标的映射。
 
-公开版展示「上季假设 → 本季实际 → 验证/打脸」闭环；
-投研日记（操作层）单独存放于 journal/，绝不进公开版。
+轻量投资日记（journal/）用此模块自动推导「这类公司该盯哪些数」。
 """
 
-from .ledger import (
-    VERDICTS,
-    VERDICT_LABEL,
-    load_latest,
-    load_period,
-    latest_period,
-    new_ledger,
-    save_period,
-)
+from .lynch import classify, metrics_for
 
-__all__ = [
-    "VERDICTS", "VERDICT_LABEL",
-    "new_ledger", "save_period", "load_period", "load_latest", "latest_period",
-]
+__all__ = ["classify", "metrics_for"]

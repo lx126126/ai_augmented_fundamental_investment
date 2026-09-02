@@ -259,10 +259,16 @@ def build_consensus() -> str:
     eps_txt = " / ".join(f"{e['year']} {e['eps']:.2f}" for e in eps if e.get("eps") is not None)
     eps_line = f'<div style="margin-top:5px;">预测每股收益：{eps_txt} 元</div>' if eps_txt else ""
 
+    # 目标价（港股经济通有，A 股无）
+    tp = r.get("target_price")
+    tp_line = ""
+    if tp is not None:
+        tp_line = f'<div style="margin-top:5px;">券商目标价均值：{tp:.2f}（第三方观点）</div>'
+
     return (
         '<div class="consensus">'
         f'<div>机构评级（近6个月 · <b>{int(total)}家</b>）</div>'
-        + bar + eps_line
+        + bar + eps_line + tp_line
         + '<div style="font-size:10px;color:var(--faint);margin-top:5px;">第三方机构观点汇总，非本人建议。</div>'
         "</div>"
     )
@@ -416,10 +422,29 @@ def build_business_model() -> str:
 
 
 def build_competition() -> str:
-    """竞争地位（客观数据）：行业营收排名 + 份额 + 同行对比。"""
+    """竞争地位（客观数据）：行业营收排名 + 份额 + 同行对比。
+
+    港股降级：无全市场营收排名接口，仅展示行业定位 + 公司介绍。
+    """
     if not COMPETITION:
         return ""
     c = COMPETITION
+
+    # 港股简化版：行业定位 + 公司介绍（无排名/份额/同行）
+    if c.get("is_hk"):
+        industry = c.get("industry") or "—"
+        intro = c.get("company_intro") or ""
+        intro_html = f'<div class="comp-intro">{intro}</div>' if intro else ""
+        return (
+            '<div class="competition">'
+            f'<div class="comp-title">竞争地位 · {industry}'
+            '<span class="comp-note">港股行业分类（恒生），营收排名数据源缺失</span></div>'
+            + intro_html
+            + '<div class="comp-note" style="margin-top:6px;">港股暂无全市场营收排名接口，'
+              '仅展示行业定位与公司介绍。</div>'
+            "</div>"
+        )
+
     industry = c.get("industry") or "—"
     year = c.get("report_year")
     rank = c.get("rank")
@@ -673,6 +698,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .competition { margin-top: 14px; padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; }
 .comp-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; }
 .comp-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.comp-intro { font-size: 11px; line-height: 1.6; color: var(--muted); margin-top: 8px; }
 .comp-grid { display: flex; gap: 12px; margin: 10px 0; }
 .comp-item { flex: 1; padding: 9px 12px; background: #fff; border: 1px solid var(--line-soft); border-radius: 6px; }
 .comp-item .lbl { font-size: 10px; color: var(--muted); }

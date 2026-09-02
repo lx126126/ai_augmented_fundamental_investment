@@ -82,7 +82,7 @@ flowchart TB
 │   ├── report/        # 报告层：llm（DeepSeek 叙事，结构化输出）
 │   ├── validation/    # 数据验证：cninfo（巨潮下载）/ pdf_parser（pymupdf）/ validator（金标准交叉校验）/ whitelist
 │   ├── api/           # 后端：query（DuckDB 只读查询）/ main（FastAPI 7 端点）
-│   └── review/        # 复盘层：ledger（假设台账生命周期）
+│   └── review/        # 投研决策辅助：lynch（林奇六类 → 该看什么指标映射）
 ├── airflow/
 │   ├── dags/valueline_pipeline.py  # 五阶段 ETL 编排（拉取→校验→渲染→数仓→导出）
 │   ├── docker-compose.yaml         # 容器化运行
@@ -92,8 +92,7 @@ flowchart TB
 │   ├── build_valueline.py # 渲染 ValueLine 一页报告
 │   ├── build_web_index.py # 生成手机网页版首页（数据驱动）
 │   ├── export.py          # HTML → PNG / PDF
-│   ├── review.py          # 复盘验证引擎
-│   └── journal.py         # 投研日记（内部操作层）
+│   └── journal.py         # 投研日记（内部操作层，含 AI 操作建议）
 ├── tests/                     # 测试套件（单元 + 集成）
 │   ├── test_cleaner.py        # 清洗层（银行股兼容 / 净利率兜底 / 派生指标）
 │   ├── test_fraud.py          # 造假检测（M-Score / 审计意见非标一票否决）
@@ -111,7 +110,7 @@ flowchart TB
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
 ├── reports/                   # 报告归档（按季度）
 ├── web/                       # 手机网页版入口（index.html，上下滑动浏览）
-├── watchlist/                 # 跟踪池 + 假设台账
+├── watchlist/                 # 跟踪池（客观研究范围）
 └── README.md
 ```
 

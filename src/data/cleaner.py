@@ -368,7 +368,8 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     - PB / 市值：百度估值直接给（近十年）
     - PE = 最新总市值 / 最新年报归母净利
     - 52周股价 = 近一年市值 min/max ÷ 总股本
-    - 分位：PB 用 PB 序列；PE 用市值分位近似（净利短期稳定）
+    - 分位：PB 用 PB 序列；PE 用历史 PE 序列（历史市值 ÷ 同期已披露净利，
+      forward-fill 年报净利到每个市值采样日），避免「市值增长」被误判为「估值贵」。
     """
     mcap = valuation[valuation["indicator"] == "market_cap"].sort_values("report_date")
     pb = valuation[valuation["indicator"] == "pb"].sort_values("report_date")
@@ -397,7 +398,7 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
 
     # 分位（当前值在历史序列中的百分位）
     pb_pctile = (pb["value"] < pb_now).mean() * 100
-    pe_pctile = (mcap["value"] < mcap_now).mean() * 100
+    pe_pctile = _pe_pctile(mcap, annual)
 
     return {
         "pe": pe,
@@ -409,3 +410,38 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
         "pe_pctile": pe_pctile,
         "pb_pctile": pb_pctile,
     }
+
+
+def _pe_pctile(mcap: pd.DataFrame, annual: pd.DataFrame) -> float | None:
+    """PE 近10年分位：用「历史市值 ÷ 同期已披露归母净利」构造历史 PE 序列。
+
+    市值是日频序列，净利是年报低频序列——把年报净利按 report_date 升序
+    forward-fill 到每个市值采样日（该日市场只看得见已披露的最近年报净利），
+    再算 PE = 市值/净利，当前 PE 在历史 PE 序列中的百分位。
+
+    缺陷规避：不再用「市值分位」近似（市值因公司成长天然右移，会把
+    「公司变大」误判成「估值变贵」，导致成熟白马股 PE 分位常年 99%+）。
+    """
+    if "net_profit_parent" not in annual.columns:
+        return None
+    np_annual = annual[["report_date", "net_profit_parent"]].dropna(
+        subset=["net_profit_parent"]
+    ).sort_values("report_date")
+    if np_annual.empty:
+        return None
+
+    # 市值日频序列 → 关联「该日已披露的最近年报净利」（merge_asof 向后取 <= 日期）
+    mcap_sorted = mcap[["report_date", "value"]].sort_values("report_date")
+    merged = pd.merge_asof(
+        mcap_sorted,
+        np_annual[["report_date", "net_profit_parent"]],
+        on="report_date",
+        direction="backward",
+    )
+    pe_series = merged["value"] / merged["net_profit_parent"]
+    pe_series = pe_series[merged["net_profit_parent"] > 0]  # 剔除净利非正的样本
+
+    if pe_series.empty:
+        return None
+    pe_now = pe_series.iloc[-1]
+    return float((pe_series < pe_now).mean() * 100)
