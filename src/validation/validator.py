@@ -15,7 +15,9 @@ from .cninfo import download_annual_report
 from .pdf_parser import (
     PDF_FIELD_ALIASES,
     parse_balance_sheet,
+    parse_cash_flow_statement,
     parse_financials_by_year,
+    parse_income_statement,
     parse_key_financials,
 )
 
@@ -282,3 +284,120 @@ def load_reconcile_log(code: str, year: int,
         return data.get("items", [])
     except (json.JSONDecodeError, OSError):
         return []
+
+
+# ---------------------------------------------------------------------------
+# 三表 reconcile（利润表 / 现金流量表 / 资产负债表）
+# ---------------------------------------------------------------------------
+
+# 各表标签（用于覆盖记录展示）
+_INCOME_LABEL = {
+    "operating_revenue": "营业收入", "operating_cost": "营业成本",
+    "operating_profit": "营业利润", "total_profit": "利润总额",
+    "net_profit": "净利润", "net_profit_parent": "归母净利润",
+    "sell_expense": "销售费用", "admin_expense": "管理费用",
+    "interest_expense": "财务费用", "income_tax": "所得税费用",
+}
+_CASH_FLOW_LABEL = {
+    "ocf": "经营现金流净额", "icf": "投资现金流净额", "fcf": "筹资现金流净额",
+    "capital_expenditure": "资本开支", "depreciation": "固定资产折旧",
+}
+
+
+def _reconcile_statement(code: str, year: int, table: str, parser, pdf_dir, data_dir) -> list[dict]:
+    """通用单表 reconcile：PDF 金标准 vs 接口 parquet，差异 >1% 覆盖写回。
+
+    table: 'profit_sheet' / 'cash_flow' / 'balance_sheet'
+    parser: parse_income_statement / parse_cash_flow_statement / parse_balance_sheet
+    返回覆盖记录 [{field, label, api_yi, pdf_yi, diff_pct}]。
+    """
+    pdf_path = Path(pdf_dir) / f"{code}_{year}年报.pdf"
+    if not pdf_path.exists():
+        pdf_path = download_annual_report(code, year, Path(pdf_dir))
+    golden = parser(pdf_path)
+    if not golden:
+        return []
+
+    parquet_path = Path(data_dir) / code / f"{table}.parquet"
+    if not parquet_path.exists():
+        return []
+    df = pd.read_parquet(parquet_path)
+
+    d = pd.to_datetime(df["report_date"])
+    mask = (d.dt.year == year) & (d.dt.month == 12)
+    if not mask.any():
+        return []
+    idx = df[mask].index[0]
+
+    corrections: list[dict] = []
+    for field, pdf_val in golden.items():
+        if field not in df.columns or pdf_val is None:
+            continue
+        api_val = df.at[idx, field]
+        if pd.isna(api_val):
+            continue
+        if pdf_val == 0 and api_val == 0:
+            continue
+        diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
+        if diff > RECONCILE_TOLERANCE_PCT:
+            df.at[idx, field] = pdf_val
+            label = _INCOME_LABEL.get(field, _CASH_FLOW_LABEL.get(field, field))
+            corrections.append({
+                "field": field, "label": label,
+                "api_yi": api_val / 1e8, "pdf_yi": pdf_val / 1e8, "diff_pct": diff,
+            })
+
+    if corrections:
+        df.to_parquet(parquet_path, index=False)
+    return corrections
+
+
+def reconcile_income_statement(code: str, year: int,
+                               data_dir: str | Path = "data/raw",
+                               pdf_dir: str | Path = "data/validation") -> list[dict]:
+    """利润表 PDF 金标准 reconcile（差异 >1% 覆盖写回 profit_sheet.parquet）。"""
+    return _reconcile_statement(code, year, "profit_sheet", parse_income_statement,
+                                pdf_dir, data_dir)
+
+
+def reconcile_cash_flow(code: str, year: int,
+                        data_dir: str | Path = "data/raw",
+                        pdf_dir: str | Path = "data/validation") -> list[dict]:
+    """现金流量表 PDF 金标准 reconcile（差异 >1% 覆盖写回 cash_flow.parquet）。"""
+    return _reconcile_statement(code, year, "cash_flow", parse_cash_flow_statement,
+                                pdf_dir, data_dir)
+
+
+def reconcile_all(code: str, year: int,
+                  data_dir: str | Path = "data/raw",
+                  pdf_dir: str | Path = "data/validation") -> dict:
+    """三表全量 reconcile：利润表 + 现金流量表 + 资产负债表，统一覆盖写回 + 落盘记录。
+
+    返回 {code, year, corrections: {表: [覆盖记录]}}。
+    覆盖记录持久化到 data/validation/{code}_{year}_reconcile.json（合并三表）。
+    """
+    import json
+
+    result: dict[str, list[dict]] = {}
+    for table, fn in (("profit_sheet", reconcile_income_statement),
+                      ("cash_flow", reconcile_cash_flow),
+                      ("balance_sheet", reconcile_balance_sheet)):
+        try:
+            corrections = fn(code, year, data_dir, pdf_dir)
+        except Exception:
+            corrections = []
+        if corrections:
+            result[table] = corrections
+
+    # 落盘合并记录（供报告「数据校验」区展示）
+    if result:
+        items = [
+            {"table": t, **it}
+            for t, corrs in result.items()
+            for it in corrs
+        ]
+        log_path = Path(pdf_dir) / f"{code}_{year}_reconcile.json"
+        log_path.write_text(
+            json.dumps({"code": code, "year": year, "items": items},
+                       ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"code": code, "year": year, "corrections": result}

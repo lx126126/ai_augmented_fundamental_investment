@@ -354,3 +354,199 @@ def parse_balance_sheet(pdf_path: str | Path) -> dict[str, float]:
     if not pages_text:
         return {}
     return _parse_balance_sheet_lines(pages_text)
+
+
+# ---------------------------------------------------------------------------
+# 利润表 / 现金流量表字段映射（对齐 cleaner 输出的 profit_sheet / cash_flow 列名）
+# ---------------------------------------------------------------------------
+
+# 利润表字段 → 标准字段（东财 profit_sheet 列名）
+INCOME_STATEMENT_ITEMS: dict[str, str] = {
+    "营业收入": "operating_revenue",
+    "营业总收入": "operating_revenue",
+    "营业成本": "operating_cost",
+    "营业总成本": "operating_cost",
+    "营业利润": "operating_profit",
+    "利润总额": "total_profit",
+    "净利润": "net_profit",
+    "归属于母公司股东的净利润": "net_profit_parent",
+    "归属于上市公司股东的净利润": "net_profit_parent",
+    "归属于母公司所有者的净利润": "net_profit_parent",
+    "销售费用": "sell_expense",
+    "管理费用": "admin_expense",
+    "财务费用": "interest_expense",
+    "所得税费用": "income_tax",
+    "利息费用": "interest_expense",
+}
+
+# 现金流量表字段 → 标准字段（东财 cash_flow 列名）
+CASH_FLOW_ITEMS: dict[str, str] = {
+    "经营活动产生的现金流量净额": "ocf",
+    "经营活动现金流量净额": "ocf",
+    "购建固定资产、无形资产和其他长期资产支付的现金": "capital_expenditure",
+    "购建固定资产、无形资产和其他长期资产所支付的现金": "capital_expenditure",
+    "固定资产折旧": "depreciation",
+    "投资活动产生的现金流量净额": "icf",
+    "筹资活动产生的现金流量净额": "fcf",
+}
+
+
+def _match_item(name: str, mapping: dict[str, str]) -> str | None:
+    """会计科目名 → 标准字段（宽松匹配：去括号后缀、去空格、去换行、去序号前缀）。
+
+    年报利润表/现金流表的科目名常带前缀：「一、营业收入」「减：营业成本」
+    「二、营业利润」「加：其他收益」等，须剥离序号（一、二、三…/1、2、3…）
+    和「加：/减：/其中：」等前缀后再匹配。
+    """
+    name = _clean(name)
+    name = re.sub(r"[（(][^）)]*[）)]", "", name)
+    # 剥离「一、」「1、」「减：」「加：」「其中：」等前缀
+    name = re.sub(r"^[一二三四五六七八九十0-9]+[、.．]", "", name)
+    name = re.sub(r"^(加|减|其中|其中：[^：]*|其中：)[：:]?", "", name)
+    name = name.strip()
+    if name in mapping:
+        return mapping[name]
+    compact = name.replace(" ", "")
+    for k, v in mapping.items():
+        if k.replace(" ", "") == compact:
+            return v
+    return None
+
+
+def _parse_statement_lines(pages_text: list[str], mapping: dict[str, str],
+                           stop_markers: tuple[str, ...]) -> dict[str, float]:
+    """通用主表文本行扫描解析（利润表 / 现金流量表）。
+
+    与资产负债表解析同构：字段名 → 附注编号 → 本期值（取字段名后第一个有效数值）。
+    注意利润表/现金流量表存在负数（费用为负、现金流可为负），故数值正则须容忍负号，
+    且不能把「附注编号小整数」误判——费用类科目本期值可能本身就是小负数。
+    """
+    full = "\n".join(pages_text)
+    full = re.sub(r"（[^（）\n]*\n[^（）]*）", lambda m: m.group(0).replace("\n", ""), full)
+    unit = _detect_unit(full)
+    mult = _UNIT_MULTIPLIER.get(unit, 1)
+
+    # 合并字段名内部断行：相邻两行都是「纯中文（含序号/冒号等，无数字）」时拼接。
+    # 年报字段名常因排版断成两行（如茅台「筹资活动产生的现金流\n量净额」），
+    # 断点两侧均为中文、无数字，拼接后可被 _match_item 精确匹配。
+    lines = [ln.strip() for ln in full.split("\n")]
+    merged_lines: list[str] = []
+    _zh_re = re.compile(r"^[\u4e00-\u9fa5（）()：:、，,一二三四五六七八九十加减其中\-—\.\s]+$")
+    i = 0
+    while i < len(lines):
+        ln = lines[i]
+        # 当前行是纯中文（字段名片段）且下一行也是纯中文 → 拼接
+        if ln and _zh_re.match(ln) and i + 1 < len(lines) and _zh_re.match(lines[i + 1]):
+            merged_lines.append(ln + lines[i + 1])
+            i += 2
+            continue
+        merged_lines.append(ln)
+        i += 1
+    lines = merged_lines
+    result: dict[str, float] = {}
+    for i, ln in enumerate(lines):
+        field = _match_item(ln, mapping)
+        if field is None:
+            continue
+        nums: list[float] = []
+        note_skipped = False
+        for j in range(i + 1, min(i + 12, len(lines))):
+            cell = lines[j].replace(",", "").replace("\u200a", "").strip()
+            # 括号负值：(4) → -4
+            neg = False
+            if re.fullmatch(r"\(\d+(\.\d+)?\)", cell):
+                neg = True
+                cell = cell[1:-1]
+            if re.fullmatch(r"-?\d+(\.\d+)?", cell):
+                v = float(cell)
+                if neg:
+                    v = -v
+                # 附注编号：字段名后第一个「正整数」且 <=99，跳过（费用科目本期值可为负，不影响）
+                if not note_skipped and v > 0 and v == int(v) and 1 <= v <= 99:
+                    note_skipped = True
+                    continue
+                nums.append(v)
+                if len(nums) == 1:
+                    break
+            elif cell in ("", "-", "-*", "—"):
+                continue
+            elif re.fullmatch(r"[五四三二一0-9]+、\d*", cell) or re.fullmatch(r"五、\d+", cell):
+                continue
+            else:
+                if _match_item(cell, mapping):
+                    break
+                if re.fullmatch(r"[\u4e00-\u9fa5（）：:、，,]+", cell):
+                    break
+        if nums:
+            val = nums[0] * mult
+            # 资本开支本质是「支出金额」，接口统一存正数；年报 PDF 若用括号负值
+            # 表示现金流出（如神华「(48,398)」），须取绝对值对齐接口口径。
+            if field == "capital_expenditure":
+                val = abs(val)
+            result[field] = val
+    return result
+
+
+def _extract_statement_pages(doc, title: str, stop_titles: tuple[str, ...],
+                             end_markers: tuple[str, ...]) -> list[str]:
+    """定位主表页范围：从标题页开始，到结束标记（总计行）或下一张表标题为止。"""
+    in_table = False
+    pages_text: list[str] = []
+    for page in doc:
+        txt = page.get_text()
+        if not in_table and title in txt:
+            in_table = True
+        if not in_table:
+            continue
+        # 下一张表标题（如「合并现金流量表」「母公司利润表」）= 硬结束
+        stopped = False
+        for st in stop_titles:
+            if st in txt and st != title:
+                head = txt.split(st)[0]
+                if head.strip():
+                    pages_text.append(head)
+                stopped = True
+                break
+        if stopped:
+            break
+        pages_text.append(txt)
+        for m in end_markers:
+            if m in txt:
+                return pages_text
+    return pages_text
+
+
+def parse_income_statement(pdf_path: str | Path) -> dict[str, float]:
+    """解析「合并利润表」主表，返回 {标准字段: 最新年值(元)}。
+
+    字段对齐 cleaner 输出的 profit_sheet 列（operating_revenue/operating_cost/
+    operating_profit/total_profit/net_profit/net_profit_parent/sell_expense/
+    admin_expense/interest_expense/income_tax）。
+    """
+    doc = fitz.open(str(pdf_path))
+    pages_text = _extract_statement_pages(
+        doc, "合并利润表",
+        stop_titles=("母公司利润表", "合并现金流量表", "合并资产负债表"),
+        end_markers=("五、合并财务报表项目注释", "七、合并财务报表项目注释", "基本每股收益"),
+    )
+    doc.close()
+    if not pages_text:
+        return {}
+    return _parse_statement_lines(pages_text, INCOME_STATEMENT_ITEMS, ())
+
+
+def parse_cash_flow_statement(pdf_path: str | Path) -> dict[str, float]:
+    """解析「合并现金流量表」主表，返回 {标准字段: 最新年值(元)}。
+
+    字段对齐 cleaner 输出的 cash_flow 列（ocf/icf/fcf/capital_expenditure/depreciation）。
+    """
+    doc = fitz.open(str(pdf_path))
+    pages_text = _extract_statement_pages(
+        doc, "合并现金流量表",
+        stop_titles=("母公司现金流量表", "合并利润表", "合并资产负债表"),
+        end_markers=("五、合并财务报表项目注释", "七、合并财务报表项目注释", "汇率变动对现金及现金等价物的影响"),
+    )
+    doc.close()
+    if not pages_text:
+        return {}
+    return _parse_statement_lines(pages_text, CASH_FLOW_ITEMS, ())

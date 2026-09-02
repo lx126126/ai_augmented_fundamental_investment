@@ -93,6 +93,11 @@ flowchart TB
 │   ├── export.py          # HTML → PNG / PDF
 │   ├── review.py          # 复盘验证引擎
 │   └── journal.py         # 投研日记（内部操作层）
+├── tests/                     # 测试套件（单元 + 集成）
+│   ├── test_cleaner.py        # 清洗层（银行股兼容 / 净利率兜底 / 派生指标）
+│   ├── test_fraud.py          # 造假检测（M-Score / 审计意见非标一票否决）
+│   ├── test_pdf_parser.py     # PDF 金标准三表解析（利润/现金流/资产负债）
+│   └── test_warehouse.py      # 数仓层（datetime 归一化 / 跨股票 concat）
 ├── templates/valueline.html   # 报告模板（由 build_valueline.py 生成）
 ├── docs/
 │   ├── architecture.md        # 架构设计
@@ -129,6 +134,9 @@ curl "http://127.0.0.1:8000/compare?metric=roe_pct"   # 跨股对比
 
 # Airflow 端到端编排（Docker Compose）
 cd airflow && docker compose up -d
+
+# 运行测试（单元 + 集成，27 项）
+pytest tests/ -v
 ```
 
 ## 数据可信（本项目护城河）

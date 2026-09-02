@@ -868,10 +868,11 @@ def _reconcile(code: str) -> list[dict]:
 
     背景：东财/新浪等第三方接口同源，在「同一控制下企业合并追溯重述」等特殊情形下
     会抓取错误（如神华 2025 年总资产 9038 亿 vs 官方 6278 亿）。此步骤在渲染前用官方
-    年报 PDF 的合并资产负债表覆盖错误字段，保证报告数据可信。失败则降级跳过。
+    年报 PDF 的三张主表（资产负债表 + 利润表 + 现金流量表）覆盖错误字段，保证报告
+    数据可信。失败则降级跳过。
     """
     try:
-        from src.validation import reconcile_balance_sheet, load_reconcile_log
+        from src.validation import reconcile_all, load_reconcile_log
         import pandas as pd
         bs_path = Path("data/raw") / code / "balance_sheet.parquet"
         if not bs_path.exists():
@@ -882,9 +883,10 @@ def _reconcile(code: str) -> list[dict]:
         if annual_dates.empty:
             return []
         year = int(annual_dates.dt.year.max())  # 最新年报年份（12-31），非季度
-        corr = reconcile_balance_sheet(code, year)
-        if corr:
-            print(f"[reconcile] {code} {year} 已用官方PDF金标准覆盖 {len(corr)} 个接口错误字段")
+        result = reconcile_all(code, year)
+        n = sum(len(c) for c in result["corrections"].values())
+        if n:
+            print(f"[reconcile] {code} {year} 已用官方PDF金标准覆盖 {n} 个接口错误字段（三表）")
         # 读历史覆盖记录（parquet 已覆盖后本次可能返回空，但记录已落盘）
         log = load_reconcile_log(code, year)
         if log:

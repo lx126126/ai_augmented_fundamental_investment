@@ -80,28 +80,42 @@ A 股年报「主要会计数据」规范要求披露**近三年对比**，所�
 | 模块 | 职责 |
 |------|------|
 | `cninfo.py` | 巨潮公告查询（`hisAnnouncement/query`）+ 年报 PDF 下载 |
-| `pdf_parser.py` | pymupdf `find_tables()` 解析「主要会计数据」表，提取 7 个关键指标 |
-| `validator.py` | 读接口宽表 → 单位对齐 → 容差 <0.1% 对比 → 校验记录 |
+| `pdf_parser.py` | pymupdf 解析三大主表：`parse_key_financials`（主要会计数据 7 指标）+ `parse_income_statement`（利润表）+ `parse_cash_flow_statement`（现金流量表）+ `parse_balance_sheet`（资产负债表） |
+| `validator.py` | 读接口宽表 → 单位对齐 → 容差 <0.1% 对比 → 校验记录 + 三表 reconcile（差异 >1% 覆盖写回） |
 
 调用方式：
 
 ```python
-from src.validation import validate, format_report
-result = validate("601088", 2025)   # 下载 PDF + 解析 + 对比
+from src.validation import validate, format_report, reconcile_all
+result = validate("601088", 2025)   # 下载 PDF + 解析「主要会计数据」+ 对比
 print(format_report(result))
+reconcile_all("601088", 2025)       # 三表（利润/现金流/资产负债）PDF 金标准 reconcile
 ```
+
+### 三表覆盖范围（2026-09-02 扩展）
+
+金标准解析从「主要会计数据 7 指标」扩展到**三张主表**：
+
+| 主表 | 解析函数 | 覆盖字段 | 对齐接口表 |
+|------|---------|---------|-----------|
+| 主要会计数据 | `parse_key_financials` | 营业收入 / 归母净利 / 经营现金流 / 净资产 / 总资产 / 总负债 / 总股本 | —（汇总校验） |
+| 合并利润表 | `parse_income_statement` | 营业收入 / 营业成本 / 营业利润 / 利润总额 / 净利润 / 归母净利 / 销售费用 / 管理费用 / 财务费用 / 所得税 | `profit_sheet` |
+| 合并现金流量表 | `parse_cash_flow_statement` | 经营现金流净额 / 投资现金流 / 筹资现金流 / 资本开支 / 折旧 | `cash_flow` |
+| 合并资产负债表 | `parse_balance_sheet` | 19 字段（货币资金 / 存货 / 应收 / 长短期借款 / 未分配利润 / 归母净资产等） | `balance_sheet` |
 
 **关键指标映射**（PDF 指标名 → 宽表字段）：
 
 | PDF 指标 | 宽表字段 | PDF 单位 | 接口单位 |
 |---------|---------|---------|---------|
-| 营业收入 | `operating_revenue` | 百万元 | 亿元 |
-| 归属于本公司股东的净利润 | `net_profit_parent` | 百万元 | 亿元 |
-| 经营活动产生的现金流量净额 | `ocf` | 百万元 | 亿元 |
-| 归属于本公司股东的净资产 | `total_equity` | 百万元 | 亿元 |
-| 资产总计 | `total_assets` | 百万元 | 亿元 |
-| 负债合计 | `total_liabilities` | 百万元 | 亿元 |
-| 期末总股本 | `total_shares` | 百万股 | 股 |
+| 营业收入 | `operating_revenue` | 百万元/元 | 亿元 |
+| 归属于本公司股东的净利润 | `net_profit_parent` | 百万元/元 | 亿元 |
+| 经营活动产生的现金流量净额 | `ocf` | 百万元/元 | 亿元 |
+| 归属于本公司股东的净资产 | `total_equity` | 百万元/元 | 亿元 |
+| 资产总计 | `total_assets` | 百万元/元 | 亿元 |
+| 负债合计 | `total_liabilities` | 百万元/元 | 亿元 |
+| 期末总股本 | `share_capital` | 百万股/股 | 亿股 |
+
+> 年报 PDF 单位因公司而异（神华「百万元」、茅台「元」），`_detect_unit` 自动识别。字段名也可能带序号前缀（「一、营业收入」「减：营业成本」）或跨行断开（茅台「筹资活动产生的现金流\n量净额」），解析器均已自适应处理。
 
 ---
 
@@ -126,9 +140,11 @@ print(format_report(result))
 
 ## 6. 落地路径（Roadmap）
 
-- [ ] **字段白名单**：验证通过的字段进白名单，日常只监控白名单字段的新数据 + 字段映射变更
-- [ ] **总股本修正**：数据层对 `total_shares` 用官方年报值修正或换数据源，报告股本标注「以官方年报为准」
+- [x] **字段白名单**：验证通过的字段进白名单，日常只监控白名单字段的新数据 + 字段映射变更
+- [x] **总股本修正**：数据层对股本改用资产负债表 `share_capital`（分红接口 `total_shares` 有 bug）
+- [x] **三表金标准扩展**：从「主要会计数据 7 指标」扩展到利润表 + 现金流量表 + 资产负债表全字段
+- [x] **三表 reconcile**：差异 >1% 自动用 PDF 值覆盖写回 parquet + 落盘记录
+- [x] **测试套件**：`tests/` 单元 + 集成测试（含 PDF 金标准解析一致性回归）
 - [ ] **全历史校验**：错位采样扩展（神华 2007 至今 + 茅台），建立信任基线
-- [ ] **校验记录集成报告**：把 `validate()` 结果填进报告「数据校验」区（替换静态占位）
 - [ ] **增量校验**：季度更新引擎触发时，自动校验新增报告期
 - [ ] **抽样复查**：每季度随机抽 1-2 只标的全量复查
