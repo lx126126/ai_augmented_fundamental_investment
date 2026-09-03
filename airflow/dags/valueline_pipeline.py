@@ -147,17 +147,26 @@ def validate_data(code: str, **context) -> dict:
                 if corrections:
                     print(f"[validate] {store_code} {year} 用官方 PDF 金标准覆盖 {len(corrections)} 个接口错误字段")
 
-    # 2) Beneish M-Score + 现金流背离 + 应收背离 + 审计意见
+    # 2) 基础数据质量 gate：行数/空值/正数/会计勾稽（防接口空表、脏数据）
+    #    在造假检测之前先校验「数据是否完整、数值是否合理」，失败即阻断下游。
     raw = load_raw(store_code)
     required = {"financial_indicator", "profit_sheet", "balance_sheet", "cash_flow"}
     if not required.issubset(raw.keys()):
         raise FileNotFoundError(f"[validate] {store_code} 缺 parquet 表，请先运行 fetch")
+
+    from src.data.quality import validate_all
+    qc = validate_all(raw)
+    if not qc.ok:
+        raise ValueError(f"[validate] {store_code} 数据质量校验未通过：\n{qc.summary()}")
+    print(f"[validate] {store_code} 数据质量校验通过（{qc.passed} 项断言）")
+
+    # 3) Beneish M-Score + 现金流背离 + 应收背离 + 审计意见
     annual = build_annual_financials(raw)
     fraud = fraud_check(annual)
     risk = fraud.get("overall_risk")
     flags = fraud.get("flags", [])
 
-    # 3) 质量 gate：高风险 → 阻断 + 告警
+    # 4) 质量 gate：高风险 → 阻断 + 告警
     if risk == "high":
         reason = "、".join(flags) or "未知原因"
         raise ValueError(f"[validate] {store_code} 财务造假检测高风险（{reason}），阻断下游报告生成")
@@ -166,6 +175,7 @@ def validate_data(code: str, **context) -> dict:
     return {
         "code": store_code,
         "corrections": len(corrections),
+        "quality_checks": qc.passed,
         "fraud_risk": risk,
         "fraud_flags": flags,
     }
@@ -249,30 +259,68 @@ def build_web_index(**context) -> dict:
 
 
 # --------------------------------------------------------------------------- #
-# 告警回调：任务失败时记录日志 + 可选 Webhook 推送（钉钉/飞书/Slack）
+# 告警回调：任务失败时记录日志 + Webhook 推送（个人微信 Server酱/PushPlus，或钉钉/飞书）
 # --------------------------------------------------------------------------- #
+def _push_alert(msg: str) -> None:
+    """按环境变量推送到对应渠道。
+
+    支持三种渠道（按优先级，配置哪个用哪个）：
+    - SERVERCHAN_SENDKEY：Server 酱（推送到个人微信，无需企业微信）
+      POST https://sctapi.ftqq.com/{key}.send  title/desp
+    - PUSHPLUS_TOKEN：PushPlus（推送到个人微信）
+      POST https://www.pushplus.plus/send  token/title/content
+    - AIRFLOW_ALERT_WEBHOOK：通用 webhook（钉钉/飞书/企业微信机器人文本格式）
+    """
+    import requests
+
+    key = os.environ.get("SERVERCHAN_SENDKEY")
+    if key:
+        r = requests.post(
+            f"https://sctapi.ftqq.com/{key}.send",
+            data={"title": "fqf 数据管道告警", "desp": msg},
+            timeout=10,
+        )
+        print(f"[alert] Server酱 推送状态 {r.status_code}")
+        return
+
+    token = os.environ.get("PUSHPLUS_TOKEN")
+    if token:
+        r = requests.post(
+            "https://www.pushplus.plus/send",
+            json={"token": token, "title": "fqf 数据管道告警", "content": msg, "template": "txt"},
+            timeout=10,
+        )
+        print(f"[alert] PushPlus 推送状态 {r.status_code}")
+        return
+
+    webhook = os.environ.get("AIRFLOW_ALERT_WEBHOOK")
+    if webhook:
+        r = requests.post(webhook, json={"msgtype": "text", "text": {"content": msg}}, timeout=10)
+        print(f"[alert] webhook 推送状态 {r.status_code}")
+        return
+
+    print("[alert] 未配置告警渠道（SERVERCHAN_SENDKEY / PUSHPLUS_TOKEN / AIRFLOW_ALERT_WEBHOOK），仅记录日志")
+
+
 def notify_failure(context) -> None:
-    """任务失败告警。日志始终记录；配置 AIRFLOW_ALERT_WEBHOOK 后追加推送。"""
+    """任务失败告警。日志始终记录；配置推送渠道后追加推送（个人微信等）。"""
     import logging
 
     log = context.get("log", logging.getLogger("airflow.task"))
     dag = context.get("dag")
     ti = context.get("task_instance")
+    exc = context.get("exception")
     msg = (
-        f"[告警] DAG `{dag.dag_id}` 任务 `{ti.task_id}` 失败\n"
+        f"DAG `{dag.dag_id}` 任务 `{ti.task_id}` 失败\n"
         f"execution_date={context.get('execution_date')}\n"
-        f"exception={context.get('exception')}"
+        f"exception={exc}"
     )
     log.error(msg)
 
-    webhook = os.environ.get("AIRFLOW_ALERT_WEBHOOK")
-    if webhook:
-        try:
-            import requests
-            # 钉钉/飞书文本消息格式；Slack 等按需调整 payload
-            requests.post(webhook, json={"msgtype": "text", "text": {"content": msg}}, timeout=5)
-        except Exception as e:
-            log.warning(f"[告警] webhook 推送失败：{e}")
+    try:
+        _push_alert(msg)
+    except Exception as e:
+        log.warning(f"[告警] 推送失败：{e}")
 
 
 # --------------------------------------------------------------------------- #
