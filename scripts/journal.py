@@ -26,7 +26,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.adapter import build_template_data
 from src.review.lynch import classify, metrics_for
-from src.report.llm import generate_market_view, generate_narrative, generate_action_advice
+from src.report.llm import generate_market_view, generate_narrative, generate_action_advice, generate_perspective_view
+from src.report.perspectives import list_perspectives
 
 JOURNAL_DIR = Path(__file__).resolve().parent.parent / "journal"
 
@@ -217,15 +218,46 @@ def _action_section(real: dict, lynch_type: str) -> str:
     return "\n".join(lines)
 
 
+def _perspective_section(real: dict) -> str:
+    """多投资人视角：每个视角输出一份「投研笔记」+ 书单溯源。
+
+    属「第三方方法视角」，非本人观点、非荐股。数据同一份，结论因方法论而异。
+    """
+    narrative = real.get("narrative_data") or {}
+    if not narrative:
+        return "## 多视角投研笔记\n- （无数据，无法生成）"
+
+    lines = ["## 多视角投研笔记（第三方方法视角 · 非本人观点 · 非荐股）"]
+    for p in list_perspectives():
+        pid = p.get("id", "")
+        pname = p.get("name", pid)
+        books = p.get("source_books", [])
+        lines.append(f"\n### {pname} 视角")
+        if books:
+            lines.append(f"> 方法论溯源：{'；'.join(books)}")
+        view = generate_perspective_view(narrative, pid)
+        if not view:
+            lines.append("- （待 AI 生成，需配置 DEEPSEEK_API_KEY）")
+            continue
+        if view.get("verdict"):
+            lines.append(f"- **一句话态度**：{view['verdict']}")
+        thesis = view.get("thesis", [])
+        if thesis:
+            lines.append("- 核心判断：")
+            lines += [f"  - {t}" for t in thesis]
+        if view.get("edge"):
+            lines.append(f"- 最看重的信号：{view['edge']}")
+        if view.get("concern"):
+            lines.append(f"- 最担忧的风险：{view['concern']}")
+    return "\n".join(lines)
+
+
 _TEMPLATE_TAIL = """
 ## 操作
 - （待填：日期 + 方向 + 价格 + 仓位，未成交也记）
 
 ## 决策心理
 - （待填：为什么这个价/这个时点，在犹豫什么）
-
-## 事后
-- （复盘时补：这个决定对不对，为什么）
 """
 
 
@@ -257,6 +289,7 @@ def generate(code: str, force: bool = False) -> Path:
         _valuation_section(real),
         _market_section(real),
         _action_section(real, lynch_type),
+        _perspective_section(real),
     ]
     content = f"# {ym} {name}\n\n" + "\n\n".join(b.rstrip("\n") for b in blocks) + "\n" + _TEMPLATE_TAIL
     path.write_text(content, encoding="utf-8")

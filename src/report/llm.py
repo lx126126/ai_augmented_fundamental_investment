@@ -251,6 +251,48 @@ def generate_market_view(data: dict) -> dict | None:
         return None
 
 
+def generate_perspective_view(data: dict, perspective_id: str) -> dict | None:
+    """基于某投资人视角（perspectives/*.json）生成投研笔记。失败返回 None。
+
+    与 generate_narrative 的区别：这里不输出「客观公司定性」，而是
+    完全站在某个投资人的方法论立场上推演判断，属「第三方方法视角」。
+    """
+    from .perspectives import load_perspective, build_perspective_prompt
+
+    p = load_perspective(perspective_id)
+    if not p:
+        print(f"[llm] 未知视角: {perspective_id}")
+        return None
+    cfg = _load_config()
+    if not cfg:
+        print(f"[llm] 未配置 DEEPSEEK_API_KEY，跳过视角[{perspective_id}]生成")
+        return None
+    key, model, base = cfg
+    prompt = build_perspective_prompt(data, p)
+    try:
+        r = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": f"你是价值投资流派中的{p.get('name')}，只输出 JSON，不输出任何其他内容。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": {"type": "json_object"},
+                "max_tokens": 1000,
+                "temperature": 0.3,
+            },
+            timeout=90,
+        )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except Exception as e:
+        print(f"[llm] 生成视角[{perspective_id}]失败: {e}")
+        return None
+
+
 def generate_action_advice(data: dict) -> dict | None:
     """基于数据生成「AI 操作建议草稿」（私有日记决策参考，非本人操作、非荐股）。失败返回 None。"""
     cfg = _load_config()
