@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1080">
+<title>跟踪池横向对比</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --line: #e9ecef;
+    --text: #1a1d24; --sub: #8a97a6; --head-bg: #1f2733;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; color: var(--text); padding: 24px 0 48px; }
+  .wrap { width: 1080px; margin: 0 auto; background: var(--card); border-radius: 12px; overflow: hidden; box-shadow: 0 2px 16px rgba(0,0,0,.06); }
+  .head { padding: 28px 32px 20px; border-bottom: 1px solid var(--line); }
+  .head h1 { font-size: 22px; font-weight: 700; }
+  .head p { margin-top: 6px; color: var(--sub); font-size: 13px; }
+  .legend { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 32px; background: #fafbfc; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--sub); }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: middle; }
+  .legend .sep { color: #d0d5db; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--head-bg); color: #fff; font-weight: 600; padding: 12px 10px; text-align: center; white-space: nowrap; position: sticky; top: 0; z-index: 2; }
+  td { padding: 14px 10px; text-align: center; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:hover td { background: #f8fafc; }
+  td.sticky, th.sticky { position: sticky; left: 0; background: var(--card); z-index: 1; text-align: left; }
+  th.sticky { background: var(--head-bg); z-index: 3; }
+  tr:hover td.sticky { background: #f8fafc; }
+  .name { font-weight: 600; min-width: 150px; }
+  .name .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+  .code { color: var(--sub); font-weight: 400; font-size: 12px; }
+  .ind { color: var(--sub); font-weight: 400; font-size: 11px; margin-top: 2px; }
+  .sub { color: var(--sub); font-size: 11px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .risk { color: #fff; padding: 3px 8px; border-radius: 10px; font-size: 12px; font-weight: 600; }
+  .flag { display: block; margin-top: 4px; color: #c92a2a; font-size: 11px; }
+  .audit { color: var(--sub); font-size: 11px; margin-top: 2px; }
+  .missing { padding: 14px 32px; color: #e8590c; font-size: 13px; background: #fff4e6; }
+  .foot { padding: 16px 32px; color: var(--sub); font-size: 11px; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>跟踪池横向对比</h1>
+    <p>同口径决策关键指标一览 · 客观数据 + 第三方视角 · 非本人观点 · 非荐股 · 生成于数据最新状态</p>
+  </div>
+  <div class='legend'><span><i style='background:#2f9e44'></i>造假风险低</span><span><i style='background:#e8590c'></i>造假风险中</span><span><i style='background:#c92a2a'></i>造假风险高</span><span class='sep'>|</span><span>PE 分位：<b style='color:#2f9e44'>＜30% 便宜</b> · <b style='color:#e8590c'>30~70% 中性</b> · <b style='color:#c92a2a'>＞70% 贵</b></span></div>
+  
+  <div style="overflow-x:auto;">
+    <table><tr><th class='sticky'>标的</th><th>报告期</th><th>现价</th><th>PE(分位)</th><th>PB(分位)</th><th>股息率</th><th>营收/净利(亿)</th><th>ROE</th><th>负债率</th><th>净现金(亿)</th><th>盈利稳定</th><th>造假风险</th><th>行业排名</th></tr><tr><td class='sticky name'><span class='dot' style='background:#378ADD'></span>中国神华<div class='code'>601088</div><div class='ind'>煤炭开采 · 周期型稳健收息</div></td><td>2025</td><td>47.74</td><td><span style='color:#c92a2a;font-weight:600'>19.2</span><div class='sub'>97%</div></td><td>2.30<div class='sub'>99%</div></td><td>4.7%</td><td class='num'>2949 / 528</td><td class='num'>12.9%</td><td class='num'>23%</td><td class='num'>681</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#e8590c'>中</span><span class='flag'>应收增速背离</span><div class='audit'>标准无保留意见</div></td><td class='num'>第1/26</td></tr>
+<tr><td class='sticky name'><span class='dot' style='background:#E24B4A'></span>贵州茅台<div class='code'>600519</div><div class='ind'>白酒 · 稳健增长型</div></td><td>2025</td><td>1299.56</td><td><span style='color:#2f9e44;font-weight:600'>19.9</span><div class='sub'>2%</div></td><td>6.47<div class='sub'>8%</div></td><td>4.0%</td><td class='num'>1688 / 823</td><td class='num'>33.6%</td><td class='num'>16%</td><td class='num'>—</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#2f9e44'>低</span><div class='audit'>标准无保留意见</div></td><td class='num'>第1/19</td></tr>
+<tr><td class='sticky name'><span class='dot' style='background:#BA7517'></span>格力电器<div class='code'>000651</div><div class='ind'>家电 · 稳健增长型收息</div></td><td>2025</td><td>41.62</td><td><span style='color:#2f9e44;font-weight:600'>8.0</span><div class='sub'>29%</div></td><td>1.53<div class='sub'>6%</div></td><td>7.3%</td><td class='num'>1704 / 290</td><td class='num'>19.9%</td><td class='num'>62%</td><td class='num'>395</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#2f9e44'>低</span><div class='audit'>标准无保留意见</div></td><td class='num'>第3/11</td></tr>
+<tr><td class='sticky name'><span class='dot' style='background:#888780'></span>交通银行<div class='code'>601328</div><div class='ind'>银行 · 稳健增长型收息</div></td><td>2025</td><td>7.36</td><td><span style='color:#c92a2a;font-weight:600'>6.7</span><div class='sub'>88%</div></td><td>0.56<div class='sub'>47%</div></td><td>4.6%</td><td class='num'>2651 / 956</td><td class='num'>7.5%</td><td class='num'>92%</td><td class='num'>—</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#2f9e44'>低</span><div class='audit'>标准无保留意见</div></td><td class='num'>第7/42</td></tr>
+<tr><td class='sticky name'><span class='dot' style='background:#00A4FF'></span>腾讯控股<div class='code'>00700</div><div class='ind'>互联网 · 平台型</div></td><td>2025</td><td>438.60</td><td><span style='color:#2f9e44;font-weight:600'>14.7</span><div class='sub'>16%</div></td><td>3.07<div class='sub'>2%</div></td><td>1.2%</td><td class='num'>7437 / 2248</td><td class='num'>21.1%</td><td class='num'>39%</td><td class='num'>—</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#2f9e44'>低</span></td><td class='num'>—</td></tr>
+<tr><td class='sticky name'><span class='dot' style='background:#F08BB0'></span>泡泡玛特<div class='code'>09992</div><div class='ind'>潮玩消费 · 快速增长型</div></td><td>2025</td><td>154.10</td><td><span style='color:#2f9e44;font-weight:600'>13.5</span><div class='sub'>3%</div></td><td>7.73<div class='sub'>47%</div></td><td>1.8%</td><td class='num'>318 / 110</td><td class='num'>77.5%</td><td class='num'>29%</td><td class='num'>—</td><td><span style='color:#2f9e44'>稳定</span></td><td><span class='risk' style='background:#e8590c'>中</span><span class='flag'>M-Score 超阈值</span></td><td class='num'>—</td></tr></table>
+  </div>
+  <div class="foot">
+    指标口径：PE/PB 及分位为近10年分位（港股为港元市值 ÷ 人民币净利的混合口径，彭博/Wind 惯例）；
+    造假风险 = Beneish M-Score + 现金流背离 + 应收背离 + 审计意见综合评级（非标一票否决）；
+    净现金 = 货币资金 − 有息负债；盈利稳定 = 近5年归母净利连续为正。
+    <br>本表仅作横向比较决策辅助，不构成任何买卖建议。
+  </div>
+</div>
+</body>
+</html>
