@@ -5,7 +5,7 @@
 用法：
     python scripts/fetch_stock.py 601088          # 拉神华（A 股）
     python scripts/fetch_stock.py 600036          # 拉招行（A 股）
-    python scripts/fetch_stock.py 09992.HK        # 拉泡泡玛特（港股，港币→人民币）
+    python scripts/fetch_stock.py 09992.HK        # 拉泡泡玛特（港股，财报人民币/市值港元）
 """
 from __future__ import annotations
 

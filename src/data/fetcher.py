@@ -184,22 +184,6 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     return pd.DataFrame([row])
 
 
-def _hkd_to_cny() -> float:
-    """港币兑人民币汇率（1 HKD = ? CNY），来源：中国外汇交易中心即期报价。
-
-    失败时返回 0（调用方据此跳过换算，保留港币原值并标注）。
-    """
-    try:
-        df = ak.fx_spot_quote()
-        row = df[df["货币对"] == "HKD/CNY"]
-        if not row.empty:
-            v = row["买报价"].iloc[0]
-            return float(v) if pd.notna(v) else 0.0
-    except Exception:
-        pass
-    return 0.0
-
-
 def _hk_code(code: str) -> str:
     """港股代码规范化：剥 .HK 后缀，去前导零（东财港股接口要 5 位纯数字，如 09992）。"""
     code = str(code).upper().replace(".HK", "").strip()
@@ -211,7 +195,7 @@ def _hk_report_to_wide(symbol: str, mapping: dict, code: str) -> pd.DataFrame:
     """港股三表长表 → 宽表（标准字段名）。
 
     长表每行一个字段（STD_ITEM_CODE + AMOUNT），按 STD_ITEM_CODE 映射后
-    pivot 成「每报告期一行、每字段一列」的宽表，单位仍为港币元。
+    pivot 成「每报告期一行、每字段一列」的宽表，单位人民币元（东财港股接口原生人民币）。
     用 indicator="报告期" 拉半年度（6-30 中期 + 12-31 年报），港股无 Q1/Q3 季报。
     """
     hk = _hk_code(code)
@@ -229,17 +213,17 @@ def _hk_report_to_wide(symbol: str, mapping: dict, code: str) -> pd.DataFrame:
 
 
 def fetch_hk_profit_sheet(code: str) -> pd.DataFrame:
-    """港股利润表（长表→宽表，港币元，标准字段名）。"""
+    """港股利润表（长表→宽表，人民币元，标准字段名）。"""
     return _hk_report_to_wide("利润表", HK_PROFIT_SHEET_MAP, code)
 
 
 def fetch_hk_balance_sheet(code: str) -> pd.DataFrame:
-    """港股资产负债表（长表→宽表，港币元，标准字段名）。"""
+    """港股资产负债表（长表→宽表，人民币元，标准字段名）。"""
     return _hk_report_to_wide("资产负债表", HK_BALANCE_SHEET_MAP, code)
 
 
 def fetch_hk_cash_flow(code: str) -> pd.DataFrame:
-    """港股现金流量表（长表→宽表，港币元，标准字段名）。"""
+    """港股现金流量表（长表→宽表，人民币元，标准字段名）。"""
     wide = _hk_report_to_wide("现金流量表", HK_CASH_FLOW_MAP, code)
     # 资本开支：港股接口「购建固定资产」为流出，接口返回正数，取绝对值对齐 A 股口径
     if not wide.empty and "capital_expenditure" in wide.columns:
@@ -331,17 +315,6 @@ def fetch_hk_valuation(code: str, period: str = "近十年") -> pd.DataFrame | N
     df = df.rename(columns={"date": "report_date"})
     df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = hk
-    return df
-
-
-def _hkd_to_cny_apply(df: pd.DataFrame, money_cols: set[str]) -> pd.DataFrame:
-    """将港币金额列统一换算为人民币（汇率失败则原样返回，由上层标注）。"""
-    rate = _hkd_to_cny()
-    if rate <= 0:
-        return df
-    df = df.copy()
-    for c in money_cols.intersection(df.columns):
-        df[c] = pd.to_numeric(df[c], errors="coerce") * rate
     return df
 
 
@@ -577,26 +550,18 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     return data
 
 
-# 港股三表 + 财务指标中需要「港币 → 人民币」换算的金额列（元/股口径）
-_HK_MONEY_FIELDS = {
-    "operating_revenue", "operating_cost", "operating_profit", "total_profit", "net_profit",
-    "net_profit_parent", "income_tax", "sell_expense", "admin_expense", "interest_expense",
-    "total_assets", "total_liabilities", "total_equity", "total_equity_all",
-    "minority_interest", "current_assets", "current_liabilities", "retained_profit",
-    "inventory", "accounts_receivable", "monetary_funds", "accounts_payable",
-    "noncurrent_liabilities", "ocf", "icf", "fcf", "depreciation", "capital_expenditure",
-}
+# 港股标的：三表 + 财务指标 + 估值 + 分红 + 行情（财报原生人民币，市值/股价原生港元）
 
 
 def fetch_all_hk(code: str) -> dict[str, pd.DataFrame]:
-    """港股标的：三表（港币→人民币）+ 财务指标 + 估值 + 分红 + 行情。
+    """港股标的：三表 + 财务指标 + 估值 + 分红 + 行情。
 
-    与 A 股 fetch_all 输出同一套标准字段名，cleaner/adapter/build 全部复用。
+    财报三表/财务指标原生即为人民币口径（东财直接返回人民币值，不换算）；
+    估值/行情（市值/股价）原生为港元口径。与 A 股 fetch_all 输出同一套标准字段名，
+    cleaner/adapter/build 全部复用。
     股本不可靠（港股报表股本单位特殊），用 股东应占溢利 / 每股基本盈利 反推。
     """
     code = _hk_code(code)
-    rate = _hkd_to_cny()
-    rate_ok = rate > 0
 
     ps = fetch_hk_profit_sheet(code)
     bs = fetch_hk_balance_sheet(code)
@@ -605,13 +570,9 @@ def fetch_all_hk(code: str) -> dict[str, pd.DataFrame]:
 
     data: dict[str, pd.DataFrame] = {}
 
-    # 港币 → 人民币（三表金额列）
-    if rate_ok and not ps.empty:
-        ps = _hkd_to_cny_apply(ps, _HK_MONEY_FIELDS)
-    if rate_ok and not bs.empty:
-        bs = _hkd_to_cny_apply(bs, _HK_MONEY_FIELDS)
-    if rate_ok and not cf.empty:
-        cf = _hkd_to_cny_apply(cf, _HK_MONEY_FIELDS)
+    # 港股财报（东财 stock_financial_hk_report_em + 财务指标）原生即为人民币口径
+    # （腾讯/泡泡玛特等以人民币为记账本位币，东财直接返回人民币值），无需任何汇率换算。
+    # 市值/股价（估值+行情）原生为港元，保持原样；PE/PB 计算时由 adapter 标注双币种。
 
     # 股本反推：share_capital = 股东应占溢利 / 每股基本盈利（人民币元）
     # cleaner 会再 ÷1e8 转「亿元/亿股」，此处保持「元」口径对齐 A 股 share_capital

@@ -58,7 +58,8 @@ COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供�
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
-CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务已换算人民币，股价为港币）
+CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
+VAL_CURRENCY_HINT = ""     # 估值面板 PE/PB 币种提示（港股：港元市值÷人民币财务）
 
 
 def _is_hk(code: str) -> bool:
@@ -898,7 +899,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算</span></div>
+    <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算@@VAL_CURRENCY_HINT@@</span></div>
     <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
 @@VAL_GRID@@
 @@MARKET_ROW@@
@@ -982,12 +983,14 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088", daily: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE
-    # 货币口径：港股财务数据已换算人民币，但股价仍为港币，需标注避免误读
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE, VAL_CURRENCY_HINT
+    # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
-        "港股标的 · 财务数据已按汇率换算为人民币，股价/市值为港币"
+        "港股标的 · 财务数据为人民币，股价/市值为港元"
         if _is_hk(code) else ""
     )
+    # 估值面板币种提示：PE/PB 分子(市值)为港元、分母(利润/净资产)为人民币（港股市场惯例口径）
+    VAL_CURRENCY_HINT = " · PE/PB 为港元市值÷人民币财务（港股惯例）" if _is_hk(code) else ""
     # 代码规范化（港股 00700.HK→00700）：归档文件名与 parquet 目录统一为 5 位纯数字
     if _norm_code:
         code = _norm_code(code)
@@ -1064,6 +1067,7 @@ def build(code: str = "601088", daily: bool = False) -> None:
         .replace("@@REPORT_PERIOD@@", report_period)
         .replace("@@PUBLISH_DATE@@", publish_date)
         .replace("@@CURRENCY_NOTE@@", CURRENCY_NOTE)
+        .replace("@@VAL_CURRENCY_HINT@@", VAL_CURRENCY_HINT)
         .replace("@@LYNCH_TYPE@@", lynch_type)
         .replace("@@GRAHAM_BADGE@@", graham_badge)
     )
