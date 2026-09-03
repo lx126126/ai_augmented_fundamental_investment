@@ -1,0 +1,14 @@
+{
+  "code": "601328",
+  "year": 2025,
+  "items": [
+    {
+      "table": "cash_flow",
+      "field": "capital_expenditure",
+      "label": "资本开支",
+      "api_yi": 431.97,
+      "pdf_yi": 0.00043197,
+      "diff_pct": 99999900.0
+    }
+  ]
+}

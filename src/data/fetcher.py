@@ -32,7 +32,8 @@ from .fields import (
 
 
 def _em_symbol(code: str) -> str:
-    """纯数字代码 → 东财接口带交易所前缀的代码。"""
+    """纯数字代码 → 东财接口带交易所前缀的代码（自动剥市场后缀）。"""
+    code = _bare_code(code)
     code = code.zfill(6)
     if code.startswith(("6", "9")):
         return f"SH{code}"
@@ -49,11 +50,24 @@ def _remap(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     return df[list(cols.keys())].rename(columns=cols)
 
 
+def _bare_code(code: str) -> str:
+    """剥市场后缀 → 纯数字代码（A 股 6 位，港股 5 位）。
+
+    兼容 601088 / 601088.SH / 09992.HK 等格式，供各 fetch 函数入口防御性规范化，
+    避免带后缀 symbol 传给 akshare 接口导致返回空表（stock_financial_analysis_indicator 等）。
+    """
+    c = str(code).upper().strip()
+    if c.endswith(".HK"):
+        return c[:-3].zfill(5)
+    return c.split(".")[0].zfill(6)
+
+
 def fetch_financial_indicator(code: str, start_year: str = "2005") -> pd.DataFrame:
     """财务指标（比率型）：毛利率/净利率/ROE/负债率/增速/现金流背离等。
 
     覆盖 2005 至今（含上市前招股书披露），报告期为季度。
     """
+    code = _bare_code(code)
     raw = ak.stock_financial_analysis_indicator(symbol=code, start_year=start_year)
     df = _remap(raw, FINANCIAL_INDICATOR_MAP).copy()
     df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
@@ -518,7 +532,12 @@ def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame 
 
 
 def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
-    """一次拉取全部表，返回 {表名: DataFrame}。"""
+    """一次拉取全部表，返回 {表名: DataFrame}。
+
+    code 允许带市场后缀（如 601088.SH / 000651.SZ），入口统一剥后缀成纯数字代码，
+    避免下游 akshare 接口（stock_financial_analysis_indicator 等）收到带后缀 symbol 返回空表。
+    """
+    code = code.strip().split(".")[0].zfill(6)
     data = {
         "financial_indicator": fetch_financial_indicator(code, start_year),
         "profit_sheet": fetch_profit_sheet(code),

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated": "2026-09-03",
+  "rules": {
+    "max_size": 8,
+    "cadence": "年报/中报季全量更新，Q1/Q3 按需轻量更新",
+    "disclaimer": "跟踪池仅为研究范围，不含任何操作建议"
+  },
+  "stocks": [
+    { "code": "601088.SH", "name": "中国神华", "industry": "煤炭开采", "lynch": "周期型 · 稳健收息", "status": "active", "since": "2026-08" },
+    { "code": "600519.SH", "name": "贵州茅台", "industry": "白酒", "lynch": "稳定增长型 · 护城河", "status": "active", "since": "2026-08" },
+    { "code": "000651.SZ", "name": "格力电器", "industry": "家电", "lynch": "稳健增长型 · 收息", "status": "active", "since": "2026-08" },
+    { "code": "601328.SH", "name": "交通银行", "industry": "银行", "lynch": "稳健增长型 · 收息", "status": "active", "since": "2026-08" },
+    { "code": "00700.HK", "name": "腾讯控股", "industry": "互联网", "lynch": "稳定增长型 · 生态护城河", "status": "active", "since": "2026-09" },
+    { "code": "09992.HK", "name": "泡泡玛特", "industry": "潮玩消费", "lynch": "快速增长型", "status": "active", "since": "2026-08" }
+  ]
+}
