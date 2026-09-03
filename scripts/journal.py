@@ -10,7 +10,8 @@
 定位：任何时间可跑的一份「轻量决策辅助」，固定栏目帮你在读一页报告后落到结论。
 栏目：基本面快照 → 公司类型(林奇) → 主要看什么 → 有没有风险 → 现在贵不贵
      → 市场在交易什么(多空，第三方视角) → AI 操作建议(AI 生成，非本人操作)
-     → 重点关注 → 操作/决策心理(待填)
+     → 多视角投研笔记(第三方方法视角) → 视角分歧汇总 → 下次验证触发点(决策闭环)
+     → 重点关注 → 操作/决策心理/复盘(待填)
 
 铁律：日记是操作层，但「市场多空」「公司类型」「AI 操作建议」等由 AI 生成的内容
 属「第三方视角，非本人观点/非本人操作」；操作/决策心理由本人填写。
@@ -26,7 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.adapter import build_template_data
 from src.review.lynch import classify, metrics_for
-from src.report.llm import generate_market_view, generate_narrative, generate_action_advice, generate_perspective_view
+from src.report.llm import (
+    generate_market_view,
+    generate_narrative,
+    generate_action_advice,
+    generate_perspective_view,
+    generate_verification_plan,
+)
 from src.report.perspectives import list_perspectives
 
 JOURNAL_DIR = Path(__file__).resolve().parent.parent / "journal"
@@ -218,16 +225,18 @@ def _action_section(real: dict, lynch_type: str) -> str:
     return "\n".join(lines)
 
 
-def _perspective_section(real: dict) -> str:
+def _perspective_section(real: dict) -> tuple[str, list[dict]]:
     """多投资人视角：每个视角输出一份「投研笔记」+ 书单溯源。
 
     属「第三方方法视角」，非本人观点、非荐股。数据同一份，结论因方法论而异。
+    返回 (区块文本, 各视角结论列表)——结论列表供「分歧汇总」「验证计划」复用。
     """
     narrative = real.get("narrative_data") or {}
     if not narrative:
-        return "## 多视角投研笔记\n- （无数据，无法生成）"
+        return "## 多视角投研笔记\n- （无数据，无法生成）", []
 
     lines = ["## 多视角投研笔记（第三方方法视角 · 非本人观点 · 非荐股）"]
+    collected: list[dict] = []
     for p in list_perspectives():
         pid = p.get("id", "")
         pname = p.get("name", pid)
@@ -239,6 +248,14 @@ def _perspective_section(real: dict) -> str:
         if not view:
             lines.append("- （待 AI 生成，需配置 DEEPSEEK_API_KEY）")
             continue
+        # 收集结论供分歧汇总 / 验证计划复用
+        collected.append({
+            "id": pid,
+            "name": pname,
+            "verdict": view.get("verdict", ""),
+            "edge": view.get("edge", ""),
+            "concern": view.get("concern", ""),
+        })
         if view.get("verdict"):
             lines.append(f"- **一句话态度**：{view['verdict']}")
         thesis = view.get("thesis", [])
@@ -249,7 +266,57 @@ def _perspective_section(real: dict) -> str:
             lines.append(f"- 最看重的信号：{view['edge']}")
         if view.get("concern"):
             lines.append(f"- 最担忧的风险：{view['concern']}")
+    return "\n".join(lines), collected
+
+
+def _divergence_section(collected: list[dict]) -> str:
+    """视角分歧汇总表：把各视角的「一句话态度」横向摆开，一眼看出分歧在哪。
+
+    分歧本身就是最值钱的决策信号——四个方法论都指向同一结论时是共识，
+    出现分歧时说明这只票「看多与看空各有依据」，值得本人重点想清楚。
+    """
+    if not collected:
+        return "## 视角分歧汇总\n- （无视角结论，无法汇总）"
+
+    lines = ["## 视角分歧汇总（第三方方法视角 · 非本人观点）", ""]
+    lines.append("| 视角 | 一句话态度 | 最看重 | 最担忧 |")
+    lines.append("|------|-----------|--------|--------|")
+    for c in collected:
+        verdict = c.get("verdict") or "—"
+        edge = c.get("edge") or "—"
+        concern = c.get("concern") or "—"
+        lines.append(f"| {c['name']} | {verdict} | {edge} | {concern} |")
     return "\n".join(lines)
+
+
+def _verification_section(real: dict, collected: list[dict]) -> str:
+    """下次验证触发点：把「现在的判断」转成「可证伪的验证计划」，闭合结论→验证→复盘闭环。
+
+    属「AI 生成 · 非本人操作 · 非荐股」。到点了可回看这份日记，逐一对照 pass/fail。
+    """
+    narrative = real.get("narrative_data") or {}
+    lines = ["## 下次验证触发点（AI 生成 · 非本人操作 · 非荐股，供复盘）"]
+    if not narrative or not collected:
+        lines.append("- （无数据或视角结论，无法生成）")
+        return "\n".join(lines)
+    plan = generate_verification_plan(narrative, collected)
+    if not plan:
+        lines.append("- （待 AI 生成，需配置 DEEPSEEK_API_KEY）")
+        return "\n".join(lines)
+
+    if plan.get("key_disagreement"):
+        lines.append(f"- **核心分歧**：{plan['key_disagreement']}")
+
+    points = plan.get("verification_points", [])
+    if points:
+        lines.append("")
+        for i, vp in enumerate(points, 1):
+            lines.append(f"**验证点 {i}**：{vp.get('when', '—')}")
+            lines.append(f"- 看什么：{vp.get('what', '—')}")
+            lines.append(f"- ✅ 若成立：{vp.get('pass_if', '—')}")
+            lines.append(f"- ❌ 若不成立：{vp.get('fail_if', '—')}")
+            lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 _TEMPLATE_TAIL = """
@@ -258,6 +325,9 @@ _TEMPLATE_TAIL = """
 
 ## 决策心理
 - （待填：为什么这个价/这个时点，在犹豫什么）
+
+## 复盘（到点回看上面的「下次验证触发点」）
+- （待填：验证点 N 是否成立？成立 → 判断延续；不成立 → 哪里错了、怎么修正）
 """
 
 
@@ -282,6 +352,8 @@ def generate(code: str, force: bool = False) -> Path:
             lynch_type = narr.get("lynch_type", "")
 
     path.parent.mkdir(parents=True, exist_ok=True)
+    # 多视角区块返回 (文本, 结论列表)，结论列表供分歧汇总/验证计划复用
+    perspective_text, collected = _perspective_section(real)
     blocks = [
         _snapshot(real),
         _type_section(lynch_type),
@@ -289,7 +361,9 @@ def generate(code: str, force: bool = False) -> Path:
         _valuation_section(real),
         _market_section(real),
         _action_section(real, lynch_type),
-        _perspective_section(real),
+        perspective_text,
+        _divergence_section(collected),
+        _verification_section(real, collected),
     ]
     content = f"# {ym} {name}\n\n" + "\n\n".join(b.rstrip("\n") for b in blocks) + "\n" + _TEMPLATE_TAIL
     path.write_text(content, encoding="utf-8")

@@ -391,3 +391,128 @@ PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 1. 每条 15-40 字，具体、可执行、可证伪，不要空话套话。
 2. 触发条件必须带量化阈值（基于给出的 PE/PB/股息率/分位等数据），不要「合理价位」「耐心等待」这类模糊表述。
 3. 全程是「参考框架」，帮本人把数据落到决策，不是替本人下单。"""
+
+
+def generate_verification_plan(data: dict, perspectives: list[dict]) -> dict | None:
+    """基于数据 + 各视角结论，生成「下次验证触发点」计划（决策闭环的核心）。
+
+    把「读完报告、有了判断」进一步落到「到什么时候、看什么指标、验证什么」，
+    让结论可被证伪、可被复盘。属「AI 生成 · 非本人操作 · 非荐股」。
+
+    perspectives：[{id, name, verdict, edge, concern}, ...] 各视角已生成的结论。
+    失败返回 None。
+    """
+    cfg = _load_config()
+    if not cfg:
+        print("[llm] 未配置 DEEPSEEK_API_KEY，跳过验证计划生成")
+        return None
+    key, model, base = cfg
+    prompt = _build_verification_prompt(data, perspectives)
+    try:
+        r = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "你是资深价值投资者，只输出 JSON，不输出任何其他内容。"},
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": {"type": "json_object"},
+                "max_tokens": 1200,
+                "temperature": 0.3,
+            },
+            timeout=90,
+        )
+        r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except Exception as e:
+        print(f"[llm] 生成验证计划失败: {e}")
+        return None
+
+
+def _build_verification_prompt(data: dict, perspectives: list[dict]) -> str:
+    """把数据 + 各视角结论转成「下次验证触发点」生成 prompt。
+
+    目标：把「现在的判断」转成「可证伪的验证计划」，闭合「结论→验证→复盘」闭环。
+    """
+    from datetime import date as _date
+
+    val = data.get("valuation") or {}
+    today = _date.today().strftime("%Y-%m-%d")
+
+    # 汇总各视角结论
+    pers_text = "\n".join(
+        f"  - {p.get('name', '')}：{p.get('verdict', '')}"
+        f"（最看重 {p.get('edge', '')}；最担忧 {p.get('concern', '')}）"
+        for p in perspectives
+    ) or "  （无视角结论）"
+
+    return f"""你是资深价值投资者，遵循格雷厄姆 + 彼得林奇方法论。
+
+下面是【真实财务数据】和【不同投资人视角对这家公司的判断】。你的任务是：
+把「现在的判断」转成「可证伪的验证计划」——即写下「到什么时候、看什么指标、
+如果怎样就说明判断成立/不成立」，这样过一段时间能回头复盘，而不是写完就丢。
+
+**铁律：**
+1. 只能基于下方数据推演，严禁编造数据之外的任何数字、事件、目标价。
+2. 验证触发点要带明确的时间锚点（如下次财报/中报/年报）和量化阈值。
+3. 你是 AI 辅助，措辞用「若…则…」，不是命令式。
+
+=== 时间锚点（务必以此为准，不要用你自己的训练知识猜日期）===
+今天日期：{today}
+已披露的最新报告期：{data.get('latest_year', '')} 年（年报）
+注意：验证时间点必须是【今天之后】尚未披露的报告期（如下一年中报/下一年年报/下一季度），
+严禁把已披露的过去报告期当作「待验证」的时间点。
+
+=== 公司 ===
+公司名：{data.get('name', '')}
+代码：{data.get('code', '')}
+林奇分类：{data.get('lynch_type', 'N/A')}
+
+=== 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
+营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
+ROE：{data.get('latest', {}).get('roe', 'N/A')}%
+资产负债率：{data.get('latest', {}).get('debt_ratio', 'N/A')}%
+
+=== 估值 ===
+PE：{val.get('pe', 'N/A')}（近10年分位 {val.get('pe_pctile', 'N/A')}%）
+PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
+股息率：{data.get('dividend_yield', 'N/A')}%
+
+=== 各视角判断 ===
+{pers_text}
+
+请输出以下 JSON（不要输出 JSON 之外的内容，所有文字用中文）：
+
+{{
+  "verification_points": [
+    {{
+      "when": "验证时间点（必须晚于今天 {today}，如 2026 中报/2026 年报/下一季度，写清具体报告期）",
+      "what": "看什么指标/信号（基于数据，落到具体指标）",
+      "pass_if": "若成立，说明什么（判断被验证）",
+      "fail_if": "若不成立，说明什么（判断被打脸，该怎么修正）"
+    }},
+    {{
+      "when": "验证点2（同样必须晚于今天）",
+      "what": "…",
+      "pass_if": "…",
+      "fail_if": "…"
+    }},
+    {{
+      "when": "验证点3（同样必须晚于今天）",
+      "what": "…",
+      "pass_if": "…",
+      "fail_if": "…"
+    }}
+  ],
+  "key_disagreement": "各视角最大的分歧点是什么（一句话，20-40字，指出分歧的本质）"
+}}
+
+要求：
+1. verification_points 给 3 条，每条的时间点不重复且【都晚于今天 {today}】，覆盖「基本面验证」「估值验证」「风险验证」三个维度。
+2. 三条时间点尽量错开（如 验证点1=下季度、验证点2=下年中报、验证点3=下年年报），避免都挤在同一报告期。
+3. 每条 pass_if / fail_if 要具体、可证伪，落到数据阈值。
+4. 严禁编造数据之外的数字、目标价。"""
