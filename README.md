@@ -115,7 +115,8 @@ flowchart TB
 │   ├── api.md                 # 查询 API 文档
 │   ├── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
 │   ├── mobile-web.md          # 手机网页版部署（伪小程序）
-│   └── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
+│   ├── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
+│   └── decision-drill.md       # 决策演练 SOP（数据→三问定调→逼问矛盾→落纪律）
 ├── sql/
 │   └── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
