@@ -22,8 +22,13 @@ x-airflow-common: &airflow-common
     HTTPS_PROXY: ''
     http_proxy: ''
     https_proxy: ''
-    # 告警 Webhook（可选）：配置后任务失败会推送通知
-    AIRFLOW_ALERT_WEBHOOK: ''
+    # 告警渠道（可选，三选一，配置后任务失败会推送到个人微信/IM）：
+    #   SERVERCHAN_SENDKEY  → Server 酱（推个人微信，无需企业微信）
+    #   PUSHPLUS_TOKEN      → PushPlus（推个人微信）
+    #   AIRFLOW_ALERT_WEBHOOK → 通用 webhook（钉钉/飞书/企业微信机器人文本格式）
+    SERVERCHAN_SENDKEY: '${SERVERCHAN_SENDKEY:-}'
+    PUSHPLUS_TOKEN: '${PUSHPLUS_TOKEN:-}'
+    AIRFLOW_ALERT_WEBHOOK: '${AIRFLOW_ALERT_WEBHOOK:-}'
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
