@@ -174,14 +174,35 @@ Playwright 导图（PNG @2x / PDF）
 ```
 基本面快照 → 公司类型(林奇分类) → 主要看什么指标 → 有没有风险
           → 现在贵不贵 → 市场在交易什么(多空，第三方视角)
-          → AI 操作建议(AI 生成，非本人操作) → 重点关注 → 操作/决策心理(本人待填)
+          → AI 操作建议(AI 生成，非本人操作) → 多视角投研笔记(第三方方法视角)
+          → 视角分歧汇总 → 下次验证触发点(决策闭环) → 操作/决策心理/复盘(本人待填)
 ```
 
 - **客观数据**：基本面快照、估值、造假检测、林奇分类均来自真实数据与算法
-- **AI 生成（标注「第三方视角/AI 生成，非本人观点/非本人操作」）**：市场多空（`generate_market_view`）、AI 操作建议（`generate_action_advice`）
+- **AI 生成（标注「第三方视角/AI 生成，非本人观点/非本人操作」）**：市场多空（`generate_market_view`）、AI 操作建议（`generate_action_advice`）、多视角投研笔记（`generate_perspective_view`）、下次验证触发点（`generate_verification_plan`）
 - **铁律**：AI 操作建议只基于客观数据推演，不编数、不给精确买卖点位（只给方向 + 量化触发条件，如「PE 分位 <50% 且股息率 >5.5%」），全称标注「非荐股，仅供决策参考」
-- **本人填写**：操作 / 决策心理一栏留空待填，是唯一的主观落点
+- **决策闭环**：「下次验证触发点」把「现在的判断」转成「可证伪的验证计划」（3 条 when/what/pass_if/fail_if，覆盖基本面/估值/风险），到点回看「复盘」栏逐一对照——闭合「结论→验证→复盘」，避免写完就丢
+- **本人填写**：操作 / 决策心理 / 复盘三栏留空待填，是唯一的主观落点
 - **A 股 + 港股通用**：`_norm_code` 区分港股（0 开头 5 位码不 zfill）与 A 股（zfill 6）
+
+### 6.5 多投资人视角（`src/report/perspectives/` + `scripts/journal.py` 的 `_perspective_section`）
+
+同一份客观数据，按不同投资人的方法论输出不同版本的投研笔记。每个视角 = 一个结构化 JSON 定义（`src/report/perspectives/{id}.json`），而非散落的 prompt 字符串。
+
+- **已建 4 视角**：格雷厄姆（安全边际）/ 彼得·林奇（六类分类）/ 巴菲特·芒格（护城河 + 复利）/ 菲利普·费雪（成长股质变）
+- **视角定义字段**：`focus_dimensions`（关注维度）/ `core_questions`（核心问题）/ `metrics_to_watch`（该看的指标）/ `tone`（话术风格）/ `source_books`（书单溯源）
+- **加载层**：`perspectives.py`（`load_perspective` / `list_perspectives` / `build_perspective_prompt`）+ `llm.generate_perspective_view`
+- **复利流水线**：「读书 → 蒸馏成视角 JSON → 生成该风格日记」，SOP 见 [perspective-distillation.md](perspective-distillation.md)
+- **铁律**：视角只「翻译数据」，不「编数据」；所有视角输出标注「第三方方法视角 · 非本人观点 · 非荐股」
+
+### 6.6 跟踪池横向对比（`scripts/build_watchlist.py`）
+
+把跟踪池全部标的关键决策指标拉到一张表上，一眼看出「谁便宜、谁安全、谁有雷」。复用 `build_template_data` 的既有输出，不引入新数据源、不重复算指标。
+
+- **对比维度**：现价 / PE(近10年分位) / PB(近10年分位) / 股息率 / 营收·净利 / ROE / 负债率 / 净现金 / 盈利稳定 / 造假风险(含审计意见) / 行业排名
+- **配色语义**：造假风险 低=绿·中=橙·高=红；PE 分位 <30% 便宜(绿)·30~70% 中性(橙)·>70% 贵(红)
+- **输出**：`web/watchlist.html`（纵向长图风格，宽 1080px）
+- **口径**：港股 PE/PB 为港元市值 ÷ 人民币净利混合口径（彭博/Wind 惯例），不做换算
 
 ---
 

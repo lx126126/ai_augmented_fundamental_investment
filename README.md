@@ -43,6 +43,12 @@ flowchart TB
     subgraph REVIEW["⑥ 投研日记（内部决策辅助）"]
         F1["基本面快照<br/>+ 林奇分类"]
         F2["多空视角 + AI 操作建议<br/>（第三方/AI，非本人）"]
+        F3["多投资人视角<br/>格雷厄姆/林奇/巴菲特/费雪<br/>（第三方方法视角）"]
+    end
+
+    subgraph WATCH["⑦ 跟踪池横向对比"]
+        G1["build_watchlist<br/>同口径决策指标一览"]
+        G2["一眼看出谁便宜/谁安全/谁有雷"]
     end
 
     A1 --> C1
@@ -57,6 +63,8 @@ flowchart TB
     D2 --> E2
     D3 --> E2
     E2 --> F1 --> F2
+    E2 --> F3
+    E2 --> G1 --> G2
 ```
 
 ## 技术能力清单
@@ -79,7 +87,7 @@ flowchart TB
 ├── src/
 │   ├── data/          # 数据层：fetcher（拉取）/ cleaner（清洗）/ fields（字段映射）/ adapter（宽表→模板）/ storage（入库）/ warehouse（DuckDB 数仓落库）
 │   ├── analysis/      # 分析层：fraud（Beneish M-Score + 现金流/应收背离 + 审计意见）
-│   ├── report/        # 报告层：llm（DeepSeek 叙事，结构化输出）
+│   ├── report/        # 报告层：llm（DeepSeek 叙事，结构化输出）+ perspectives（多投资人视角定义）
 │   ├── validation/    # 数据验证：cninfo（巨潮下载）/ pdf_parser（pymupdf）/ validator（金标准交叉校验）/ whitelist
 │   ├── api/           # 后端：query（DuckDB 只读查询）/ main（FastAPI 7 端点）
 │   └── review/        # 投研决策辅助：lynch（林奇六类 → 该看什么指标映射）
@@ -91,6 +99,7 @@ flowchart TB
 │   ├── fetch_stock.py     # 拉取单票数据
 │   ├── build_valueline.py # 渲染 ValueLine 一页报告
 │   ├── build_web_index.py # 生成手机网页版首页（数据驱动）
+│   ├── build_watchlist.py # 生成跟踪池横向对比表（同口径决策指标一览）
 │   ├── export.py          # HTML → PNG / PDF
 │   └── journal.py         # 投研日记（内部操作层，含 AI 操作建议）
 ├── tests/                     # 测试套件（单元 + 集成）
@@ -105,7 +114,8 @@ flowchart TB
 │   ├── data-validation.md     # 数据验证设计
 │   ├── api.md                 # 查询 API 文档
 │   ├── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
-│   └── mobile-web.md          # 手机网页版部署（伪小程序）
+│   ├── mobile-web.md          # 手机网页版部署（伪小程序）
+│   └── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
 ├── sql/
 │   └── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
@@ -131,6 +141,10 @@ python scripts/export.py templates/valueline.html -o reports/2026Q2 -f png pdf
 # 生成投研日记（内部决策辅助，gitignore，A 股 + 港股通用）
 python scripts/journal.py 601088          # 中国神华
 python scripts/journal.py 09992 --force   # 泡泡玛特（港股），覆盖重建
+
+# 生成跟踪池横向对比表（同口径决策指标一览）
+python scripts/build_watchlist.py                 # 全跟踪池 6 只
+python scripts/build_watchlist.py 601088 00700    # 指定标的对比
 
 # 构建 DuckDB 数仓（raw/mart 双层）
 python -m src.data.warehouse
