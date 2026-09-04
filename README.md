@@ -113,7 +113,7 @@ flowchart TB
 │   ├── architecture.md        # 架构设计
 │   ├── data-validation.md     # 数据校验体系（四层防线 + 分层调度：金标准/结构断言/造假/告警）
 │   ├── api.md                 # 查询 API 文档
-│   ├── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
+│   ├── cloud-deployment.md    # 云部署方案（GCP/AWS 迁移映射 + PG 数仓落地实证 v1.1）
 │   ├── mobile-web.md          # 手机网页版部署（伪小程序）
 │   ├── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
 │   └── decision-drill.md       # 决策演练 SOP（数据→三问定调→逼问矛盾→落纪律）
@@ -178,7 +178,7 @@ pytest tests/ -v
 | P1 | 数据层：多源接入 + 文档解析 + 清洗入库 + 数据验证 + Airflow 调度 | ✅（剩：全市场批量拉取） |
 | P2 | 分析层：估值分位 / 格雷厄姆体检 / 造假检测 / 竞争地位 | ✅ |
 | P3 | 报告层：数据绑定 + LLM 叙事 + 机构评级 + 业务版图 + DuckDB 数仓 + FastAPI 查询 API | ✅（剩：季度更新引擎） |
-| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案 + 全市场批量拉取 | 🔄 PG schema + 云方案已输出，剩全市场批量拉取 + 实际云部署 |
+| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案 + 全市场批量拉取 | ✅ PG 数仓已真实落地（三表 286 行，psql 可查）+ 云方案 v1.1；剩全市场批量拉取 + 实际云部署 |
 
 ## 合规铁律
 
