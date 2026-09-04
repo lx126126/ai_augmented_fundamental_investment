@@ -160,11 +160,21 @@ def _build_mart_segments(codes: list[str]) -> pd.DataFrame:
         latest = cand["report_date"].max()
         cutoff = latest - pd.DateOffset(years=2)
         cand = cand[cand["report_date"] >= cutoff]
+        # 同名条线去重：东财 stock_zygc_em 对某些公司会把「其他」等类目拆成
+        # 多条但共用同名（如格力「其他」被拆成两条不同收入/毛利率的记录）。
+        # 若直接拍平，(symbol, report_date, segment_name) 主键会撞。此处对同一
+        # 报告期内重名的条线加 (2)/(3)... 后缀，保住数据且主键唯一。
+        dup_key = cand.groupby("report_date")["clean"].transform(
+            lambda s: s.groupby(s).cumcount()
+        )
+        cand["clean_final"] = cand["clean"].where(
+            dup_key == 0, cand["clean"] + "(" + (dup_key + 1).astype(str) + ")"
+        )
         for _, r in cand.iterrows():
             rows.append({
                 "symbol": code,
                 "report_date": r["report_date"],
-                "segment_name": r["clean"],
+                "segment_name": r["clean_final"],
                 "category_type": best_type,
                 "revenue_yi": r["segment_revenue"] / 1e8 if pd.notna(r["segment_revenue"]) else None,
                 "margin_pct": r["segment_margin"] * 100 if pd.notna(r["segment_margin"]) else None,

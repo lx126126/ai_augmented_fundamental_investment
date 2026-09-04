@@ -171,6 +171,13 @@ def sync_all(truncate: bool = False, init: bool = False) -> dict:
             except Exception as e:
                 summary[table] = f"失败: {e}"
                 print(f"[elt] {table}: 失败 {e}")
+    except Exception:
+        conn.rollback()
+        raise
+    else:
+        # psycopg2 默认非 autocommit：不显式 commit，close() 会隐式 rollback，
+        # 导致所有 INSERT 被丢弃（三表 0 行的根因）。必须在 close 前 commit。
+        conn.commit()
     finally:
         conn.close()
     return summary
