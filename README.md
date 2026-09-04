@@ -111,7 +111,7 @@ flowchart TB
 ├── templates/valueline.html   # 报告模板（由 build_valueline.py 生成）
 ├── docs/
 │   ├── architecture.md        # 架构设计
-│   ├── data-validation.md     # 数据验证设计
+│   ├── data-validation.md     # 数据校验体系（四层防线 + 分层调度：金标准/结构断言/造假/告警）
 │   ├── api.md                 # 查询 API 文档
 │   ├── cloud-deployment.md    # 云部署方案设计（GCP/AWS 迁移映射）
 │   ├── mobile-web.md          # 手机网页版部署（伪小程序）
