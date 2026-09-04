@@ -199,3 +199,94 @@ def validate_all(raw: dict[str, pd.DataFrame]) -> CheckResult:
         merged.passed += r.passed
         merged.failed += r.failed
     return merged
+
+
+# --------------------------------------------------------------------------- #
+# 行情快照校验（日更 DAG 用）：价格/估值合理性，轻量、不阻断（仅告警）
+# --------------------------------------------------------------------------- #
+# 估值合理范围：PE/PB 恒为正；PE 上限 200（超过多为接口脏值或亏损股误报）、
+# PB 上限 30（金融/高杠杆行业也可能较高，留足余量）。这些是「明显异常」阈值，
+# 用于抓接口返回脏价/错位，不做投资判断。
+_QUOTE_POSITIVE = ["price", "market_cap"]
+_QUOTE_RANGE = {"pe": (0.0, 200.0), "pb": (0.0, 30.0)}
+
+
+def check_quote(q: pd.DataFrame, code: str | None = None) -> CheckResult:
+    """对行情快照单行做合理性校验（日更 DAG 的轻量 gate）。
+
+    与 check_financial_tables 的区别：行情是「高频、错了影响小」的数据，
+    故本校验定位为「明显异常识别 + 告警」，不阻断整条流水线（调用方自行决定
+    是否 raise）。校验三类：
+
+    1. 结构：非空、含 price/market_cap 列（防接口空表/字段错位）；
+    2. 价格合理性：现价落在 [52周低, 52周高] 区间外则视为异常（抓脏价）；
+       区间允许 ±5% 容差（52 周高低是历史极值，现价可能因除权/复权略超出）；
+    3. 估值合理性：PE/PB 落在合理范围（抓接口返回的 -1/999 等脏值）。
+
+    Args:
+        q: fetch_quote 返回的单行 DataFrame（含 price/pe/pb/market_cap/
+           price_52w_high/price_52w_low）。
+        code: 标的代码（仅用于日志展示）。
+
+    Returns:
+        CheckResult，.ok=False 表示存在明显异常（调用方决定是否告警/阻断）。
+    """
+    label = f"quote:{code}" if code else "quote"
+    res = CheckResult(table=label)
+
+    # 1) 结构断言
+    if q is None or q.empty:
+        res.add("non_empty", False, "行情快照为空")
+        return res
+    res.add("non_empty", True, f"{len(q)} 行")
+    res = _merge(res, check_frame(
+        q, label, min_rows=1,
+        required_cols=["price", "market_cap"],
+        positive_cols=_QUOTE_POSITIVE,
+    ))
+
+    # 2) 价格合理性：现价 vs 52 周区间（±5% 容差）
+    if all(c in q.columns for c in ("price", "price_52w_high", "price_52w_low")):
+        price = pd.to_numeric(q["price"], errors="coerce")
+        high = pd.to_numeric(q["price_52w_high"], errors="coerce")
+        low = pd.to_numeric(q["price_52w_low"], errors="coerce")
+        # 只对同时有 price 和高低的行校验
+        valid = price.notna() & high.notna() & low.notna() & (high > 0) & (low > 0)
+        if valid.any():
+            p = price[valid].iloc[0]
+            h = high[valid].iloc[0]
+            l = low[valid].iloc[0]
+            lo_ok = p >= l * 0.95
+            hi_ok = p <= h * 1.05
+            if lo_ok and hi_ok:
+                res.add("price_in_52w_range", True, f"现价 {p} ∈ [{l}, {h}]")
+            else:
+                res.add("price_in_52w_range", False,
+                        f"现价 {p} 超出 52 周区间 [{l}, {h}]（±5% 容差）")
+        else:
+            res.add("price_in_52w_range", True, "52 周高低缺失，跳过")
+
+    # 3) 估值合理性：PE/PB 落在合理范围
+    for col, (lo, hi) in _QUOTE_RANGE.items():
+        if col not in q.columns:
+            res.add(f"range:{col}", True, "列缺失，跳过")
+            continue
+        s = pd.to_numeric(q[col], errors="coerce").dropna()
+        if s.empty:
+            res.add(f"range:{col}", True, "值缺失，跳过（港股可能无 PE）")
+            continue
+        v = s.iloc[0]
+        if lo < v < hi:
+            res.add(f"range:{col}", True, f"{v} ∈ ({lo}, {hi})")
+        else:
+            res.add(f"range:{col}", False, f"{v} 超出合理范围 ({lo}, {hi})，疑似脏值")
+
+    return res
+
+
+def _merge(a: CheckResult, b: CheckResult) -> CheckResult:
+    """合并两个 CheckResult（用于 check_quote 内部复用 check_frame）。"""
+    a.checks.extend(b.checks)
+    a.passed += b.passed
+    a.failed += b.failed
+    return a

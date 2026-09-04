@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.data.quality import CheckResult, check_frame, validate_all
+from src.data.quality import CheckResult, check_frame, check_quote, validate_all
 
 
 def _bs(total_assets=100.0, total_liabilities=60.0, total_equity=40.0):
@@ -76,3 +76,49 @@ def test_check_result_summary_lists_failures():
     r.add("b", False, "坏")
     assert r.failed == 1
     assert "✗ b" in r.summary()
+
+
+# --------------------------------------------------------------------------- #
+# 行情快照校验（check_quote）
+# --------------------------------------------------------------------------- #
+def _quote(**kw):
+    """构造单行行情快照，默认值均合理。"""
+    base = {
+        "name": "X",
+        "price": 40.0,
+        "pe": 15.0,
+        "pb": 2.0,
+        "market_cap": 8000.0,
+        "price_52w_high": 50.0,
+        "price_52w_low": 30.0,
+        "symbol": "601088",
+    }
+    base.update(kw)
+    return pd.DataFrame([base])
+
+
+def test_check_quote_ok_on_normal():
+    assert check_quote(_quote(), "601088").ok
+
+
+def test_check_quote_empty_fails():
+    assert not check_quote(pd.DataFrame(), "601088").ok
+
+
+def test_check_quote_catches_price_outside_52w_range():
+    r = check_quote(_quote(price=80.0), "601088")  # 超出 52 周高 50 的 ±5%
+    assert not r.ok
+    assert any("price_in_52w_range" in c["check"] and not c["ok"] for c in r.checks)
+
+
+def test_check_quote_catches_dirty_pe():
+    r = check_quote(_quote(pe=-1.0), "601088")  # 接口常见脏值
+    assert not r.ok
+    assert any(c["check"] == "range:pe" and not c["ok"] for c in r.checks)
+
+
+def test_check_quote_skips_missing_hk_pe():
+    """港股可能无 PE，缺值时跳过估值断言，不误报。"""
+    q = _quote(pe=None)
+    # price/pb 合理、pe 缺失 → 整体仍应 ok（pe 缺失是合法情况，非脏值）
+    assert check_quote(q, "09992").ok

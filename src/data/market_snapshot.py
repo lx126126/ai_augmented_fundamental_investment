@@ -134,12 +134,28 @@ def snapshot_all(code: str, market: str | None = None) -> dict:
     """拉取单只标的全部行情类数据，返回各表状态摘要。
 
     market：可选交易所前缀（港股传 "hk"，只拉行情不拉估值/评级）。
+
+    行情校验：拉完 quote 后做「价格/估值合理性」轻量校验（见 quality.check_quote），
+    异常仅打印告警、不阻断（行情是高频低风险数据，与财报季的重校验分层）。
     """
-    result = {"code": code, "quote": False, "valuation": False, "rating": False}
+    result = {"code": code, "quote": False, "valuation": False, "rating": False,
+              "quote_ok": None, "quote_checks": []}
 
     q = snapshot_quote(code, market=market)
     if q is not None:
         result["quote"] = True
+        # 行情合理性校验（轻量，仅告警不阻断）
+        try:
+            from src.data.quality import check_quote
+            qc = check_quote(q, code=code)
+            result["quote_ok"] = qc.ok
+            result["quote_checks"] = [
+                c for c in qc.checks if not c["ok"]
+            ]
+            if not qc.ok:
+                print(f"[market] {code} 行情校验告警：{qc.summary()}")
+        except Exception as e:  # 校验本身失败不应拖垮拉取
+            print(f"[market] {code} 行情校验异常（跳过）：{e}")
 
     if not is_hk(market):
         v = snapshot_valuation(code)
