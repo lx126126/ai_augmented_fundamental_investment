@@ -50,3 +50,6 @@ journal/
 # 假设台账（主观判断：假设/验证/打脸/归因，严禁入库）
 # 保留 watchlist/watchlist.example.json（跟踪池配置，客观研究范围）
 watchlist/reviews/
+
+# 个人 Code Review 工作笔记（自用草稿，含未定稿的审查记录，不入库）
+docs/code-review-guide.md

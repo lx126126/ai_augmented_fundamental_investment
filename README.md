@@ -113,6 +113,8 @@ flowchart TB
 │   ├── architecture.md        # 架构设计
 │   ├── data-validation.md     # 数据校验体系（四层防线 + 分层调度：金标准/结构断言/造假/告警）
 │   ├── api.md                 # 查询 API 文档
+│   ├── api-test-evidence.md   # 接口实测证据（7 端点全通）
+│   ├── airflow-run-evidence.md # Airflow 双 DAG 运行证据
 │   ├── cloud-deployment.md    # 云部署方案（GCP/AWS 迁移映射 + PG 数仓落地实证 v1.1）
 │   ├── mobile-web.md          # 手机网页版部署（伪小程序）
 │   ├── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
