@@ -1,0 +1,30 @@
+# PostgreSQL 数仓容器（生产级关系型数仓，承接 DuckDB mart 层 ELT）
+# 用途：验证「DuckDB → PG 数仓 schema 化」落地，对齐 JD「数仓（Snowflake/BigQuery/PG schema 化）」。
+# 用法：
+#   docker compose -f airflow/docker-compose.pg.yaml up -d
+#   # 首次建 schema + 同步：
+#   python -m src.data.elt_pg --init-schema --truncate
+#   # 验证：
+#   docker exec -it fqf-pg psql -U fqf -d fqf -c "SELECT symbol, report_date, roe_pct FROM mart.annual_financials LIMIT 5;"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fqf-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fqf
+      POSTGRES_PASSWORD: fqf123456
+      POSTGRES_DB: fqf
+    ports:
+      - "5432:5432"
+    volumes:
+      - fqf_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fqf -d fqf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  fqf_pg_data:

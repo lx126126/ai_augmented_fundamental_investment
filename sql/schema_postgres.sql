@@ -91,11 +91,10 @@ CREATE TABLE IF NOT EXISTS mart.annual_financials (
     quick_ratio              NUMERIC(10, 4),          -- 速动比率
 
     -- 分红（亿元 / % / 元）
-    dividend_per_10          NUMERIC(10, 4),          -- 每10股派息（元）
+    dividend_per_share       NUMERIC(10, 4),          -- 每股股息（元）
     dividend_yield_pct       NUMERIC(10, 4),          -- 股息率 %
     dividend_total           NUMERIC(20, 4),          -- 分红总额（亿元）
     dividend_payout_pct      NUMERIC(10, 4),          -- 分红比例（股利支付率）%
-    dividend_per_share       NUMERIC(10, 4),          -- 每股股息（元）
 
     -- ValueLine 派生指标
     working_capital          NUMERIC(20, 4),          -- 营运资本（流动资产-流动负债）
