@@ -142,8 +142,57 @@ def _period_label(dt, half_yearly: bool = False) -> str:
     return f"{y}Q{q}"
 
 
+def _apply_corrections(raw: dict[str, pd.DataFrame], code: str,
+                       val_dir: Path | None = None) -> dict[str, pd.DataFrame]:
+    """把 PDF 金标准修正记录应用到 raw 数据（raw 层保持接口原始值，修正在此层统一应用）。
+
+    修正记录来源：data/validation/{code}_{year}_reconcile.json（由 reconcile_all 落盘，
+    每个 item 含 table / field / pdf_yi(亿元)）。把 pdf_yi 亿元还原为「元」，覆盖到
+    对应表、对应年报行的字段值。这样「重拉 raw」只刷新接口原始值，修正记录独立持久化，
+    两者解耦，不会再互相抹掉。
+    """
+    import json
+
+    val_dir = val_dir or (Path(__file__).resolve().parent.parent.parent / "data" / "validation")
+    out = {k: v.copy() for k, v in raw.items()}
+    if not val_dir.exists():
+        return out
+
+    logs = sorted(val_dir.glob(f"{code}_*_reconcile.json"))
+    if not logs:
+        return out
+
+    for log_path in logs:
+        try:
+            data = json.loads(log_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        year = data.get("year")
+        for item in data.get("items", []):
+            table = item.get("table")
+            field = item.get("field")
+            pdf_yi = item.get("pdf_yi")
+            diff_pct = item.get("diff_pct")
+            if not table or not field or pdf_yi is None or table not in out:
+                continue
+            # 保护：diff_pct 异常大（如 >1e6%）说明 PDF 解析单位识别错误（元/万元/亿元错位），
+            # 而非真实的重述偏差，跳过该条避免把错误解析值应用进数据。
+            if diff_pct is not None and abs(diff_pct) > 1e6:
+                continue
+            df = out[table]
+            if field not in df.columns or "report_date" not in df.columns:
+                continue
+            d = pd.to_datetime(df["report_date"])
+            mask = (d.dt.year == year) & (d.dt.month == 12)
+            if not mask.any():
+                continue
+            # pdf_yi 是亿元，raw 是元 → 还原为元（int 消除浮点误差，金额应为整数元）
+            df.loc[mask, field] = int(round(pdf_yi * 1e8))
+    return out
+
+
 def load_raw(code: str) -> dict[str, pd.DataFrame]:
-    """读 parquet 原始数据（含分业务构成 + 估值，最多 8 张表）。"""
+    """读 parquet 原始数据（含分业务构成 + 估值，最多 8 张表），并应用 PDF 金标准修正。"""
     d = Path(__file__).resolve().parent.parent.parent / "data" / "raw" / code
     tables = ["financial_indicator", "profit_sheet", "balance_sheet", "cash_flow", "dividend", "segments", "valuation", "quote", "rating", "competition", "profile"]
     out = {}
@@ -151,7 +200,7 @@ def load_raw(code: str) -> dict[str, pd.DataFrame]:
         p = d / f"{t}.parquet"
         if p.exists():
             out[t] = pd.read_parquet(p)
-    return out
+    return _apply_corrections(out, code)
 
 
 def build_template_data(code: str) -> dict:

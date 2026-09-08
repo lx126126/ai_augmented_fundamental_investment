@@ -938,12 +938,13 @@ TEMPLATE = """<!DOCTYPE html>
 
 
 def _reconcile(code: str) -> list[dict]:
-    """生成报告前，用官方年报 PDF 金标准交叉校验并覆盖接口错误字段。
+    """生成报告前，用官方年报 PDF 金标准交叉校验并生成修正记录。
 
     背景：东财/新浪等第三方接口同源，在「同一控制下企业合并追溯重述」等特殊情形下
     会抓取错误（如神华 2025 年总资产 9038 亿 vs 官方 6278 亿）。此步骤在渲染前用官方
-    年报 PDF 的三张主表（资产负债表 + 利润表 + 现金流量表）覆盖错误字段，保证报告
-    数据可信。失败则降级跳过。
+    年报 PDF 的三张主表（资产负债表 + 利润表 + 现金流量表）对比接口值，差异 >1% 记录
+    修正项（落盘 reconcile.json，由 adapter.load_raw 读 raw 后统一应用，raw 层保持接口
+    原始值）。失败则降级跳过。
     """
     try:
         from src.validation import reconcile_all, load_reconcile_log
@@ -960,8 +961,8 @@ def _reconcile(code: str) -> list[dict]:
         result = reconcile_all(code, year)
         n = sum(len(c) for c in result["corrections"].values())
         if n:
-            print(f"[reconcile] {code} {year} 已用官方PDF金标准覆盖 {n} 个接口错误字段（三表）")
-        # 读历史覆盖记录（parquet 已覆盖后本次可能返回空，但记录已落盘）
+            print(f"[reconcile] {code} {year} 记录 {n} 个接口错误字段（官方PDF金标准，adapter 读 raw 时应用）")
+        # 读历史修正记录（供报告「数据校验」区展示）
         log = load_reconcile_log(code, year)
         if log:
             print(f"[reconcile] {code} {year} 历史修正记录 {len(log)} 项（官方PDF金标准）")

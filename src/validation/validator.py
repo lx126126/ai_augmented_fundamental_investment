@@ -212,22 +212,18 @@ def format_history_report(result: dict) -> str:
 def reconcile_balance_sheet(code: str, year: int,
                             data_dir: str | Path = "data/raw",
                             pdf_dir: str | Path = "data/validation") -> list[dict]:
-    """用官方年报 PDF 合并资产负债表（金标准）覆盖接口错误字段，写回 parquet。
+    """用官方年报 PDF 合并资产负债表（金标准）对比接口字段，差异 >1% 记录修正。
 
     背景：东财/新浪等第三方接口同源（同一底层数据供应商），在「同一控制下企业合并
     追溯重述」等特殊情形下会抓取错误——如神华 2025 年总资产被接口报成 9038 亿（官方
     6278 亿）、短期借款 131 亿（官方 4 亿）。官方年报 PDF 的合并资产负债表是唯一权威
-    源，本函数逐字段对比，差异超过容差（1%）即用 PDF 值覆盖。
+    源，本函数逐字段对比，差异超过容差（1%）即记录修正项。
 
-    覆盖后 cleaner 会重新跑（_to_yi + 派生指标重算），故无需重复派生逻辑。
-
-    覆盖记录持久化到 data/validation/{code}_{year}_reconcile.json，供报告「数据校验」区
-    展示（parquet 覆盖后再次对比会一致，故记录须落盘保存）。
+    ⚠️ 不再写回 raw parquet：raw 层保持接口原始值（重拉幂等无害），修正由
+    adapter._apply_corrections 在读 raw 后统一应用（见 adapter.py）。
 
     返回覆盖记录列表 [{field, label, api_yi, pdf_yi, diff_pct}]。
     """
-    import json
-
     pdf_path = Path(pdf_dir) / f"{code}_{year}年报.pdf"
     if not pdf_path.exists():
         pdf_path = download_annual_report(code, year, Path(pdf_dir))
@@ -257,17 +253,11 @@ def reconcile_balance_sheet(code: str, year: int,
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
         if diff > RECONCILE_TOLERANCE_PCT:
-            bs.at[idx, field] = pdf_val
             corrections.append({
                 "field": field, "label": _BS_LABEL.get(field, field),
                 "api_yi": api_val / 1e8, "pdf_yi": pdf_val / 1e8, "diff_pct": diff,
             })
 
-    if corrections:
-        bs.to_parquet(bs_path, index=False)
-        log_path = Path(pdf_dir) / f"{code}_{year}_reconcile.json"
-        log_path.write_text(json.dumps({"code": code, "year": year, "items": corrections},
-                                       ensure_ascii=False, indent=2), encoding="utf-8")
     return corrections
 
 
@@ -305,11 +295,12 @@ _CASH_FLOW_LABEL = {
 
 
 def _reconcile_statement(code: str, year: int, table: str, parser, pdf_dir, data_dir) -> list[dict]:
-    """通用单表 reconcile：PDF 金标准 vs 接口 parquet，差异 >1% 覆盖写回。
+    """通用单表 reconcile：PDF 金标准 vs 接口 parquet，差异 >1% 记录修正（不写回 raw）。
 
     table: 'profit_sheet' / 'cash_flow' / 'balance_sheet'
     parser: parse_income_statement / parse_cash_flow_statement / parse_balance_sheet
-    返回覆盖记录 [{field, label, api_yi, pdf_yi, diff_pct}]。
+    返回覆盖记录 [{table, field, label, api_yi, pdf_yi, diff_pct}]。
+    修正由 adapter 读 raw 后统一应用，raw parquet 保持接口原始值（重拉幂等无害）。
     """
     pdf_path = Path(pdf_dir) / f"{code}_{year}年报.pdf"
     if not pdf_path.exists():
@@ -340,22 +331,19 @@ def _reconcile_statement(code: str, year: int, table: str, parser, pdf_dir, data
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
         if diff > RECONCILE_TOLERANCE_PCT:
-            df.at[idx, field] = pdf_val
             label = _INCOME_LABEL.get(field, _CASH_FLOW_LABEL.get(field, field))
             corrections.append({
                 "field": field, "label": label,
                 "api_yi": api_val / 1e8, "pdf_yi": pdf_val / 1e8, "diff_pct": diff,
             })
 
-    if corrections:
-        df.to_parquet(parquet_path, index=False)
     return corrections
 
 
 def reconcile_income_statement(code: str, year: int,
                                data_dir: str | Path = "data/raw",
                                pdf_dir: str | Path = "data/validation") -> list[dict]:
-    """利润表 PDF 金标准 reconcile（差异 >1% 覆盖写回 profit_sheet.parquet）。"""
+    """利润表 PDF 金标准 reconcile（差异 >1% 记录修正，不写回 raw）。"""
     return _reconcile_statement(code, year, "profit_sheet", parse_income_statement,
                                 pdf_dir, data_dir)
 
@@ -371,10 +359,11 @@ def reconcile_cash_flow(code: str, year: int,
 def reconcile_all(code: str, year: int,
                   data_dir: str | Path = "data/raw",
                   pdf_dir: str | Path = "data/validation") -> dict:
-    """三表全量 reconcile：利润表 + 现金流量表 + 资产负债表，统一覆盖写回 + 落盘记录。
+    """三表全量 reconcile：利润表 + 现金流量表 + 资产负债表，统一记录修正 + 落盘。
 
     返回 {code, year, corrections: {表: [覆盖记录]}}。
-    覆盖记录持久化到 data/validation/{code}_{year}_reconcile.json（合并三表）。
+    修正记录持久化到 data/validation/{code}_{year}_reconcile.json（合并三表，带 table 字段），
+    供报告「数据校验」区展示 + adapter 读 raw 后应用（raw 层保持接口原始值）。
     """
     import json
 
