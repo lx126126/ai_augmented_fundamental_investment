@@ -53,3 +53,6 @@ watchlist/reviews/
 
 # 个人 Code Review 工作笔记（自用草稿，含未定稿的审查记录，不入库）
 docs/code-review-guide.md
+
+# 面试话术文档（含短板清单与雷点清单；简历附了 GitHub 链接，公开不利，不入库）
+docs/interview-narrative.md
