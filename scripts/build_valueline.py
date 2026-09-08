@@ -133,23 +133,34 @@ def build_segments() -> str:
             s.append((v / total * 100) if (v is not None and total > 0) else None)
         shares.append(s)
 
-    def _table(vals_list, unit: str) -> str:
-        head = "".join(f"<th>{q}</th>" for q in SEGMENT_LABELS)
-        rows = []
-        for (name, color, _revs, _margins), vals in zip(SEGMENTS, vals_list):
-            cells = [f'<td class="row-head"><span class="seg-dot" style="background:{color}"></span>{name}</td>']
-            cells += [f'<td class="num">{_fmt(v)}</td>' for v in vals]
-            rows.append("<tr>" + "".join(cells) + "</tr>")
-        return (
-            '<div class="table-scroll">'
-            f'<table class="dense"><thead><tr><th class="name">{unit}</th>{head}</tr></thead>'
-            f'<tbody>{"".join(rows)}</tbody></table>'
-            "</div>"
-        )
+    # 单一表：每个报告期下分「收入 / 占比 / 利润率」三列
+    # 表头两层：第一层 report_date（colspan=3），第二层 收入(亿元)/占比(%)/利润率(%)
+    head1 = '<th class="name" rowspan="2">业务条线</th>'
+    head2 = ""
+    for q in SEGMENT_LABELS:
+        head1 += f'<th colspan="3">{q}</th>'
+        head2 += "<th>收入</th><th>占比</th><th>利润率</th>"
+    rows = []
+    for (name, color, revs, margins), share_vals in zip(SEGMENTS, shares):
+        cells = [f'<td class="row-head"><span class="seg-dot" style="background:{color}"></span>{name}</td>']
+        for i in range(n_periods):
+            rev = revs[i]
+            sh = share_vals[i]
+            mg = margins[i]
+            rev_txt = _fmt(rev) if rev is not None else "—"
+            sh_txt = f"{sh:.1f}" if sh is not None else "—"
+            mg_txt = f"{mg:.1f}" if mg is not None else "—"
+            cells.append(f'<td class="num">{rev_txt}</td>')
+            cells.append(f'<td class="num">{sh_txt}</td>')
+            cells.append(f'<td class="num">{mg_txt}</td>')
+        rows.append("<tr>" + "".join(cells) + "</tr>")
 
-    rev_table = _table([s[2] for s in SEGMENTS], "业务条线")
-    margin_table = _table([s[3] for s in SEGMENTS], "业务条线")
-    share_table = _table(shares, "业务条线")
+    table = (
+        '<div class="table-scroll">'
+        f'<table class="dense"><thead><tr>{head1}</tr><tr>{head2}</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
+        "</div>"
+    )
 
     # 最新报告期收入占比（堆叠条，None 视为 0）
     latest = [s[2][-1] if s[2][-1] is not None else 0 for s in SEGMENTS]
@@ -168,16 +179,10 @@ def build_segments() -> str:
         legend = ""
 
     return (
-        '<div class="seg-block seg-full">'
-        f'<div class="seg-block-title">收入（亿元）</div>{rev_table}'
-        "</div>"
-        '<div class="seg-row">'
-        f'<div class="seg-block"><div class="seg-block-title">利润率（%）</div>{margin_table}</div>'
-        f'<div class="seg-block"><div class="seg-block-title">收入占比（%）</div>{share_table}</div>'
-        "</div>"
+        f'<div class="seg-block seg-full">{table}</div>'
         f'<div class="seg-bar">{bar}</div>'
         f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'
-        f'<div class="seg-note" style="font-size:10px;color:var(--faint);margin-top:5px;">利润率口径随行业而异：金融业为利差率/利润率，制造业为毛利率（数据源披露口径）。</div>'
+        f'<div class="seg-note" style="font-size:10px;color:var(--faint);margin-top:5px;">收入单位亿元；利润率口径随行业而异：金融业为利差率/利润率，制造业为毛利率（数据源披露口径）。</div>'
     )
 
 
@@ -379,48 +384,65 @@ def _narr(path, default=""):
 
 
 def build_business_map() -> str:
-    """业务版图（客观）：主营业务一句话（巨潮）+ 各业务条线收入占比条（分业务构成）。"""
+    """业务版图（客观）：主营业务一句话（巨潮）+ 各业务条线收入占比文字（分业务构成）。
+
+    与盈利来源/盈利结构/护城河（LLM 叙事）合并为一段连贯文字，避免内容重复。
+    此处仅返回「主营业务 + 各业务占比」的数据文字，供 build_business_model 拼装。
+    """
     if not BUSINESS_MAP:
         return ""
     bm = BUSINESS_MAP
     main = bm.get("main_business")
     segs = bm.get("segments") or []
 
-    main_txt = f'<div class="bizmap-main">{main}</div>' if main else ""
-    bars = []
-    for s in segs:
-        name = s.get("name", "")
-        pct = s.get("pct")
-        w = pct if (pct is not None) else 0
-        bars.append(
-            f'<div class="bizmap-row">'
-            f'<span class="bizmap-name">{name}</span>'
-            f'<div class="bizmap-track"><div class="bizmap-bar" style="width:{w:.1f}%"></div></div>'
-            f'<span class="bizmap-val">{pct:.1f}%</span>'
-            f'</div>'
-        )
-    seg_block = '<div class="bizmap-list">' + "".join(bars) + "</div>" if bars else ""
-
-    if not main_txt and not seg_block:
-        return ""
-    return (
-        '<div class="bizmap">'
-        f'<div class="bizmap-title">业务版图 <span class="bizmap-note">主营业务 · 巨潮概况 | 占比 · 分业务收入</span></div>'
-        f'{main_txt}{seg_block}'
-        "</div>"
+    # 各业务条线占比（文字，如「消费电器 82.9%、工业制品 9.7%」）
+    seg_txt = "、".join(
+        f"{s.get('name', '')} {s.get('pct', 0):.1f}%" for s in segs if s.get("pct") is not None
     )
+
+    parts = []
+    if main:
+        main = main.rstrip("。").rstrip("，").strip()
+        parts.append(f"主营业务为{main}")
+    if seg_txt:
+        parts.append(f"分业务收入占比：{seg_txt}")
+    if not parts:
+        return ""
+    return "；".join(parts)
 
 
 def build_business_model() -> str:
+    """商业模式文字段：业务版图（客观占比） + 盈利来源/盈利结构/护城河（LLM 叙事）。
+
+    合并成一段连贯文字（不再分行贴标签），避免「业务版图 / 盈利来源 / 盈利结构」
+    三者内容重复。顺序：主营业务 → 各业务真实占比 → 盈利来源/结构 → 护城河。
+    """
     bm = NARRATIVE.get("business_model", {}) if NARRATIVE else {}
-    rows = []
-    for key, label in [("revenue_source", "盈利来源"), ("profit_structure", "盈利结构"),
-                       ("moat", "护城河")]:
-        val = bm.get(key, "")
-        rows.append(f'<div class="biz-row"><div class="biz-k">{label}</div><div class="biz-v">{val}</div></div>')
-    if not any(bm.get(k) for k in ("revenue_source", "profit_structure", "moat")):
+    revenue_source = (bm.get("revenue_source") or "").strip()
+    profit_structure = (bm.get("profit_structure") or "").strip()
+    moat = (bm.get("moat") or "").strip()
+
+    # 业务版图客观数据（主营业务 + 各业务占比）
+    bizmap_txt = build_business_map()
+
+    # 拼接为一段连贯文字：业务版图 → 盈利来源/结构 → 护城河
+    segs = []
+    if bizmap_txt:
+        segs.append(bizmap_txt.rstrip("。"))
+    for val in (revenue_source, profit_structure):
+        if val:
+            # 去掉 LLM 可能自带的前缀（「盈利来源：」「盈利结构：」），避免重复
+            val = val.split("：", 1)[-1].strip() if "：" in val else val
+            segs.append(val.rstrip("。"))
+    if not segs:
         return '<div class="biz"><div class="biz-v" style="color:var(--faint);">商业模式待 LLM 生成</div></div>'
-    return '<div class="biz">' + "".join(rows) + "</div>"
+
+    # 一段正文 + 护城河（相对独立，加粗引出，仍属同一段落）
+    body = "。".join(segs) + "。"
+    if moat:
+        moat = moat.split("：", 1)[-1].strip() if "：" in moat else moat
+        body += f'<span style="color:var(--accent);font-weight:600;">护城河：</span>{moat}'
+    return '<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">' + body + "</div></div>"
 
 
 def build_competition() -> str:
@@ -875,7 +897,6 @@ TEMPLATE = """<!DOCTYPE html>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-@@BUSINESS_MAP@@
 @@BIZ@@
 @@COMPETITION@@
   </div>
@@ -885,7 +906,7 @@ TEMPLATE = """<!DOCTYPE html>
 @@TABLE@@
     <div class="sub-title">近两年季度（@@QUARTER_RANGE@@）</div>
 @@QUARTER_TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表 / 股本为季度末时点值。</div>
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表为季度末时点值。</div>
 
     <div class="sub-title">业务收入构成（@@SEGMENT_RANGE@@）</div>
 @@SEGMENTS@@
@@ -1053,7 +1074,6 @@ def build(code: str = "601088", daily: bool = False) -> None:
         .replace("@@VAL_GRID@@", build_val_grid())
         .replace("@@MARKET_ROW@@", build_market_row())
         .replace("@@GRAHAM@@", build_graham())
-        .replace("@@BUSINESS_MAP@@", build_business_map())
         .replace("@@BIZ@@", build_business_model())
         .replace("@@COMPETITION@@", build_competition())
         .replace("@@CURRENT_POSITION@@", build_current_position())

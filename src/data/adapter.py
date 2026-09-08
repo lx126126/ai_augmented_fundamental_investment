@@ -86,9 +86,6 @@ QUARTER_SPEC = [
     (None, "应收账款（亿元）", "accounts_receivable", 1),
     (None, "有息负债（亿元）", "interest_bearing_debt", 1),
     (None, "商誉（亿元）", "goodwill", 1),
-    ("股本结构（季末）", None, None, None),
-    (None, "普通股数量（亿股）", "total_shares_yi", 2),
-    (None, "优先股数量（亿股）", "preferred_shares_yi", 2),
 ]
 
 
@@ -219,11 +216,6 @@ def build_template_data(code: str) -> dict:
     annual = build_annual_financials(raw)
     quarter = build_quarter_financials(raw)
 
-    # 股本（share_capital 已是亿股，面值 1 元）+ 优先股默认 0
-    latest_shares = None
-    if "share_capital" in annual.columns:
-        latest_shares = annual["share_capital"].iloc[-1]  # 亿股
-
     annual = annual.copy()
     if "share_capital" in annual.columns:
         annual["total_shares_yi"] = annual["share_capital"]  # 已是亿股
@@ -231,11 +223,6 @@ def build_template_data(code: str) -> dict:
         annual["preferred_shares_yi"] = annual["preferred_shares"]  # 已是亿股（面值1元）
     else:
         annual["preferred_shares_yi"] = 0.0
-
-    quarter = quarter.copy()
-    if latest_shares is not None:
-        quarter["total_shares_yi"] = latest_shares  # 股本变动不频繁，用最新值近似
-    quarter["preferred_shares_yi"] = 0.0
 
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)
