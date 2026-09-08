@@ -29,6 +29,7 @@ from .fields import (
     HK_FINANCIAL_INDICATOR_MAP,
     HK_DIVIDEND_MAP,
 )
+from .retry import retry
 
 
 def _em_symbol(code: str) -> str:
@@ -62,6 +63,7 @@ def _bare_code(code: str) -> str:
     return c.split(".")[0].zfill(6)
 
 
+@retry()
 def fetch_financial_indicator(code: str, start_year: str = "2005") -> pd.DataFrame:
     """财务指标（比率型）：毛利率/净利率/ROE/负债率/增速/现金流背离等。
 
@@ -75,6 +77,7 @@ def fetch_financial_indicator(code: str, start_year: str = "2005") -> pd.DataFra
     return df
 
 
+@retry()
 def fetch_profit_sheet(code: str) -> pd.DataFrame:
     """利润表（绝对额）：营业收入/净利润等。"""
     raw = ak.stock_profit_sheet_by_report_em(symbol=_em_symbol(code))
@@ -84,6 +87,7 @@ def fetch_profit_sheet(code: str) -> pd.DataFrame:
     return df
 
 
+@retry()
 def fetch_balance_sheet(code: str) -> pd.DataFrame:
     """资产负债表（时点值）：总资产/负债/货币资金/存货/应收/商誉等。"""
     raw = ak.stock_balance_sheet_by_report_em(symbol=_em_symbol(code))
@@ -93,6 +97,7 @@ def fetch_balance_sheet(code: str) -> pd.DataFrame:
     return df
 
 
+@retry()
 def fetch_cash_flow(code: str) -> pd.DataFrame:
     """现金流表：经营/投资/筹资现金流净额。"""
     raw = ak.stock_cash_flow_sheet_by_report_em(symbol=_em_symbol(code))
@@ -102,6 +107,7 @@ def fetch_cash_flow(code: str) -> pd.DataFrame:
     return df
 
 
+@retry()
 def fetch_dividend(code: str) -> pd.DataFrame:
     """分红送配：每10股派息、股息率、总股本（普通股数量）。"""
     raw = ak.stock_fhps_detail_em(symbol=code)
@@ -112,6 +118,7 @@ def fetch_dividend(code: str) -> pd.DataFrame:
     return df
 
 
+@retry()
 def fetch_segments(code: str) -> pd.DataFrame:
     """主营构成（分业务收入/毛利率），东财口径，半年度披露。"""
     raw = ak.stock_zygc_em(symbol=_em_symbol(code))
@@ -205,6 +212,7 @@ def _hk_code(code: str) -> str:
     return code
 
 
+@retry()
 def _hk_report_to_wide(symbol: str, mapping: dict, code: str) -> pd.DataFrame:
     """港股三表长表 → 宽表（标准字段名）。
 
@@ -245,6 +253,7 @@ def fetch_hk_cash_flow(code: str) -> pd.DataFrame:
     return wide
 
 
+@retry()
 def fetch_hk_financial_indicator(code: str) -> pd.DataFrame:
     """港股财务指标（宽表，英文列名 → 标准字段名）。"""
     hk = _hk_code(code)
@@ -492,6 +501,7 @@ def fetch_hk_profile(code: str) -> pd.DataFrame | None:
     }])
 
 
+@retry(retries=5, base=2.0, cap=15.0)
 def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame | None:
     """竞争地位：东财业绩报表（全市场营收 + 申万行业）→ 标的所在行业全部公司。
 

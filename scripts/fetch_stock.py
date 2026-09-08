@@ -6,6 +6,7 @@
     python scripts/fetch_stock.py 601088          # 拉神华（A 股）
     python scripts/fetch_stock.py 600036          # 拉招行（A 股）
     python scripts/fetch_stock.py 09992.HK        # 拉泡泡玛特（港股，财报人民币/市值港元）
+    python scripts/fetch_stock.py 601088 --incremental   # 断点续传：跳过已成功落盘的表
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.fetcher import fetch_all, fetch_all_hk, _hk_code
-from src.data.storage import save_all
+from src.data.storage import save_all, missing_tables
 
 
 def _is_hk(code: str) -> bool:
@@ -29,14 +30,33 @@ def _is_hk(code: str) -> bool:
 
 
 def main() -> None:
-    code = sys.argv[1] if len(sys.argv) > 1 else "601088"
+    args = sys.argv[1:]
+    incremental = "--incremental" in args
+    args = [a for a in args if a != "--incremental"]
+    code = args[0] if args else "601088"
     is_hk = _is_hk(code)
 
     # 港股剥后缀成 5 位码（09992.HK → 09992），作为 parquet 目录名
     store_code = _hk_code(code) if is_hk else code.zfill(6)
 
     print(f"拉取 {code} 财报数据（{'港股' if is_hk else 'A股'}）...")
-    data = fetch_all_hk(code) if is_hk else fetch_all(code)
+
+    if is_hk:
+        data = fetch_all_hk(code)
+    else:
+        data = fetch_all(code)
+
+    if incremental:
+        # 断点续传：只保留「缺失或为空」的表，跳过已成功落盘的表
+        missing = missing_tables(store_code, list(data.keys()))
+        if not missing:
+            print("✅ 所有表均已成功落盘，无需重新拉取（--incremental 跳过）")
+            return
+        skipped = [t for t in data if t not in missing]
+        if skipped:
+            print(f"⏭  跳过已存在的表: {', '.join(skipped)}")
+        data = {t: data[t] for t in missing}
+
     paths = save_all(data, store_code)
 
     print("\n已入库文件:")
