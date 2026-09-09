@@ -14,6 +14,7 @@ data/raw/
 data/market/
 data/cache/
 data/warehouse/
+data/*_daily_kline.csv
 *.parquet
 *.sqlite
 *.db
