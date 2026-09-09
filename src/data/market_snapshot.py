@@ -81,14 +81,20 @@ def snapshot_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     if q is None or q.empty:
         return None
 
+    # 快照日期（腾讯行情返回的是最近收盘价；此处记为抓取日，即「股价数据日期」）
+    snap_date = pd.Timestamp.now().normalize()
+
     # 覆盖报告用最新表（adapter 读 data/raw/{code}/quote.parquet）
+    # 补 report_date，让下游能拿到「股价数据日期」，供发布日期与股价日期保持一致
+    raw_q = q.copy()
+    raw_q["report_date"] = snap_date
     raw_path = RAW_DIR / code / "quote.parquet"
     raw_path.parent.mkdir(parents=True, exist_ok=True)
-    q.to_parquet(raw_path, index=False)
+    raw_q.to_parquet(raw_path, index=False)
 
     # 追加历史快照（加 report_date 日期列）
     snap = q.copy()
-    snap["report_date"] = pd.Timestamp.now().normalize()
+    snap["report_date"] = snap_date
     _append_snapshot(MARKET_DIR / f"{code}_quote.parquet", snap)
     return snap
 

@@ -77,6 +77,12 @@ def _with_interest_debt(bs_df: pd.DataFrame) -> pd.DataFrame:
     if td is not None:
         df["total_debt"] = td
 
+    # 有息负债 fallback：部分公司（如茅台）最新报告期「长期借款/短期借款」字段为 NaN
+    # （东财不披露该明细科目），但实际有应付债券/长期应付款/租赁负债等。此时用完整
+    # 口径 total_debt 兜底，避免有息负债误显示为空。
+    if "interest_bearing_debt" in df.columns and "total_debt" in df.columns:
+        df["interest_bearing_debt"] = df["interest_bearing_debt"].fillna(df["total_debt"])
+
     if "goodwill" in df.columns:
         df["goodwill"] = df["goodwill"].fillna(0.0)
     if "preferred_shares" in df.columns:

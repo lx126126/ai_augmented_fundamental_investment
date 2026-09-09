@@ -135,11 +135,12 @@ def build_segments() -> str:
 
     # 单一表：每个报告期下分「收入 / 占比 / 利润率」三列
     # 表头两层：第一层 report_date（colspan=3），第二层 收入(亿元)/占比(%)/利润率(%)
+    # 报告期/列名均为文字标签，居中显示（数字右对齐由 td.num 控制，表头文字居中更整齐）
     head1 = '<th class="name" rowspan="2">业务条线</th>'
     head2 = ""
     for q in SEGMENT_LABELS:
-        head1 += f'<th colspan="3">{q}</th>'
-        head2 += "<th>收入</th><th>占比</th><th>利润率</th>"
+        head1 += f'<th colspan="3" style="text-align:center">{q}</th>'
+        head2 += '<th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th>'
     rows = []
     for (name, color, revs, margins), share_vals in zip(SEGMENTS, shares):
         cells = [f'<td class="row-head"><span class="seg-dot" style="background:{color}"></span>{name}</td>']
@@ -201,6 +202,15 @@ def build_val_grid() -> str:
     if not VALUATION:
         return '<div style="font-size:11px;color:var(--faint);padding:8px 0;">估值数据待接入（行情接口受网络限制）。</div>'
     v = VALUATION
+    # 总市值（亿元；港股为港元。万亿以上转「万亿」更易读）
+    mcap = v.get("market_cap")
+    if mcap is not None:
+        if mcap >= 10000:
+            mcap_txt = f"{mcap/10000:.2f}<small>万亿</small>"
+        else:
+            mcap_txt = f"{mcap:.0f}<small>亿</small>"
+    else:
+        mcap_txt = "—"
     pe = f"{v['pe']:.1f}<small>x</small>" if v.get("pe") else "—"
     pb = f"{v['pb']:.2f}<small>x</small>" if v.get("pb") else "—"
     dy = f"{v['dividend_yield']:.1f}<small>%</small>" if v.get("dividend_yield") else "—"
@@ -208,6 +218,7 @@ def build_val_grid() -> str:
     pb_pct, pb_cls, _ = _pct_text(v.get("pb_pctile"))
     return (
         '<div class="val-grid">'
+        f'<div class="val-item"><div class="lbl">总市值</div><div class="v">{mcap_txt}</div><div class="pct">最新收盘</div></div>'
         f'<div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">{pe}</div><div class="pct {pe_cls}">近10年分位 {pe_pct}</div></div>'
         f'<div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">{pb}</div><div class="pct {pb_cls}">近10年分位 {pb_pct}</div></div>'
         f'<div class="val-item"><div class="lbl">股息率</div><div class="v" style="color:var(--up)">{dy}</div><div class="pct">最新报告期</div></div>'
@@ -223,10 +234,13 @@ def build_market_row() -> str:
     if low is None or high is None or now is None:
         return ""
     pos = (now - low) / (high - low) * 100 if high > low else 50
+    # 股价数据日期（与头部「发布日期」一致）
+    qd = v.get("quote_date")
+    date_note = f'<span class="cp-note" style="font-weight:400;">股价日期 {qd.isoformat()}</span>' if qd else ""
     return (
         '<div class="market-row">'
         '<div class="price-range">'
-        '<div class="pr-title">52周价格区间（元）</div>'
+        f'<div class="pr-title">52周价格区间（元）{date_note}</div>'
         f'<div class="pr-bar"><div class="pr-marker" style="left:{pos:.1f}%"></div></div>'
         '<div class="pr-labels">'
         f'<span>52周最低 <b>{low:.2f}</b></span>'
@@ -1056,7 +1070,11 @@ def build(code: str = "601088", daily: bool = False) -> None:
     year_range = f"{YEARS[0]}–{YEARS[-1]}"
     quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"
     segment_range = f"{SEGMENT_LABELS[0]}–{SEGMENT_LABELS[-1]}" if SEGMENT_LABELS else ""
-    publish_date = "2026-08-25"
+    # 发布日期 = 股价数据日期（估值面板 quote_date），保证「发布日期」与「最新股价日期」一致；
+    # 取不到 quote_date 时回退到生成当天。
+    from datetime import date as _date
+    quote_date = (VALUATION or {}).get("quote_date")
+    publish_date = quote_date.isoformat() if quote_date else _date.today().isoformat()
 
     industry = (COMPETITION or {}).get("industry") or _narr(["industry"], "行业待接入")
     lynch_type = _narr(["lynch_type"], "待分析")

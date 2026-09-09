@@ -38,27 +38,27 @@ def _norm_code(code: str) -> str:
 # ---------------------------------------------------------------------------
 ANNUAL_SPEC = [
     ("利润表", None, None, None),
-    (None, "营业收入（亿元）", "operating_revenue", 1),
-    (None, "归母净利润（亿元）", "net_profit_parent", 1),
+    (None, "营业收入（亿元）", "operating_revenue", 0),
+    (None, "归母净利润（亿元）", "net_profit_parent", 0),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
-    (None, "经营现金流净额（亿元）", "ocf", 1),
-    (None, "折旧与摊销（亿元）", "depreciation_amortization", 1),
-    (None, "资本开支（亿元）", "capital_expenditure", 1),
+    (None, "经营现金流净额（亿元）", "ocf", 0),
+    (None, "折旧与摊销（亿元）", "depreciation_amortization", 0),
+    (None, "资本开支（亿元）", "capital_expenditure", 0),
     (None, "所得税率 %", "income_tax_rate", 1),
     (None, "ROE（摊薄）%", "roe_pct", 1),
     (None, "ROTC（总资本回报）%", "rotc", 1),
     ("资产负债表", None, None, None),
-    (None, "总资产（亿元）", "total_assets", 1),
-    (None, "总负债（亿元）", "total_liabilities", 1),
-    (None, "净资产（归母）（亿元）", "total_equity", 1),
-    (None, "营运资本（亿元）", "working_capital", 1),
-    (None, "货币资金（亿元）", "monetary_funds", 1),
-    (None, "存货（亿元）", "inventory", 1),
-    (None, "应收账款（亿元）", "accounts_receivable", 1),
-    (None, "长期债务（亿元）", "long_term_debt", 1),
-    (None, "总债务（有息）（亿元）", "total_debt", 1),
-    (None, "商誉（亿元）", "goodwill", 1),
+    (None, "总资产（亿元）", "total_assets", 0),
+    (None, "总负债（亿元）", "total_liabilities", 0),
+    (None, "净资产（归母）（亿元）", "total_equity", 0),
+    (None, "营运资本（亿元）", "working_capital", 0),
+    (None, "货币资金（亿元）", "monetary_funds", 0),
+    (None, "存货（亿元）", "inventory", 0),
+    (None, "应收账款（亿元）", "accounts_receivable", 0),
+    (None, "长期债务（亿元）", "long_term_debt", 0),
+    (None, "总债务（有息）（亿元）", "total_debt", 0),
+    (None, "商誉（亿元）", "goodwill", 0),
     ("股本结构", None, None, None),
     (None, "普通股数量（亿股）", "total_shares_yi", 2),
     (None, "优先股数量（亿股）", "preferred_shares_yi", 2),
@@ -71,21 +71,21 @@ ANNUAL_SPEC = [
 
 QUARTER_SPEC = [
     ("利润表（单季）", None, None, None),
-    (None, "营业收入（亿元）", "operating_revenue", 1),
-    (None, "归母净利润（亿元）", "net_profit_parent", 1),
+    (None, "营业收入（亿元）", "operating_revenue", 0),
+    (None, "归母净利润（亿元）", "net_profit_parent", 0),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
-    (None, "经营现金流净额（亿元）", "ocf", 1),
+    (None, "经营现金流净额（亿元）", "ocf", 0),
     (None, "ROE（单季）%", "roe_pct", 1),
     ("资产负债表（季末）", None, None, None),
-    (None, "总资产（亿元）", "total_assets", 1),
-    (None, "总负债（亿元）", "total_liabilities", 1),
-    (None, "净资产（归母）（亿元）", "total_equity", 1),
-    (None, "货币资金（亿元）", "monetary_funds", 1),
-    (None, "存货（亿元）", "inventory", 1),
-    (None, "应收账款（亿元）", "accounts_receivable", 1),
-    (None, "有息负债（亿元）", "interest_bearing_debt", 1),
-    (None, "商誉（亿元）", "goodwill", 1),
+    (None, "总资产（亿元）", "total_assets", 0),
+    (None, "总负债（亿元）", "total_liabilities", 0),
+    (None, "净资产（归母）（亿元）", "total_equity", 0),
+    (None, "货币资金（亿元）", "monetary_funds", 0),
+    (None, "存货（亿元）", "inventory", 0),
+    (None, "应收账款（亿元）", "accounts_receivable", 0),
+    (None, "有息负债（亿元）", "interest_bearing_debt", 0),
+    (None, "商誉（亿元）", "goodwill", 0),
 ]
 
 
@@ -279,9 +279,16 @@ def build_template_data(code: str) -> dict:
                 valuation["price_high"] = q["price_52w_high"]
             if q.get("price"):
                 valuation["price_now"] = q["price"]
+            # 总市值（腾讯行情，亿元口径；港股为港元市值）
+            if q.get("market_cap"):
+                valuation["market_cap"] = q["market_cap"]
             # 港股：股息率由腾讯行情 f[47] 提供（分红接口无 dividend_yield_pct）
             if q.get("dividend_yield") and q.get("dividend_yield") > 0:
                 valuation["dividend_yield"] = q["dividend_yield"]
+            # 股价数据日期（腾讯行情快照日期，供「发布日期 = 股价日期」对齐）
+            qd = q.get("report_date")
+            if qd is not None and not pd.isna(qd):
+                valuation["quote_date"] = pd.Timestamp(qd).date()
 
     # 机构评级（东财盈利预测 + 评级分布，可选）
     rating = None
