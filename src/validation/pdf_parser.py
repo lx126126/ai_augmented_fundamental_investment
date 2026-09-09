@@ -167,13 +167,25 @@ def parse_financials_by_year(pdf_path: str | Path) -> dict[int, dict[str, dict]]
 
 
 def parse_key_financials(pdf_path: str | Path) -> dict:
-    """解析「主要会计数据」表最新年份，返回 {字段: 值(元，重述后)}。"""
+    """解析「主要会计数据」表最新年份，返回 {字段: 值(元，重述后)}。
+
+    「总负债」不在「主要会计数据」表（A股标准模板只披露总资产/净资产/股本），
+    需从「合并资产负债表」补取（parse_balance_sheet 已能正确取到「负债合计」）。
+    """
     by_year = parse_financials_by_year(pdf_path)
     if by_year:
         latest_year = max(by_year.keys())
-        return {f: v["restated"] for f, v in by_year[latest_year].items()}
-    # find_tables 失败时，用文本正则兜底（只提取最新年）
-    return _parse_by_text(pdf_path)
+        result = {f: v["restated"] for f, v in by_year[latest_year].items()}
+    else:
+        # find_tables 失败时，用文本正则兜底（只提取最新年）
+        result = _parse_by_text(pdf_path)
+
+    # 补「总负债」：主要会计数据表无此字段，从合并资产负债表取
+    if "total_liabilities" not in result or result.get("total_liabilities") is None:
+        bs = parse_balance_sheet(pdf_path)
+        if bs.get("total_liabilities") is not None:
+            result["total_liabilities"] = bs["total_liabilities"]
+    return result
 
 
 def _parse_by_text(pdf_path: str | Path) -> dict:
@@ -206,7 +218,9 @@ def _parse_by_text(pdf_path: str | Path) -> dict:
         ("ocf", r"经营活动[^0-9]{0,15}?现金\s*流量净额" + unit_suffix + r"\s*" + num),
         ("total_equity", r"归属于[^0-9]{0,12}?的?净资产" + unit_suffix + r"\s*" + num),
         ("total_assets", r"总资产" + unit_suffix + r"\s*" + num),
-        ("total_liabilities", r"负债合?计" + unit_suffix + r"\s*" + num),
+        # 注意：资产负债表里「流动负债合计」「非流动负债合计」都含「负债合计」子串，
+        # 用负向后顾断言排除这两者，只匹配真正的「负债合计」总行（否则会误取流动负债合计的值）
+        ("total_liabilities", r"(?<!流动)(?<!非流动)负债合?计" + unit_suffix + r"\s*" + num),
         ("share_capital", r"总股本" + unit_suffix + r"\s*" + num),
     ]
     result: dict[str, float] = {}
