@@ -743,7 +743,11 @@ def build_verify() -> str:
                 '<div class="reconcile">'
                 f'<div><b>⚠ 接口数据修正：</b>第三方接口（东财/新浪同源）在「同一控制下企业合并追溯重述」'
                 f'情形下抓取错误，已用官方年报 PDF 金标准覆盖 {len(RECONCILE_LOG)} 项：</div>'
-                + items + "</div>"
+                + items
+                + '<div style="margin-top:4px;">注：同一控制下企业合并会追溯重述比较期，公司通常只重述'
+                  '最近 2 个比较年度；更早年份接口仍为<strong>重述前</strong>口径，'
+                  '与近年的重述后口径不完全可比，同比与 CAGR 会受此影响。</div>'
+                "</div>"
             )
 
         return (
