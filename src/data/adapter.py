@@ -536,7 +536,7 @@ def _build_annual_rates(annual: pd.DataFrame) -> dict | None:
         return [None if (v is None or pd.isna(v)) else v for v in s]
 
     series_map = {
-        "sales": _series("operating_revenue"),
+        "sales": _series("revenue"),
         "cash_flow": _series("ocf"),
         "earnings": _series("net_profit_parent"),
         "dividends": _series("dividend_per_share"),
@@ -570,7 +570,7 @@ def _build_narrative_data(annual, segments, valuation, company_name, code, compe
     for _, r in annual.tail(5).iterrows():
         recent.append({
             "year": int(r["report_date"].year),
-            "revenue": _round(r.get("operating_revenue"), 1) if "operating_revenue" in annual.columns else None,
+            "revenue": _round(r.get("revenue"), 1) if "revenue" in annual.columns else None,
             "profit": _round(r.get("net_profit_parent"), 1) if "net_profit_parent" in annual.columns else None,
         })
 
@@ -601,7 +601,7 @@ def _build_narrative_data(annual, segments, valuation, company_name, code, compe
         "code": code,
         "latest_year": latest_year,
         "latest": {
-            "revenue": _round(_g("operating_revenue"), 1),
+            "revenue": _round(_g("revenue"), 1),
             "net_profit": _round(_g("net_profit_parent"), 1),
             "gross_margin": _round(_g("gross_margin_pct"), 1),
             "net_margin": _round(_g("net_margin_pct"), 1),

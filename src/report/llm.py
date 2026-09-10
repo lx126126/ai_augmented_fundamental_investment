@@ -74,7 +74,7 @@ def _build_prompt(data: dict) -> str:
 主营业务：{data.get('main_business', 'N/A')}
 
 === 最新年报关键指标（{data.get('latest_year', '')} 年）===
-营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+营业总收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
 归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
 毛利率：{data.get('latest', {}).get('gross_margin', 'N/A')}%
 净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
@@ -190,7 +190,7 @@ def _build_market_view_prompt(data: dict) -> str:
 主营业务：{data.get('main_business', 'N/A')}
 
 === 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
-营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+营业总收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
 归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
 毛利率：{data.get('latest', {}).get('gross_margin', 'N/A')}%
 净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
@@ -368,7 +368,7 @@ def _build_action_prompt(data: dict) -> str:
 林奇分类：{data.get('lynch_type', 'N/A')}
 
 === 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
-营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+营业总收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
 归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
 毛利率：{data.get('latest', {}).get('gross_margin', 'N/A')}%
 净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
@@ -479,7 +479,7 @@ def _build_verification_prompt(data: dict, perspectives: list[dict]) -> str:
 林奇分类：{data.get('lynch_type', 'N/A')}
 
 === 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
-营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+营业总收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
 归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
 ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 资产负债率：{data.get('latest', {}).get('debt_ratio', 'N/A')}%
