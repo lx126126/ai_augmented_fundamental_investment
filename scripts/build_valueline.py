@@ -408,36 +408,54 @@ def build_graham() -> str:
     )
 
 
+def _stats_hint() -> str:
+    """经营统计副标题：银行无流动/非流动划分，标题要跟着实际内容变，不能写死「流动状况」。"""
+    t = (CURRENT_POSITION or {}).get("title") or ""
+    left = "存贷结构" if "存贷" in t else "流动状况"
+    return f"{left} · 年增长率"
+
+
 def build_current_position() -> str:
-    """流动状况（ValueLine Current Position）：流动资产 vs 流动负债明细（最新年报时点）。"""
+    """经营统计左块：非金融=流动状况（流动资产 vs 流动负债 + 营运资本）；银行=存贷结构 + 存贷比。"""
     if not CURRENT_POSITION:
         return ""
     cp = CURRENT_POSITION
     year = cp.get("year")
     assets = cp.get("assets") or []
     liabs = cp.get("liabilities") or []
-    wc = cp.get("working_capital")
+    title = cp.get("title") or "流动状况（Current Position）"
 
     def _row(label, val, bold=False):
         v = f"{val:.1f}" if val is not None else "—"
-        cls = ' class="total"' if bold else ""
+        cls = " total" if bold else ""  # 注意是类名而非整个属性，否则会拼出嵌套引号的坏 HTML
         return f'<div class="cp-row{cls}"><span>{label}</span><b>{v}</b></div>'
 
-    def _col(title, items, total_label):
-        rows = [_row(label, val, bold=(label == total_label)) for label, val in items]
-        return f'<div class="cp-col"><div class="cp-col-title">{title}</div>{"".join(rows)}</div>'
+    def _col(title_, items):
+        # 合计行 = 该列最后一行（非金融「流动资产/流动负债」，银行「资产总计/负债总计」）
+        n = len(items)
+        rows = [_row(label, val, bold=(i == n - 1)) for i, (label, val) in enumerate(items)]
+        return f'<div class="cp-col"><div class="cp-col-title">{title_}</div>{"".join(rows)}</div>'
 
-    wc_txt = f"{wc:.1f}" if wc is not None else "—"
-    wc_cls = "pos" if (wc is not None and wc > 0) else "neg"
+    is_bank = "存贷" in title
+    a_col, l_col = ("资产", "负债") if is_bank else ("流动资产", "流动负债")
+
+    # 底部汇总行：非金融=营运资本（亿元，正负着色）；银行=存贷比（%，恒正不着色）
+    f = cp.get("footer") or {}
+    f_val = f.get("value")
+    digits = f.get("digits", 1)
+    f_txt = f"{f_val:.{digits}f}" if f_val is not None else "—"
+    f_cls = ""
+    if not is_bank and f_val is not None:
+        f_cls = ' class="pos"' if f_val > 0 else ' class="neg"'
 
     return (
         '<div class="current-pos">'
-        f'<div class="cp-title">流动状况（Current Position）<span class="cp-note">{year} 年报 · 单位：亿元</span></div>'
+        f'<div class="cp-title">{title}<span class="cp-note">{year} 年报 · 单位：亿元</span></div>'
         '<div class="cp-grid">'
-        + _col("流动资产", assets, "流动资产合计")
-        + _col("流动负债", liabs, "流动负债合计")
+        + _col(a_col, assets)
+        + _col(l_col, liabs)
         + "</div>"
-        f'<div class="cp-wc">营运资本（流动资产 − 流动负债）：<b class="{wc_cls}">{wc_txt}</b> 亿元</div>'
+        f'<div class="cp-wc">{f.get("label", "")}：<b{f_cls}>{f_txt}</b> {f.get("unit", "")}</div>'
         "</div>"
     )
 
@@ -1038,7 +1056,7 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
-    <div class="sec-title">经营统计（ValueLine 口径） <span class="hint">流动状况 · 年增长率</span></div>
+    <div class="sec-title">经营统计（ValueLine 口径） <span class="hint">@@STATS_HINT@@</span></div>
 @@CURRENT_POSITION@@
 @@ANNUAL_RATES@@
   </div>
@@ -1247,6 +1265,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         .replace("@@QUARTER_TABLE@@", build_quarter_table())
         .replace("@@SEGMENTS@@", build_segments())
         .replace("@@PIE@@", build_pie())
+        .replace("@@STATS_HINT@@", _stats_hint())
         .replace("@@YEAR_RANGE@@", year_range)
         .replace("@@QUARTER_RANGE@@", quarter_range)
         .replace("@@SEGMENT_RANGE@@", segment_range)

@@ -694,7 +694,13 @@ def _build_pie_data(annual: pd.DataFrame) -> dict | None:
 
 
 def _build_current_position(annual: pd.DataFrame) -> dict | None:
-    """流动状况（ValueLine Current Position）：最新年报流动资产 vs 流动负债明细。"""
+    """经营统计左块：最新年报的资产负债结构。
+
+    非金融企业 → 流动状况（Current Position）：流动资产 vs 流动负债明细 + 营运资本；
+    银行 → 存贷结构（Loan-to-Deposit）：银行报表无流动/非流动划分，「流动状况」概念不
+    成立（ValueLine 对银行也不披露 current position），改用存贷结构 + 存贷比，后者是银行
+    真正的流动性指标，且报告其他地方都没有这个数。
+    """
     if annual.empty:
         return None
     latest = annual.iloc[-1]
@@ -702,6 +708,53 @@ def _build_current_position(annual: pd.DataFrame) -> dict | None:
     def _v(col):
         v = latest.get(col) if col in annual.columns else None
         return None if (v is None or pd.isna(v)) else float(v)
+
+    def _v_multi(field):
+        if isinstance(field, (list, tuple)):
+            for f in field:
+                v = _v(f)
+                if v is not None:
+                    return v
+            return None
+        return _v(field)
+
+    is_bank = ("accept_deposit" in annual.columns) or ("cash_deposit_pbc" in annual.columns)
+
+    if is_bank:
+        loan = _v("loan_advance")
+        deposit = _v("accept_deposit")
+        assets = [
+            ("发放贷款及垫款", loan),
+            ("现金及存放中央银行款项", _v("cash_deposit_pbc")),
+            ("存放同业款项", _v("deposit_interbank")),
+            ("拆出资金", _v("lend_fund")),
+            ("债权投资", _v_multi(["creditor_invest", "amortize_cost_finasset"])),
+            ("资产总计", _v("total_assets")),
+        ]
+        liabs = [
+            ("吸收存款", deposit),
+            ("同业及其他金融机构存放款项", _v("iofi_deposit")),
+            ("拆入资金", _v("borrowings")),
+            ("应付债券", _v("bond_payable")),
+            ("向中央银行借款", _v("loan_pbc")),
+            ("负债总计", _v("total_liabilities")),
+        ]
+        if all(v is None for _, v in assets) and all(v is None for _, v in liabs):
+            return None
+        ldr = loan / deposit * 100 if (loan is not None and deposit) else None
+        return {
+            "year": int(latest["report_date"].year),
+            "title": "存贷结构（Loan-to-Deposit）",
+            "assets": assets,
+            "liabilities": liabs,
+            "working_capital": None,
+            "footer": {
+                "label": "存贷比（发放贷款及垫款 ÷ 吸收存款）",
+                "value": ldr,
+                "unit": "%",
+                "digits": 1,
+            },
+        }
 
     # 科目名称与「年度全历史表 / 构成饼图」保持完全一致（ValueLine 原名如「现金资产」
     # 「一年内到期债务」为美式报表口径，与 A 股报表科目名对不上，统一改用报表科目名）
@@ -726,9 +779,16 @@ def _build_current_position(annual: pd.DataFrame) -> dict | None:
 
     return {
         "year": int(latest["report_date"].year),
+        "title": "流动状况（Current Position）",
         "assets": assets,
         "liabilities": liabs,
         "working_capital": wc,
+        "footer": {
+            "label": "营运资本（流动资产 − 流动负债）",
+            "value": wc,
+            "unit": "亿元",
+            "digits": 1,
+        },
     }
 
 
