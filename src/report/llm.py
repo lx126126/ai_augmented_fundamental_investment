@@ -30,24 +30,88 @@ def _load_config() -> tuple[str, str, str] | None:
     return (key, model, base) if key else None
 
 
+_NA = "N/A"
+
+
+def _na(v) -> str:
+    """空值归一化：None / NaN / 空串 / 'nan' 等 → 'N/A'。
+
+    背景：`data.get(k, 'N/A')` 只在「键不存在」时返回默认值，键存在但值为 None
+    时仍返回 None，f-string 会印成「None%」。LLM 读到就会在正文里写出
+    「股息率缺失」「数据未提供」这类句子，把数据缺口变成正文噪声。
+    """
+    if v is None:
+        return _NA
+    if isinstance(v, float) and v != v:  # NaN（不引 pandas，避免循环依赖）
+        return _NA
+    s = str(v).strip()
+    if not s or s.lower() in {"nan", "none", "nat", "null"}:
+        return _NA
+    return s
+
+
+def _sanitize(obj):
+    """递归把 dict/list 里的空值替换成 N/A，保证 prompt 里不出现裸 None。"""
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    if isinstance(obj, bool) or isinstance(obj, int):
+        return obj
+    return _na(obj)
+
+
+def _as_dict(v) -> dict:
+    """安全取子字典：sanitize 后 None 会变成字符串 'N/A'，不能直接 `or {}`。
+
+    `data.get('competition') or {}` 在 competition 为 'N/A' 时会拿到字符串，
+    后续 .get() 直接 AttributeError——这类分支平时跑不到，一旦某标的竞争数据
+    为空就会崩，属于潜伏 bug。
+    """
+    return v if isinstance(v, dict) else {}
+
+
+def _as_list(v) -> list:
+    """安全取列表：sanitize 后 None → 'N/A'，直接 for 会逐个遍历字符。"""
+    return v if isinstance(v, list) else []
+
+
+def _num(v):
+    """安全的数值判定：N/A / 非数字 → None（sanitize 后占比可能是字符串）。"""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return None if f != f else f
+
+
+# 所有 prompt 共用的「数据缺口处理」约束
+_NA_RULE = (
+    "数据中标注 N/A 的指标表示数据源未提供：禁止在文字里提及该指标，"
+    "也禁止写「数据缺失」「未提供」「待接入」「未知」等字样——直接基于已有数据论述。"
+)
+
+
 def _build_prompt(data: dict) -> str:
     """把财务数据摘要转成 prompt（数据先行，约束 LLM 不编数）。"""
+    data = _sanitize(data)
+
     def _seg_line(s):
-        pct = s.get("revenue_pct")
+        pct = _num(s.get("revenue_pct"))
         name = s["name"]
         if pct is not None and pct < 1.0:
             # 占比 <1% 的杂项类目：只给占比、不给利润率，避免 LLM 过度解读
             return f"  - {name}: 收入占比 {pct}%（非核心杂项）"
         return f"  - {name}: 收入占比 {pct if pct is not None else 'N/A'}%, 利润率 {s.get('margin', 'N/A')}%"
 
-    seg_text = "\n".join(_seg_line(s) for s in data.get("segments", [])) or "  （无分业务数据）"
+    seg_text = "\n".join(_seg_line(s) for s in _as_list(data.get("segments"))) or "  （无分业务数据）"
 
     recent = ", ".join(
         f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
-        for item in data.get("recent", [])
+        for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
-    comp = data.get("competition") or {}
+    comp = _as_dict(data.get("competition"))
     comp_text = ""
     if comp:
         top5 = ", ".join(
@@ -119,7 +183,8 @@ PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 2. business_model 三个字段各 30-60 字，紧扣分业务数据与行业排名。
 3. 不要出现"根据数据""综上"等套话，直接给结论。
 4. business_model 三个字段各司其职、互不重复：revenue_source 讲「靠什么赚钱」，profit_structure 讲「利润结构与占比」，moat 讲「壁垒」；同一个业务数字不要在多个字段里重复出现。
-5. 标注「非核心杂项」的类目占比极小，不得展开描述其利润率，更不得在 thesis/risks 里解读为「亏损拖累」。"""
+5. 标注「非核心杂项」的类目占比极小，不得展开描述其利润率，更不得在 thesis/risks 里解读为「亏损拖累」。
+6. {_NA_RULE}"""
 
 
 def generate_narrative(data: dict) -> dict | None:
@@ -156,17 +221,18 @@ def generate_narrative(data: dict) -> dict | None:
 
 def _build_market_view_prompt(data: dict) -> str:
     """把财务/估值数据转成「市场在交易什么（多空）」生成 prompt。"""
+    data = _sanitize(data)
     seg_text = "\n".join(
         f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
-        for s in data.get("segments", [])
+        for s in _as_list(data.get("segments"))
     ) or "  （无分业务数据）"
 
     recent = ", ".join(
         f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
-        for item in data.get("recent", [])
+        for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
-    comp = data.get("competition") or {}
+    comp = _as_dict(data.get("competition"))
     comp_text = ""
     if comp:
         comp_text = (
@@ -176,7 +242,7 @@ def _build_market_view_prompt(data: dict) -> str:
     else:
         comp_text = "（无行业竞争地位数据）"
 
-    val = data.get("valuation") or {}
+    val = _as_dict(data.get("valuation"))
 
     return f"""你是资深 A 股基本面分析师，遵循格雷厄姆 + 彼得林奇方法论。
 
@@ -223,7 +289,8 @@ PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 要求：
 1. bull_case 和 bear_case 各 1-2 句，具体、有数据支撑，不要空话。
 2. watch_points 给 3 条，每条 15-25 字，是「下季度该盯哪些数据/事件」可操作清单。
-3. 严禁编造数据之外的任何数字、目标价、事件。"""
+3. 严禁编造数据之外的任何数字、目标价、事件。
+4. {_NA_RULE}"""
 
 
 def generate_market_view(data: dict) -> dict | None:
@@ -339,8 +406,9 @@ def _build_action_prompt(data: dict) -> str:
     只供本人（潇姐）参考拍板，绝不进公开报告。铁律：不编数、不给精确买卖点位
     （只给方向性判断 + 触发条件 + 风险提示），并明确这是 AI 生成、非本人决策。
     """
-    val = data.get("valuation") or {}
-    comp = data.get("competition") or {}
+    data = _sanitize(data)
+    val = _as_dict(data.get("valuation"))
+    comp = _as_dict(data.get("competition"))
 
     comp_text = ""
     if comp:
@@ -397,7 +465,8 @@ PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 要求：
 1. 每条 15-40 字，具体、可执行、可证伪，不要空话套话。
 2. 触发条件必须带量化阈值（基于给出的 PE/PB/股息率/分位等数据），不要「合理价位」「耐心等待」这类模糊表述。
-3. 全程是「参考框架」，帮本人把数据落到决策，不是替本人下单。"""
+3. 全程是「参考框架」，帮本人把数据落到决策，不是替本人下单。
+4. {_NA_RULE}"""
 
 
 def generate_verification_plan(data: dict, perspectives: list[dict]) -> dict | None:
@@ -446,7 +515,8 @@ def _build_verification_prompt(data: dict, perspectives: list[dict]) -> str:
     """
     from datetime import date as _date
 
-    val = data.get("valuation") or {}
+    data = _sanitize(data)
+    val = _as_dict(data.get("valuation"))
     today = _date.today().strftime("%Y-%m-%d")
 
     # 汇总各视角结论
@@ -522,4 +592,5 @@ PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 1. verification_points 给 3 条，每条的时间点不重复且【都晚于今天 {today}】，覆盖「基本面验证」「估值验证」「风险验证」三个维度。
 2. 三条时间点尽量错开（如 验证点1=下季度、验证点2=下年中报、验证点3=下年年报），避免都挤在同一报告期。
 3. 每条 pass_if / fail_if 要具体、可证伪，落到数据阈值。
-4. 严禁编造数据之外的数字、目标价。"""
+4. 严禁编造数据之外的数字、目标价。
+5. {_NA_RULE}"""

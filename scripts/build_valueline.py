@@ -598,10 +598,10 @@ def build_competition() -> str:
         return (
             '<div class="competition">'
             f'<div class="comp-title">竞争地位 · {industry}'
-            '<span class="comp-note">港股行业分类（恒生），营收排名数据源缺失</span></div>'
+            '<span class="comp-note">港股行业分类（恒生）</span></div>'
             + intro_html
             + '<div class="comp-note" style="margin-top:6px;">港股暂无全市场营收排名接口，'
-              '仅展示行业定位与公司介绍。</div>'
+              '仅展示行业定位与公司介绍，未做估算或替代口径。</div>'
             "</div>"
         )
 
@@ -691,13 +691,16 @@ def build_fraud() -> str:
         txt = "背离" if rc["warning"] else "正常"
         rows.append(f'<div class="f-row"><span>应收增速 vs 营收增速</span><b class="{cls}">应收 {rc["ar_yoy"]:.1f}% vs 营收 {rc["rev_yoy"]:.1f}% · {txt}</b></div>')
 
+    # 审计意见：A 股取东财资产负债表 OPINION_TYPE；港股该列不存在（数据源未覆盖），
+    # 按「整行无数据则隐藏」处理——不显示「数据待接入」这种占位噪声，改在末尾统一说明覆盖范围。
     audit_op = f.get("audit_opinion")
     audit_level = f.get("audit_level")
+    skipped = []
     if audit_op:
         cls = {"clean": "ok", "watch": "warn", "high": "bad"}.get(audit_level, "")
         rows.append(f'<div class="f-row"><span>审计意见</span><b class="{cls}">{audit_op}</b></div>')
     else:
-        rows.append('<div class="f-row"><span>审计意见</span><b>数据待接入</b></div>')
+        skipped.append("审计意见")
 
     overall = f.get("overall_risk", "low")
     cls = {"low": "ok", "medium": "warn", "high": "bad"}.get(overall, "ok")
@@ -705,6 +708,12 @@ def build_fraud() -> str:
     flags = f.get("flags", [])
     flag_txt = "（" + "、".join(flags) + "）" if flags else ""
     rows.append(f'<div class="f-score">综合造假风险：<b class="{cls}">{label}</b>{flag_txt}</div>')
+
+    if skipped:
+        rows.append(
+            '<div class="f-note">未覆盖检测项：' + "、".join(skipped)
+            + "（数据源未提供，未做估算，请自行查阅年报）</div>"
+        )
 
     return '<div class="fraud">' + "".join(rows) + "</div>"
 

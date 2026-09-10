@@ -205,11 +205,16 @@ def parse_key_financials(pdf_path: str | Path) -> dict:
         # find_tables 失败时，用文本正则兜底（只提取最新年）
         result = _parse_by_text(pdf_path)
 
-    # 补「总负债」：主要会计数据表无此字段，从合并资产负债表取
-    if "total_liabilities" not in result or result.get("total_liabilities") is None:
+    # 补「总负债」「股本」：主要会计数据表通常无总负债，股本也只有部分公司披露，
+    # 两者都从合并资产负债表取（金标准唯一权威源）。
+    need_bs = (result.get("total_liabilities") is None
+               or result.get("share_capital") is None)
+    if need_bs:
         bs = parse_balance_sheet(pdf_path)
-        if bs.get("total_liabilities") is not None:
+        if result.get("total_liabilities") is None and bs.get("total_liabilities") is not None:
             result["total_liabilities"] = bs["total_liabilities"]
+        if result.get("share_capital") is None and bs.get("share_capital") is not None:
+            result["share_capital"] = bs["share_capital"]
     return result
 
 
@@ -286,6 +291,10 @@ BALANCE_SHEET_ITEMS: dict[str, str] = {
     "归属于母公司所有者权益": "total_equity",
     "归属于母公司股东权益": "total_equity",
     "所有者权益合计": "total_equity_all",
+    # 股本：主要会计数据表多数公司不披露（格力即无此行），从合并资产负债表补取。
+    # 注意「减：库存股」是独立科目，不会与「股本」混淆（键名不同）。
+    "股本": "share_capital",
+    "实收资本": "share_capital",
 }
 
 
@@ -526,14 +535,38 @@ def _parse_statement_lines(pages_text: list[str], mapping: dict[str, str],
     return result
 
 
+def _page_has_heading(txt: str, title: str) -> bool:
+    """标题是否作为「独立标题行」出现在该页。
+
+    不能只用 `title in txt` 子串判断：审计报告「关键审计事项」正文里常出现
+    「…贵公司合并资产负债表中存货账面价值…」，会让报表页从审计报告页开始，
+    既多扫无关页，也有把审计报告里的数字（且单位常是万元）误当金标准的风险。
+    """
+    for line in txt.splitlines():
+        s = line.strip()
+        if not s.startswith(title):
+            continue
+        rest = s[len(title):].strip()
+        if rest == "":
+            return True
+        if rest.startswith("（") or rest.startswith("("):      # 「合并资产负债表（续）」
+            return True
+        if re.match(r"^[\d\s\.年月日:：\-/]+$", rest):           # 标题后跟日期
+            return True
+    return False
+
+
 def _extract_statement_pages(doc, title: str, stop_titles: tuple[str, ...],
                              end_markers: tuple[str, ...]) -> list[str]:
     """定位主表页范围：从标题页开始，到结束标记（总计行）或下一张表标题为止。"""
     in_table = False
     pages_text: list[str] = []
-    for page in doc:
+    pages = list(doc)
+    # 先按「独立标题行」定位；若整份 PDF 都没有（少数排版），退回子串匹配。
+    strict = any(_page_has_heading(p.get_text(), title) for p in pages)
+    for page in pages:
         txt = page.get_text()
-        if not in_table and title in txt:
+        if not in_table and (_page_has_heading(txt, title) if strict else title in txt):
             in_table = True
         if not in_table:
             continue

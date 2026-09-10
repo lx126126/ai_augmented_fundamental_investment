@@ -66,17 +66,20 @@ def build_perspective_prompt(data: dict, p: dict) -> str:
     data：adapter 产出的 narrative_data 结构（含 name/code/latest/recent/segments/competition/valuation 等）。
     p：视角定义 dict（load_perspective 的返回）。
     """
+    from src.report.llm import _as_dict, _as_list, _sanitize
+
+    data = _sanitize(data)
     seg_text = "\n".join(
         f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
-        for s in data.get("segments", [])
+        for s in _as_list(data.get("segments"))
     ) or "  （无分业务数据）"
 
     recent = ", ".join(
         f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
-        for item in data.get("recent", [])
+        for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
-    comp = data.get("competition") or {}
+    comp = _as_dict(data.get("competition"))
     if comp:
         comp_text = (
             f"所属行业：{comp.get('industry', 'N/A')}，"
@@ -86,7 +89,7 @@ def build_perspective_prompt(data: dict, p: dict) -> str:
     else:
         comp_text = "（无行业竞争地位数据）"
 
-    val = data.get("valuation") or {}
+    val = _as_dict(data.get("valuation"))
 
     return f"""你是价值投资流派中的【{p.get('name', '')}】，其方法论源自 {p.get('full_name', '')}。
 参考书目：{', '.join(p.get('source_books', [])) or '（无）'}。
@@ -148,4 +151,5 @@ PB：{val.get('pb', 'N/A')}（近10年分位 {val.get('pb_pctile', 'N/A')}%）
 要求：
 1. 四个字段都要紧扣【{p.get('name', '')}】的方法论，不要用通用套话，要体现这个投资人的独特关注点。
 2. 每条具体、可证伪，严禁编造数据之外的数字。
-3. 这是「第三方方法视角」的推演，非本人观点、非荐股。"""
+3. 这是「第三方方法视角」的推演，非本人观点、非荐股。
+4. 数据中标注 N/A 的指标表示数据源未提供：禁止在文字里提及该指标，也禁止写「数据缺失」「未提供」「待接入」「未知」等字样——直接基于已有数据论述。"""

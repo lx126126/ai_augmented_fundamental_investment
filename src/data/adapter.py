@@ -884,7 +884,14 @@ def _build_narrative_data(annual, segments, valuation, company_name, code, compe
             "pb": _round(valuation.get("pb"), 2),
             "pe_pctile": _round(valuation.get("pe_pctile"), 0),
             "pb_pctile": _round(valuation.get("pb_pctile"), 0),
+            "dividend_yield": _round(valuation.get("dividend_yield"), 1),
         }
+
+    # 股息率：年报 dividend_yield_pct 缺失时（港股无该列），回退腾讯行情口径。
+    # 不回退会让 LLM 看到「股息率：None%」并在正文里写出「股息率缺失」。
+    div_yield = _round(_g("dividend_yield_pct"), 1)
+    if div_yield is None and val_summary:
+        div_yield = val_summary.get("dividend_yield")
 
     return {
         "name": company_name,
@@ -902,7 +909,7 @@ def _build_narrative_data(annual, segments, valuation, company_name, code, compe
         "recent": recent,
         "segments": seg_summary,
         "dividend_payout": _round(_g("dividend_payout_pct"), 1),
-        "dividend_yield": _round(_g("dividend_yield_pct"), 1),
+        "dividend_yield": div_yield,
         "valuation": val_summary,
         "competition": competition,
     }

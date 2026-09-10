@@ -191,3 +191,33 @@ def test_bank_annual_report_parsed_in_millions():
     # 265,071 百万元 = 2650.71 亿元（若单位误判为万元则只有 26.5 亿）
     assert g["operating_revenue"] == pytest.approx(2650.71e8, rel=0.01)
     assert g["total_assets"] == pytest.approx(155483.88e8, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# 报表页定位：标题必须作为独立标题行出现，不能是审计报告正文里的子串。
+# 格力 2025 年报第 81 页「关键审计事项」里有「…贵公司合并资产负债表中存货账面价值…」，
+# 子串匹配会让报表页从审计报告开始——既多扫无关页，也可能把审计报告里的
+# 万元口径数字误当金标准。
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("合并资产负债表\n2025 年12 月31 日\n货币资金", True),          # 独立标题行
+    ("合并资产负债表（续）\n资本公积", True),                        # 续表
+    ("合并资产负债表（续）\n", True),
+    ("合并资产负债表 2025 年12 月31 日", True),                      # 标题 + 日期
+    ("截至2025 年12 月31 日，贵公司\n合并资产负债表中存货账面价值\n2,818,346.43 万元", False),  # 正文提及
+    ("本公司合并资产负债表日后事项", False),
+    ("见附注五、1 合并资产负债表项目", False),
+])
+def test_page_has_heading(text, expected):
+    from src.validation.pdf_parser import _page_has_heading
+    assert _page_has_heading(text, "合并资产负债表") is expected
+
+
+def test_gl_share_capital_from_balance_sheet():
+    """格力「主要会计数据」表无总股本行，须从合并资产负债表补取（5,601,405,741 股）。"""
+    pdf = DATA_DIR / "validation" / "000651_2025年报.pdf"
+    if not pdf.exists():
+        pytest.skip("缺格力年报 PDF（数据资产，.gitignore 排除）")
+    from src.validation.pdf_parser import parse_key_financials
+    g = parse_key_financials(pdf)
+    assert g.get("share_capital") == pytest.approx(5_601_405_741, rel=1e-6)
