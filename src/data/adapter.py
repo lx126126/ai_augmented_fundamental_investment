@@ -336,6 +336,9 @@ def build_template_data(code: str) -> dict:
     current_position = _build_current_position(annual)
     annual_rates = _build_annual_rates(annual)
 
+    # 构成饼图（最新年报五大类子科目构成）
+    pie_data = _build_pie_data(annual)
+
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
     if business_map:
@@ -358,6 +361,7 @@ def build_template_data(code: str) -> dict:
         "business_map": business_map,
         "current_position": current_position,
         "annual_rates": annual_rates,
+        "pie_data": pie_data,
         "narrative_data": narrative_data,
     }
 
@@ -476,6 +480,142 @@ def _build_graham(annual: pd.DataFrame) -> dict:
         "profit_stable": stable,
         "net_cash": _clean(net_cash),
     }
+
+
+# ---------------------------------------------------------------------------
+# 构成饼图配置：五大类 → 子科目清单（展示最新年报的构成占比）
+# 每项 (子科目中文名, 宽表字段名)。字段可能不存在（港股/银行），按「有值才画」处理。
+# ---------------------------------------------------------------------------
+PIE_GROUPS = [
+    ("营业总成本", "total_operating_cost", [
+        ("营业成本", "operating_cost"),
+        ("税金及附加", "operate_tax_add"),
+        ("销售费用", "sell_expense"),
+        ("管理费用", "admin_expense"),
+        ("研发费用", "research_expense"),
+        ("财务费用", "finance_expense"),
+        ("资产减值损失", "asset_impairment_loss"),
+        ("信用减值损失", "credit_impairment_loss"),
+    ]),
+    ("流动资产", "current_assets", [
+        ("货币资金", "monetary_funds"),
+        ("拆出资金", "lend_fund"),
+        ("发放贷款及垫款", "loan_advance"),
+        ("交易性金融资产", "trading_financial_assets"),
+        ("买入返售金融资产", "buy_resale_finasset"),
+        ("衍生金融资产", "derivative_finasset"),
+        ("结算备付金", "settle_excess_reserve"),
+        ("应收票据", "notes_receivable"),
+        ("应收账款", "accounts_receivable"),
+        ("应收款项融资", "finance_receivables"),
+        ("预付款项", "prepayments"),
+        ("其他应收款", "other_receivables"),
+        ("存货", "inventory"),
+        ("合同资产", "contract_assets"),
+        ("一年内到期的非流动资产", "noncurrent_asset_1y"),
+        ("其他流动资产", "other_current_assets"),
+    ]),
+    ("非流动资产", "noncurrent_assets", [
+        ("债权投资", "hold_maturity_invest"),
+        ("其他债权投资", "other_creditor_invest"),
+        ("长期股权投资", "long_equity_invest"),
+        ("其他权益工具投资", "other_equity_invest"),
+        ("其他非流动金融资产", "other_noncurrent_finasset"),
+        ("投资性房地产", "invest_realestate"),
+        ("固定资产", "fixed_assets"),
+        ("在建工程", "construction_in_progress"),
+        ("使用权资产", "useright_asset"),
+        ("无形资产", "intangible_assets"),
+        ("商誉", "goodwill"),
+        ("长期待摊费用", "long_prepaid_expense"),
+        ("递延所得税资产", "defer_tax_asset"),
+        ("其他非流动资产", "other_noncurrent_assets"),
+    ]),
+    ("流动负债", "current_liabilities", [
+        ("短期借款", "short_term_loan"),
+        ("同业存放款项", "accept_deposit_interbank"),
+        ("衍生金融负债", "derivative_finliab"),
+        ("卖出回购金融资产款", "sell_repo_finasset"),
+        ("应付票据", "notes_payable"),
+        ("应付账款", "accounts_payable"),
+        ("合同负债", "contract_liabilities"),
+        ("预收款项", "advance_receivables"),
+        ("应付职工薪酬", "staff_salary_payable"),
+        ("应交税费", "tax_payable"),
+        ("应付手续费及佣金", "fee_commission_payable"),
+        ("其他应付款", "other_payables"),
+        ("应付股利", "dividend_payable"),
+        ("应付利息", "interest_payable"),
+        ("一年内到期的非流动负债", "noncurrent_liab_1y"),
+        ("应付短期债券", "short_bond_payable"),
+        ("其他流动负债", "other_current_liabilities"),
+    ]),
+    ("非流动负债", "noncurrent_liabilities", [
+        ("长期借款", "long_term_loan"),
+        ("应付债券", "bond_payable"),
+        ("租赁负债", "lease_liabilities"),
+        ("长期应付款", "long_payable"),
+        ("长期应付职工薪酬", "long_staff_salary_payable"),
+        ("预计负债", "predict_liabilities"),
+        ("递延所得税负债", "defer_tax_liabilities"),
+        ("永续债", "perpetual_bond"),
+        ("其他非流动负债", "other_noncurrent_liabilities"),
+    ]),
+]
+
+
+def _build_pie_data(annual: pd.DataFrame) -> dict | None:
+    """构成饼图：最新年报五大类（营业总成本/流动资产/非流动资产/流动负债/非流动负债）的子科目构成。
+
+    规则：
+    - 只画「有值且 >0」的子科目；负值科目（如财务费用 <0 为利息净收益）是抵减项，单独放
+      deductions 不画扇区，避免饼图占比超 100%；
+    - 占比 = 值 / 正值科目加总（内部归一化，保证饼图填满 360°）；
+    - 大类总额 > 正值科目加总时，差额记为「其他」兜底（未单列的正项明细）。
+    """
+    if annual.empty:
+        return None
+    latest = annual.iloc[-1]
+
+    def _v(col):
+        v = latest.get(col) if col in annual.columns else None
+        return None if (v is None or pd.isna(v)) else float(v)
+
+    groups = []
+    for title, total_field, items in PIE_GROUPS:
+        total = _v(total_field)
+        if total is None or total <= 0:
+            continue
+        parts = []
+        deductions = []
+        pos_sum = 0.0
+        for name, field in items:
+            v = _v(field)
+            if v is None:
+                continue
+            if v > 0:
+                parts.append({"name": name, "value": round(v, 2)})
+                pos_sum += v
+            elif v < 0:
+                deductions.append({"name": name, "value": round(v, 2)})
+        if not parts:
+            continue
+        # 兜底「其他」：总额 > 正值科目加总时，差额为未单列的正项明细
+        if total - pos_sum > 0.01:
+            parts.append({"name": "其他", "value": round(total - pos_sum, 2)})
+            pos_sum = total
+        for p in parts:
+            p["pct"] = round(p["value"] / pos_sum * 100, 1)
+        groups.append({
+            "title": title,
+            "total": round(total, 1),
+            "items": parts,
+            "deductions": deductions,
+        })
+
+    if not groups:
+        return None
+    return {"year": int(latest["report_date"].year), "groups": groups}
 
 
 def _build_current_position(annual: pd.DataFrame) -> dict | None:

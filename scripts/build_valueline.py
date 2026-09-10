@@ -54,12 +54,21 @@ COMPETITION = None  # 竞争地位（行业排名/营收份额，真实数据时
 BUSINESS_MAP = None  # 业务版图（主营业务一句话 + 各业务收入占比，真实数据时由 adapter 提供）
 CURRENT_POSITION = None  # 流动状况（流动资产 vs 流动负债明细，ValueLine Current Position）
 ANNUAL_RATES = None      # 年增长率（销售/现金流/盈利/股息/账面价值 CAGR，ValueLine Annual Rates）
+PIE_DATA = None          # 构成饼图（最新年报五大类子科目构成，真实数据时由 adapter 提供）
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
 CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
 VAL_CURRENCY_HINT = ""     # 估值面板 PE/PB 币种提示（港股：港元市值÷人民币财务）
+
+
+# 构成饼图调色板（20 色，覆盖最多的「流动负债」子科目数）
+PIE_PALETTE = [
+    "#378ADD", "#E24B4A", "#BA7517", "#5B8FF9", "#F6903D", "#61A0A8", "#9270CA",
+    "#2F9E6E", "#C9557A", "#7A8B99", "#D4A017", "#4FB0C6", "#8A6FBF", "#6B9E5A",
+    "#E8797C", "#5C8A8A", "#C79A3B", "#7B6FA0", "#A06B5B", "#5AA08B",
+]
 
 
 def _is_hk(code: str) -> bool:
@@ -183,6 +192,75 @@ def build_segments() -> str:
         f'<div class="seg-bar">{bar}</div>'
         f'<div class="seg-legend-row">{legend}<span class="seg-note">（最新报告期收入占比）</span></div>'
         f'<div class="seg-note" style="font-size:10px;color:var(--faint);margin-top:5px;">收入单位亿元；利润率口径随行业而异：金融业为利差率/利润率，制造业为毛利率（数据源披露口径）。</div>'
+    )
+
+
+def _donut_svg(items: list[dict], size: int = 180) -> str:
+    """items: [{"name","value","pct"}] → SVG 环形图（纯 stroke-dasharray 扇形，从 12 点顺时针）。"""
+    import math
+    r = 70
+    stroke = 30
+    C = 2 * math.pi * r
+    cx = cy = size / 2
+    circles = []
+    offset = 0.0
+    for i, it in enumerate(items):
+        color = PIE_PALETTE[i % len(PIE_PALETTE)]
+        seg_len = it["pct"] / 100.0 * C
+        circles.append(
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r}" fill="none" stroke="{color}" '
+            f'stroke-width="{stroke}" stroke-dasharray="{seg_len:.2f} {C - seg_len:.2f}" '
+            f'stroke-dashoffset="{-offset:.2f}" transform="rotate(-90 {cx:.1f} {cy:.1f})"/>'
+        )
+        offset += seg_len
+    return f'<svg viewBox="0 0 {size} {size}" width="{size}" height="{size}" style="flex-shrink:0">{"".join(circles)}</svg>'
+
+
+def _pie_legend(items: list[dict], deductions: list[dict] | None = None) -> str:
+    rows = []
+    for i, it in enumerate(items):
+        color = PIE_PALETTE[i % len(PIE_PALETTE)]
+        rows.append(
+            f'<span class="pie-lg"><span class="pie-dot" style="background:{color}"></span>'
+            f'{it["name"]} <b>{it["value"]:.1f}</b><i>{it["pct"]:.1f}%</i></span>'
+        )
+    for d in (deductions or []):
+        rows.append(
+            f'<span class="pie-lg pie-deduct"><span class="pie-dot" style="background:#c8ced6"></span>'
+            f'{d["name"]} <b>{d["value"]:.1f}</b><i>抵减</i></span>'
+        )
+    return '<div class="pie-legend">' + "".join(rows) + "</div>"
+
+
+def build_pie() -> str:
+    """构成饼图：最新年报五大类子科目构成（营业总成本/流动资产/非流动资产/流动负债/非流动负债）。"""
+    if not PIE_DATA:
+        return (
+            '<div class="sub-title">最近年度报告主要科目构成</div>'
+            '<div style="font-size:11px;color:var(--faint);padding:8px 0;">'
+            '该标的资产负债科目体系特殊（金融/银行）或子科目明细未接入，暂无构成饼图。</div>'
+        )
+    year = PIE_DATA.get("year")
+    cards = []
+    for g in PIE_DATA.get("groups", []):
+        items = g.get("items") or []
+        if not items:
+            continue
+        cards.append(
+            '<div class="pie-card">'
+            f'<div class="pie-title">{g["title"]}构成 <span class="pie-total">合计 {g["total"]:.1f} 亿元</span></div>'
+            f'<div class="pie-body">{_donut_svg(items)}{_pie_legend(items, g.get("deductions"))}</div>'
+            "</div>"
+        )
+    if not cards:
+        return ""
+    year_txt = f"{year} 年报" if year else "最新年报"
+    return (
+        f'<div class="sub-title">最近年度报告（{year_txt}）主要科目构成</div>'
+        + "".join(cards)
+        + '<div style="font-size:10px;color:var(--faint);margin-top:6px;">'
+        '环形图为各科目金额（亿元）及占已列科目加总比例；「其他」为已列科目与总额的差额（含未单列明细；港股标的资产负债表子科目明细暂未接入）。'
+        "</div>"
     )
 
 
@@ -764,6 +842,20 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .seg-note { color: var(--faint); }
 
+/* 构成饼图（最新年报五大类子科目） */
+.pie-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 12px; }
+.pie-card:last-child { margin-bottom: 0; }
+.pie-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.pie-total { font-size: 10px; font-weight: 400; color: var(--faint); }
+.pie-body { display: flex; align-items: center; gap: 18px; }
+.pie-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 10.5px; color: var(--muted); align-content: flex-start; }
+.pie-lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pie-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; }
+.pie-deduct b { color: var(--faint); }
+.pie-deduct i { color: var(--faint); }
+
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
 .val-item { flex: 1; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fff; }
@@ -874,6 +966,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   .bizmap-name { flex-basis: 60px; }
   .peer-name { flex-basis: 56px; }
 
+  /* 构成饼图：手机端环形图与图例上下堆叠 */
+  .pie-body { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .pie-lg { white-space: normal; }
+
   /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
   table.dense { font-size: 9px; }
   table.dense th.name, table.dense td.name { width: 88px; }
@@ -931,6 +1027,8 @@ TEMPLATE = """<!DOCTYPE html>
     <div class="sub-title">业务收入构成（@@SEGMENT_RANGE@@）</div>
 @@SEGMENTS@@
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+
+@@PIE@@
   </div>
 
   <div class="section">
@@ -1025,7 +1123,7 @@ def _load_real_data(code: str) -> dict | None:
 
 
 def build(code: str = "601088", daily: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE, VAL_CURRENCY_HINT
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE, VAL_CURRENCY_HINT
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
         "港股标的 · 财务数据为人民币，股价/市值为港元"
@@ -1061,6 +1159,7 @@ def build(code: str = "601088", daily: bool = False) -> None:
         BUSINESS_MAP = real.get("business_map")
         CURRENT_POSITION = real.get("current_position")
         ANNUAL_RATES = real.get("annual_rates")
+        PIE_DATA = real.get("pie_data")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -1092,6 +1191,7 @@ def build(code: str = "601088", daily: bool = False) -> None:
         .replace("@@TABLE@@", build_table())
         .replace("@@QUARTER_TABLE@@", build_quarter_table())
         .replace("@@SEGMENTS@@", build_segments())
+        .replace("@@PIE@@", build_pie())
         .replace("@@YEAR_RANGE@@", year_range)
         .replace("@@QUARTER_RANGE@@", quarter_range)
         .replace("@@SEGMENT_RANGE@@", segment_range)

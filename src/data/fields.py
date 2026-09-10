@@ -77,6 +77,8 @@ PROFIT_SHEET_MAP = {
     "FINANCE_EXPENSE": "finance_expense",         # 财务费用（总额，利润表瀑布图构成）
     "FE_INTEREST_EXPENSE": "interest_expense",    # 财务费用-利息费用（长期利息近似）
     "INVEST_INCOME": "invest_income",             # 投资收益（利润表瀑布图构成）
+    "ASSET_IMPAIRMENT_LOSS": "asset_impairment_loss",   # 资产减值损失（营业总成本构成）
+    "CREDIT_IMPAIRMENT_LOSS": "credit_impairment_loss", # 信用减值损失（营业总成本构成）
 }
 
 # ---------------------------------------------------------------------------
@@ -119,6 +121,51 @@ BALANCE_SHEET_MAP = {
     "LEASE_LIAB": "lease_liabilities",            # 租赁负债
     "SHORT_BOND_PAYABLE": "short_bond_payable",   # 应付短期债券
     "TOTAL_NONCURRENT_LIAB": "noncurrent_liabilities",  # 非流动负债合计
+    # —— 构成饼图补充：四大类下的子科目明细（流动资产/非流动资产/流动负债/非流动负债）——
+    # 流动资产子科目
+    "NOTE_RECE": "notes_receivable",              # 应收票据
+    "PREPAYMENT": "prepayments",                  # 预付款项
+    "OTHER_RECE": "other_receivables",            # 其他应收款
+    "FVTPL_FINASSET": "trading_financial_assets", # 交易性金融资产
+    "CONTRACT_ASSET": "contract_assets",          # 合同资产
+    "NONCURRENT_ASSET_1YEAR": "noncurrent_asset_1y",  # 一年内到期的非流动资产
+    "DIVIDEND_RECE": "dividend_receivable",       # 应收股利
+    "INTEREST_RECE": "interest_receivable",       # 应收利息
+    "FINANCE_RECE": "finance_receivables",        # 应收款项融资
+    # 非流动资产子科目
+    "INVEST_REALESTATE": "invest_realestate",     # 投资性房地产
+    "USERIGHT_ASSET": "useright_asset",           # 使用权资产
+    "LONG_PREPAID_EXPENSE": "long_prepaid_expense",  # 长期待摊费用
+    "DEFER_TAX_ASSET": "defer_tax_asset",         # 递延所得税资产
+    "OTHER_EQUITY_INVEST": "other_equity_invest", # 其他权益工具投资
+    "OTHER_NONCURRENT_FINASSET": "other_noncurrent_finasset",  # 其他非流动金融资产
+    "OTHER_CREDITOR_INVEST": "other_creditor_invest",  # 其他债权投资
+    "HOLD_MATURITY_INVEST": "hold_maturity_invest",    # 债权投资（持有至到期）
+    # 流动负债子科目
+    "NOTE_PAYABLE": "notes_payable",              # 应付票据
+    "CONTRACT_LIAB": "contract_liabilities",      # 合同负债
+    "STAFF_SALARY_PAYABLE": "staff_salary_payable",  # 应付职工薪酬
+    "TAX_PAYABLE": "tax_payable",                 # 应交税费
+    "ADVANCE_RECEIVABLES": "advance_receivables", # 预收款项
+    "OTHER_PAYABLE": "other_payables",            # 其他应付款
+    "DIVIDEND_PAYABLE": "dividend_payable",       # 应付股利
+    "INTEREST_PAYABLE": "interest_payable",       # 应付利息
+    # 非流动负债子科目
+    "OTHER_NONCURRENT_LIAB": "other_noncurrent_liabilities",  # 其他非流动负债
+    "DEFER_TAX_LIAB": "defer_tax_liabilities",    # 递延所得税负债
+    "LONG_STAFFSALARY_PAYABLE": "long_staff_salary_payable",  # 长期应付职工薪酬
+    "PERPETUAL_BOND": "perpetual_bond",           # 永续债
+    "PREDICT_LIAB": "predict_liabilities",        # 预计负债
+    # —— 金融类科目（财务公司/银行等，避免「其他」占比过大）——
+    "LEND_FUND": "lend_fund",                     # 拆出资金（流动资产）
+    "LOAN_ADVANCE": "loan_advance",               # 发放贷款及垫款（流动资产）
+    "BUY_RESALE_FINASSET": "buy_resale_finasset", # 买入返售金融资产（流动资产）
+    "DERIVE_FINASSET": "derivative_finasset",     # 衍生金融资产（流动资产）
+    "SETTLE_EXCESS_RESERVE": "settle_excess_reserve",  # 结算备付金（流动资产）
+    "ACCEPT_DEPOSIT_INTERBANK": "accept_deposit_interbank",  # 同业及其他金融机构存放款项（流动负债）
+    "DERIVE_FINLIAB": "derivative_finliab",       # 衍生金融负债（流动负债）
+    "SELL_REPO_FINASSET": "sell_repo_finasset",   # 卖出回购金融资产款（流动负债）
+    "FEE_COMMISSION_PAYABLE": "fee_commission_payable",  # 应付手续费及佣金（流动负债）
 }
 
 # ---------------------------------------------------------------------------

@@ -119,6 +119,20 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .seg-note { color: var(--faint); }
 
+/* 构成饼图（最新年报五大类子科目） */
+.pie-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 12px; }
+.pie-card:last-child { margin-bottom: 0; }
+.pie-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.pie-total { font-size: 10px; font-weight: 400; color: var(--faint); }
+.pie-body { display: flex; align-items: center; gap: 18px; }
+.pie-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 10.5px; color: var(--muted); align-content: flex-start; }
+.pie-lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pie-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; }
+.pie-deduct b { color: var(--faint); }
+.pie-deduct i { color: var(--faint); }
+
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
 .val-item { flex: 1; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fff; }
@@ -229,6 +243,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   .bizmap-name { flex-basis: 60px; }
   .peer-name { flex-basis: 56px; }
 
+  /* 构成饼图：手机端环形图与图例上下堆叠 */
+  .pie-body { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .pie-lg { white-space: normal; }
+
   /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
   table.dense { font-size: 9px; }
   table.dense th.name, table.dense td.name { width: 88px; }
@@ -256,14 +274,14 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
         <span class="badge lynch">林奇分类：缓慢增长型（高股息防御）</span>
-        <span class="badge graham">格雷厄姆质量：中（PB 0.56 破净，但资产负债率 91.8% 属银行业常态）</span>
+        <span class="badge graham">格雷厄姆质量：中（高杠杆经营·ROE仅7.53%·PB0.56提供安全边际）</span>
       </div>
     </div>
   </div>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">主营业务为经营吸收公众存款；发放短期、中期和长期贷款；办理国内外结算；办理票据贴现；发行金融债券等；分业务收入占比：公司金融业务 49.8%、个人金融业务 36.8%、资金业务 13.2%、其他业务 0.25%。以吸收公众存款、发放贷款赚取利差为核心，公司金融与个人金融合计贡献 86.6% 收入，资金业务补充 13.2%。公司金融业务以 49.8% 收入占比贡献主要利润，资金业务利润率 82.1% 但收入占比仅 13.2%，个人金融利润率 3.0% 偏薄。<span style="color:var(--accent);font-weight:600;">护城河：</span>国有大行牌照与全国网点构成基础壁垒，营收 2650.7 亿元居行业第 7、份额 4.63%，规模与信用背书形成护城河。</div></div>
+<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">主营业务为经营吸收公众存款；发放短期、中期和长期贷款；办理国内外结算；办理票据贴现；发行金融债券等；分业务收入占比：公司金融业务 49.8%、个人金融业务 36.8%、资金业务 13.2%、其他业务 0.25%。以吸收公众存款发放贷款赚取利差为核心，公司金融与个人金融合计贡献86.6%营收，资金业务补充13.2%。公司金融收入占比49.8%且利润率51.4%，是利润基本盘；资金业务虽仅占13.2%但利润率82.1%，利润贡献效率最高。<span style="color:var(--accent);font-weight:600;">护城河：</span>全国性大型银行牌照与网点规模构成壁垒，营收2650.7亿居行业第7、份额4.63%，稳居六大行梯队。</div></div>
 <div class="competition"><div class="comp-title">竞争地位 · 银行Ⅱ（2025 年报）<span class="comp-note">营收口径：东财业绩报表</span></div><div class="comp-grid"><div class="comp-item"><div class="lbl">营收排名</div><div class="v">第 7 / 42</div></div><div class="comp-item"><div class="lbl">营收份额</div><div class="v" style="color:var(--accent-2)">4.6%</div></div><div class="comp-item"><div class="lbl">营收</div><div class="v">2651 亿</div></div></div><div class="peer-list"><div class="peer-row"><span class="peer-name">工商银行</span><div class="peer-track"><div class="peer-bar" style="width:100.0%"></div></div><span class="peer-val">8383</span></div><div class="peer-row"><span class="peer-name">建设银行</span><div class="peer-track"><div class="peer-bar" style="width:90.8%"></div></div><span class="peer-val">7610</span></div><div class="peer-row"><span class="peer-name">农业银行</span><div class="peer-track"><div class="peer-bar" style="width:86.5%"></div></div><span class="peer-val">7253</span></div><div class="peer-row"><span class="peer-name">中国银行</span><div class="peer-track"><div class="peer-bar" style="width:78.5%"></div></div><span class="peer-val">6583</span></div><div class="peer-row"><span class="peer-name">邮储银行</span><div class="peer-track"><div class="peer-bar" style="width:42.4%"></div></div><span class="peer-val">3557</span></div></div></div>
   </div>
 
@@ -277,6 +295,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="sub-title">业务收入构成（24中报–26中报）</div>
 <div class="seg-block seg-full"><div class="table-scroll"><table class="dense"><thead><tr><th class="name" rowspan="2">业务条线</th><th colspan="3" style="text-align:center">24中报</th><th colspan="3" style="text-align:center">24年报</th><th colspan="3" style="text-align:center">25中报</th><th colspan="3" style="text-align:center">25年报</th><th colspan="3" style="text-align:center">26中报</th></tr><tr><th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th><th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th><th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th><th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th><th style="text-align:center">收入</th><th style="text-align:center">占比</th><th style="text-align:center">利润率</th></tr></thead><tbody><tr><td class="row-head"><span class="seg-dot" style="background:#378ADD"></span>公司金融业务</td><td class="num">633.1</td><td class="num">47.8</td><td class="num">31.0</td><td class="num">1257.2</td><td class="num">48.4</td><td class="num">48.2</td><td class="num">645.9</td><td class="num">48.4</td><td class="num">38.9</td><td class="num">1327.5</td><td class="num">50.1</td><td class="num">45.7</td><td class="num">708.8</td><td class="num">49.8</td><td class="num">51.4</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#E24B4A"></span>个人金融业务</td><td class="num">521.3</td><td class="num">39.4</td><td class="num">27.3</td><td class="num">1026.0</td><td class="num">39.5</td><td class="num">18.7</td><td class="num">495.7</td><td class="num">37.2</td><td class="num">15.1</td><td class="num">967.2</td><td class="num">36.5</td><td class="num">13.4</td><td class="num">523.6</td><td class="num">36.8</td><td class="num">3.0</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#BA7517"></span>资金业务</td><td class="num">163.8</td><td class="num">12.4</td><td class="num">82.4</td><td class="num">305.6</td><td class="num">11.8</td><td class="num">75.7</td><td class="num">185.9</td><td class="num">13.9</td><td class="num">76.7</td><td class="num">343.8</td><td class="num">13.0</td><td class="num">85.4</td><td class="num">187.4</td><td class="num">13.2</td><td class="num">82.1</td></tr><tr><td class="row-head"><span class="seg-dot" style="background:#888780"></span>其他业务</td><td class="num">5.2</td><td class="num">0.40</td><td class="num">40.5</td><td class="num">9.5</td><td class="num">0.37</td><td class="num">49.8</td><td class="num">6.1</td><td class="num">0.46</td><td class="num">9.5</td><td class="num">12.2</td><td class="num">0.46</td><td class="num">62.0</td><td class="num">3.6</td><td class="num">0.25</td><td class="num">25.1</td></tr></tbody></table></div></div><div class="seg-bar"><div class="seg" style="width:49.8%;background:#378ADD"></div><div class="seg" style="width:36.8%;background:#E24B4A"></div><div class="seg" style="width:13.2%;background:#BA7517"></div><div class="seg" style="width:0.25%;background:#888780"></div></div><div class="seg-legend-row"><span class="seg-legend"><span class="seg-dot" style="background:#378ADD"></span>公司金融业务 49.8%</span><span class="seg-legend"><span class="seg-dot" style="background:#E24B4A"></span>个人金融业务 36.8%</span><span class="seg-legend"><span class="seg-dot" style="background:#BA7517"></span>资金业务 13.2%</span><span class="seg-legend"><span class="seg-dot" style="background:#888780"></span>其他业务 0.25%</span><span class="seg-note">（最新报告期收入占比）</span></div><div class="seg-note" style="font-size:10px;color:var(--faint);margin-top:5px;">收入单位亿元；利润率口径随行业而异：金融业为利差率/利润率，制造业为毛利率（数据源披露口径）。</div>
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+
+<div class="sub-title">最近年度报告主要科目构成</div><div style="font-size:11px;color:var(--faint);padding:8px 0;">该标的资产负债科目体系特殊（金融/银行）或子科目明细未接入，暂无构成饼图。</div>
   </div>
 
   <div class="section">
@@ -295,12 +315,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>股息率 4.6% 且分红比例稳定 30%，净利五年从 875.8 亿增至 956.2 亿，高股息防御属性明确。</li><li>PB 仅 0.56 倍处近十年 47% 分位，估值未透支，破净提供一定安全边际。</li><li>经营现金流净额 1324.4 亿元远超净利 956.2 亿元，现金生成能力对分红形成支撑。</li></ul>
+<ul class="thesis"><li>股息率4.6%且分红比例30%，净利五年从875.8亿增至956.2亿，高股息防御属性明确。</li><li>PB仅0.56倍处近10年47%分位，估值未透支，破净状态提供一定安全边际。</li><li>营收份额4.63%稳居行业第7，六大行地位稳固，资金业务82.1%利润率支撑盈利质量。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>净利率 36.1% 与 ROE 7.53% 偏低，盈利效率在国有大行中不突出，成长弹性有限。</li><li>营收五年仅从 2693.9 亿微增至 2650.7 亿，增长近乎停滞，属典型缓慢增长型标的。</li><li>PE 处近十年 86% 高分位，若市场利率或资产质量预期变化，估值回调压力大于上行空间。</li></ul>
+<ul class="risk"><li>资产负债率91.8%属银行高杠杆经营，资产质量波动将直接放大利润与净资产冲击。</li><li>ROE仅7.53%，净利五年复合增速约2.2%，成长性偏弱，难支撑估值大幅抬升。</li><li>PE处近10年86%分位，若市场利率下行压缩利差，估值与盈利双承压风险上升。</li></ul>
   </div>
 
   <div class="section">

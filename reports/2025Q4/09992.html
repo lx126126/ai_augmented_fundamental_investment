@@ -119,6 +119,20 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .seg-note { color: var(--faint); }
 
+/* 构成饼图（最新年报五大类子科目） */
+.pie-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 12px; }
+.pie-card:last-child { margin-bottom: 0; }
+.pie-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.pie-total { font-size: 10px; font-weight: 400; color: var(--faint); }
+.pie-body { display: flex; align-items: center; gap: 18px; }
+.pie-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 10.5px; color: var(--muted); align-content: flex-start; }
+.pie-lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pie-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; }
+.pie-deduct b { color: var(--faint); }
+.pie-deduct i { color: var(--faint); }
+
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
 .val-item { flex: 1; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fff; }
@@ -229,6 +243,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   .bizmap-name { flex-basis: 60px; }
   .peer-name { flex-basis: 56px; }
 
+  /* 构成饼图：手机端环形图与图例上下堆叠 */
+  .pie-body { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .pie-lg { white-space: normal; }
+
   /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
   table.dense { font-size: 9px; }
   table.dense th.name, table.dense td.name { width: 88px; }
@@ -263,7 +281,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">以IP潮玩产品零售为核心，靠设计、IP运营与渠道销售赚取商品差价，最新报告期无分业务数据可拆。利润主要来自潮玩产品销售，2025年净利率34.4%、毛利率72.1%，盈利高度集中于主业。<span style="color:var(--accent);font-weight:600;">护城河：</span>头部IP矩阵与品牌认知形成复购壁垒，叠加规模化渠道与供应链效率，行业营收排名数据缺失。</div></div>
+<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">以IP潮玩零售为核心，靠自有及授权IP产品向全球消费者销售赚取收入，2025年营收371.2亿元。利润几乎全部来自潮玩主业，无分业务数据披露，整体净利率34.4%，归母净利127.8亿元。<span style="color:var(--accent);font-weight:600;">护城河：</span>头部IP矩阵与品牌心智构成核心壁垒，行业营收排名数据缺失，规模与渠道网络形成先发优势。</div></div>
 <div class="competition"><div class="comp-title">竞争地位 · 家庭电器及用品<span class="comp-note">港股行业分类（恒生），营收排名数据源缺失</span></div><div class="comp-intro">泡泡玛特国际集团有限公司(09992.HK)成立于2010年,作为全球领先的潮流文化娱乐集团,泡泡玛特以IP为核心,为全球创作者打造了全链路创意孵化与运营平台,给消费者提供令人心动的产品、服务及美好的娱乐体验。泡泡玛特在全球范围内挖掘极具潜力的潮流艺术家和设计师,通过成熟的IP运营体系,打造潮流文化领域备受欢迎的IP形象及产品。目前孵化及开发了MOLLY、SKULLPANDA、DIMOO、THEMONSTERS、Hirono等知名IP。公司围绕旗下IP推出众多广受欢迎的潮玩及周边商品,不断引领消费潮流。截至2025年上半年,泡泡玛特在全球共开设超过550家线下门店和超过2500台机器人商店,并通过多个跨境电商平台触达全球超过90个国家和地区,为全球年轻消费者带来更多快乐。</div><div class="comp-note" style="margin-top:6px;">港股暂无全市场营收排名接口，仅展示行业定位与公司介绍。</div></div>
   </div>
 
@@ -277,6 +295,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="sub-title">业务收入构成（）</div>
 <div style="font-size:11px;color:var(--faint);padding:8px 0;">分业务收入构成数据待接入（当前数据源暂未覆盖该标的）。</div>
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+
+<div class="sub-title">最近年度报告（2025 年报）主要科目构成</div><div class="pie-card"><div class="pie-title">流动资产构成 <span class="pie-total">合计 249.1 亿元</span></div><div class="pie-body"><svg viewBox="0 0 180 180" width="180" height="180" style="flex-shrink:0"><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#378ADD" stroke-width="30" stroke-dasharray="243.22 196.60" stroke-dashoffset="-0.00" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#E24B4A" stroke-width="30" stroke-dasharray="16.27 423.55" stroke-dashoffset="-243.22" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#BA7517" stroke-width="30" stroke-dasharray="96.76 343.06" stroke-dashoffset="-259.50" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#5B8FF9" stroke-width="30" stroke-dasharray="83.57 356.26" stroke-dashoffset="-356.26" transform="rotate(-90 90.0 90.0)"/></svg><div class="pie-legend"><span class="pie-lg"><span class="pie-dot" style="background:#378ADD"></span>货币资金 <b>137.8</b><i>55.3%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#E24B4A"></span>应收账款 <b>9.2</b><i>3.7%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#BA7517"></span>存货 <b>54.7</b><i>22.0%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#5B8FF9"></span>其他 <b>47.5</b><i>19.0%</i></span></div></div></div><div class="pie-card"><div class="pie-title">流动负债构成 <span class="pie-total">合计 71.7 亿元</span></div><div class="pie-body"><svg viewBox="0 0 180 180" width="180" height="180" style="flex-shrink:0"><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#378ADD" stroke-width="30" stroke-dasharray="113.91 325.91" stroke-dashoffset="-0.00" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#E24B4A" stroke-width="30" stroke-dasharray="325.91 113.91" stroke-dashoffset="-113.91" transform="rotate(-90 90.0 90.0)"/></svg><div class="pie-legend"><span class="pie-lg"><span class="pie-dot" style="background:#378ADD"></span>应付账款 <b>18.6</b><i>25.9%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#E24B4A"></span>其他 <b>53.1</b><i>74.1%</i></span></div></div></div><div style="font-size:10px;color:var(--faint);margin-top:6px;">环形图为各科目金额（亿元）及占已列科目加总比例；「其他」为已列科目与总额的差额（含未单列明细；港股标的资产负债表子科目明细暂未接入）。</div>
   </div>
 
   <div class="section">
@@ -295,12 +315,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>2025年营收371.2亿、净利127.8亿，较2024年分别增长约185%和308%，成长动能强劲。</li><li>ROE达77.52%、资产负债率仅29.4%，经营现金流108.7亿覆盖净利，财务质量优异。</li><li>PE 13.4倍处于近10年3%分位，低估值叠加高成长，安全边际与弹性兼具。</li></ul>
+<ul class="thesis"><li>营收从2021年44.9亿增至2025年371.2亿，四年近8倍，净利同步爆发，成长动能强劲。</li><li>ROE 77.52%、毛利率72.1%、净利率34.4%，盈利质量极高，经营现金流108.7亿覆盖净利。</li><li>资产负债率仅29.4%，PE 13.4处于近10年3%分位，低估值叠加高成长，安全边际充足。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>营收净利连续两年翻倍级增长，若IP热度退潮或新品不及预期，增速回落将压制估值。</li><li>分红比例仅24.8%，股息率缺失，股东现金回报偏低，依赖股价表现兑现收益。</li><li>PB 7.69倍处于近10年48%分位，市净率不低，若盈利波动则净资产支撑较弱。</li></ul>
+<ul class="risk"><li>营收四年增8倍，若IP热度退潮或新品断档，高基数下增速可能骤降，估值双杀风险大。</li><li>分红比例仅24.8%，股息率缺失，若成长放缓而分红不提升，股东回报吸引力将下降。</li><li>行业营收排名与份额数据缺失，无法验证竞争地位，若对手复制IP模式可能侵蚀份额。</li></ul>
   </div>
 
   <div class="section">

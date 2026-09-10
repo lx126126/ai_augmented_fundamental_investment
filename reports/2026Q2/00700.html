@@ -119,6 +119,20 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .seg-note { color: var(--faint); }
 
+/* 构成饼图（最新年报五大类子科目） */
+.pie-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 12px; }
+.pie-card:last-child { margin-bottom: 0; }
+.pie-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.pie-total { font-size: 10px; font-weight: 400; color: var(--faint); }
+.pie-body { display: flex; align-items: center; gap: 18px; }
+.pie-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 10.5px; color: var(--muted); align-content: flex-start; }
+.pie-lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pie-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; }
+.pie-deduct b { color: var(--faint); }
+.pie-deduct i { color: var(--faint); }
+
 /* 估值三件套（横排） */
 .val-grid { display: flex; gap: 12px; }
 .val-item { flex: 1; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; background: #fff; }
@@ -229,6 +243,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   .bizmap-name { flex-basis: 60px; }
   .peer-name { flex-basis: 56px; }
 
+  /* 构成饼图：手机端环形图与图例上下堆叠 */
+  .pie-body { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .pie-lg { white-space: normal; }
+
   /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
   table.dense { font-size: 9px; }
   table.dense th.name, table.dense td.name { width: 88px; }
@@ -256,14 +274,14 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
         <span class="badge lynch">林奇分类：稳健成长型</span>
-        <span class="badge graham">格雷厄姆质量：高（资产负债率39.1%·经营现金流3030.5亿覆盖净利1.35倍）</span>
+        <span class="badge graham">格雷厄姆质量：高（资产负债率39.1%·ROE 21.13%·经营现金流3030.5亿）</span>
       </div>
     </div>
   </div>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">以社交与数字内容平台流量为入口，通过增值服务、网络广告及金融科技与企业服务变现，2025年营收7517.7亿元。净利率30.2%，归母净利2248.4亿元，利润主要来自高毛利增值服务与广告，金融科技及企业服务贡献收入增量。<span style="color:var(--accent);font-weight:600;">护城河：</span>社交网络规模效应与用户迁移成本构成核心壁垒，软件服务行业龙头地位稳固，生态内多业务交叉变现强化护城河。</div></div>
+<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">以社交与数字内容平台流量为基础，通过增值服务、网络广告及金融科技与企业服务等多元业务变现，2025年营收7517.7亿元。净利率30.2%，归母净利润2248.4亿元，利润主要来自高毛利增值服务与广告业务，金融科技及企业服务贡献稳定收入与利润。<span style="color:var(--accent);font-weight:600;">护城河：</span>社交网络与内容生态形成强用户粘性与网络效应，叠加规模效应和多元变现能力，构成难以复制的竞争壁垒。</div></div>
 <div class="competition"><div class="comp-title">竞争地位 · 软件服务<span class="comp-note">港股行业分类（恒生），营收排名数据源缺失</span></div><div class="comp-intro">腾讯控股有限公司是一家世界领先的互联网科技公司,用创新的产品和服务提升全球各地人们的生活品质。腾讯成立于1998年,总部位于中国深圳。公司一直秉承科技向善的宗旨。公司的通信和社交服务连接全球逾10亿人,帮助他们与亲友联系,畅享便捷的出行、支付和娱乐生活。腾讯发行多款风靡全球的电子游戏及其他优质数字内容,为全球用户带来丰富的互动娱乐体验。腾讯还提供云计算、广告、金融科技等一系列企业服务,支持合作伙伴实现数字化转型,促进业务发展。腾讯2004年于香港联合交易所上市。</div><div class="comp-note" style="margin-top:6px;">港股暂无全市场营收排名接口，仅展示行业定位与公司介绍。</div></div>
   </div>
 
@@ -277,6 +295,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="sub-title">业务收入构成（）</div>
 <div style="font-size:11px;color:var(--faint);padding:8px 0;">分业务收入构成数据待接入（当前数据源暂未覆盖该标的）。</div>
     <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
+
+<div class="sub-title">最近年度报告（2025 年报）主要科目构成</div><div class="pie-card"><div class="pie-title">流动资产构成 <span class="pie-total">合计 5954.6 亿元</span></div><div class="pie-body"><svg viewBox="0 0 180 180" width="180" height="180" style="flex-shrink:0"><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#378ADD" stroke-width="30" stroke-dasharray="104.24 335.58" stroke-dashoffset="-0.00" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#E24B4A" stroke-width="30" stroke-dasharray="36.95 402.88" stroke-dashoffset="-104.24" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#BA7517" stroke-width="30" stroke-dasharray="0.44 439.38" stroke-dashoffset="-141.18" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#5B8FF9" stroke-width="30" stroke-dasharray="298.20 141.62" stroke-dashoffset="-141.62" transform="rotate(-90 90.0 90.0)"/></svg><div class="pie-legend"><span class="pie-lg"><span class="pie-dot" style="background:#378ADD"></span>货币资金 <b>1410.4</b><i>23.7%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#E24B4A"></span>应收账款 <b>499.3</b><i>8.4%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#BA7517"></span>存货 <b>5.3</b><i>0.1%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#5B8FF9"></span>其他 <b>4039.6</b><i>67.8%</i></span></div></div></div><div class="pie-card"><div class="pie-title">流动负债构成 <span class="pie-total">合计 4127.5 亿元</span></div><div class="pie-body"><svg viewBox="0 0 180 180" width="180" height="180" style="flex-shrink:0"><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#378ADD" stroke-width="30" stroke-dasharray="128.87 310.95" stroke-dashoffset="-0.00" transform="rotate(-90 90.0 90.0)"/><circle cx="90.0" cy="90.0" r="70" fill="none" stroke="#E24B4A" stroke-width="30" stroke-dasharray="310.95 128.87" stroke-dashoffset="-128.87" transform="rotate(-90 90.0 90.0)"/></svg><div class="pie-legend"><span class="pie-lg"><span class="pie-dot" style="background:#378ADD"></span>应付账款 <b>1211.3</b><i>29.3%</i></span><span class="pie-lg"><span class="pie-dot" style="background:#E24B4A"></span>其他 <b>2916.2</b><i>70.7%</i></span></div></div></div><div style="font-size:10px;color:var(--faint);margin-top:6px;">环形图为各科目金额（亿元）及占已列科目加总比例；「其他」为已列科目与总额的差额（含未单列明细；港股标的资产负债表子科目明细暂未接入）。</div>
   </div>
 
   <div class="section">
@@ -295,12 +315,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>2025年营收7517.7亿同比增13.9%，净利2248.4亿同比增15.9%，重回双位数增长通道。</li><li>ROE达21.13%，经营现金流3030.5亿为净利1.35倍，盈利质量与造血能力扎实。</li><li>PE 14.3倍处近10年16%分位、PB 2.98倍处2%分位，估值处于历史低位，安全边际充足。</li></ul>
+<ul class="thesis"><li>2025年营收7517.7亿元、归母净利2248.4亿元，均创近五年新高，净利率30.2%显示盈利质量扎实。</li><li>ROE 21.13%、经营现金流3030.5亿元，内生造血强劲，支撑持续投资与股东回报。</li><li>PE 14.3倍处于近10年16%分位，PB 2.98倍处于2%分位，估值处于历史低位，安全边际充足。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>净利率30.2%已处高位，若宏观压力下广告与金融科技增速放缓，利润增速可能回落。</li><li>分红比例仅21.4%，股息率缺失，股东现金回报偏低，估值修复缺乏股息催化。</li><li>2023年净利曾骤降至1152.2亿，业绩波动性显示非经常性损益或投资端对利润影响较大。</li></ul>
+<ul class="risk"><li>2023年归母净利1152.2亿元较2022年下滑38.8%，业绩波动明显，盈利稳定性存疑。</li><li>分红比例仅21.4%，股息率缺失，股东现金回报偏低，可能压制估值修复空间。</li><li>营收增速由2024年8.4%升至2025年13.9%，若宏观或监管环境变化，高增长难持续。</li></ul>
   </div>
 
   <div class="section">
