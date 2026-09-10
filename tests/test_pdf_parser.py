@@ -125,3 +125,69 @@ def test_cash_flow_extracts_ocf_and_capex():
     assert "capital_expenditure" in golden
     # 资本开支是「支出金额」，接口口径为正数，PDF 解析须取绝对值
     assert golden["capital_expenditure"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 单位识别（_detect_unit）：银行年报用括号夹注「（除另有标明外，人民币百万元）」，
+# 页面里没有「单位」二字；且「百万元」含「万元」，贪婪匹配会先命中「万元」→ 差 100 倍。
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("单位：人民币百万元", "百万元"),
+    ("金额单位: 人民币百万元", "百万元"),
+    ("（除另有标明外，人民币百万元）", "百万元"),   # 交行 601328 年报实际写法
+    ("(人民币百万元)", "百万元"),
+    ("人民币百万元", "百万元"),
+    ("单位：万元", "万元"),
+    ("（人民币元）", "元"),
+    ("单位：元", "元"),
+    ("无任何单位标注", "元"),
+])
+def test_detect_unit(text, expected):
+    from src.validation.pdf_parser import _detect_unit
+    assert _detect_unit(text) == expected
+
+
+def test_bank_annual_report_parsed_in_millions():
+    """交行 2025 年报：单位「百万元」，解析值必须与接口值同量级（亿元口径）。"""
+    pdf = DATA_DIR / "validation" / "601328_2025年报.pdf"
+    if not pdf.exists():
+        pytest.skip("缺交行年报 PDF（数据资产，.gitignore 排除）")
+    from src.validation.pdf_parser import parse_key_financials
+    g = parse_key_financials(pdf)
+    assert g.get("operating_revenue"), "未解析出营业收入"
+    # 265,071 百万元 = 2650.71 亿元（若单位误判为万元则只有 26.5 亿）
+    assert g["operating_revenue"] == pytest.approx(2650.71e8, rel=0.01)
+    assert g["total_assets"] == pytest.approx(155483.88e8, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# 单位识别（_detect_unit）：银行年报用括号夹注「（除另有标明外，人民币百万元）」，
+# 页面里没有「单位」二字；且「百万元」含「万元」，贪婪匹配会先命中「万元」→ 差 100 倍。
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("text,expected", [
+    ("单位：人民币百万元", "百万元"),
+    ("金额单位: 人民币百万元", "百万元"),
+    ("（除另有标明外，人民币百万元）", "百万元"),   # 交行 601328 年报实际写法
+    ("(人民币百万元)", "百万元"),
+    ("人民币百万元", "百万元"),
+    ("单位：万元", "万元"),
+    ("（人民币元）", "元"),
+    ("单位：元", "元"),
+    ("无任何单位标注", "元"),
+])
+def test_detect_unit(text, expected):
+    from src.validation.pdf_parser import _detect_unit
+    assert _detect_unit(text) == expected
+
+
+def test_bank_annual_report_parsed_in_millions():
+    """交行 2025 年报：单位「百万元」，解析值必须与接口值同量级（亿元口径）。"""
+    pdf = DATA_DIR / "validation" / "601328_2025年报.pdf"
+    if not pdf.exists():
+        pytest.skip("缺交行年报 PDF（数据资产，.gitignore 排除）")
+    from src.validation.pdf_parser import parse_key_financials
+    g = parse_key_financials(pdf)
+    assert g.get("operating_revenue"), "未解析出营业收入"
+    # 265,071 百万元 = 2650.71 亿元（若单位误判为万元则只有 26.5 亿）
+    assert g["operating_revenue"] == pytest.approx(2650.71e8, rel=0.01)
+    assert g["total_assets"] == pytest.approx(155483.88e8, rel=0.01)

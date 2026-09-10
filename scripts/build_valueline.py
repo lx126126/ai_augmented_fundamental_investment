@@ -743,9 +743,13 @@ def build_verify() -> str:
             "</div>"
         )
     except Exception as e:
+        # 港股无巨潮年报源，校验本就不适用——直接抛异常类型（KeyError）读者看不懂
+        is_hk = len(str(COMPANY_CODE)) == 5
+        status = ("不适用（港股年报源未接入，金标准校验暂覆盖 A 股）" if is_hk
+                  else f"未运行（{type(e).__name__}）")
         return ('<div class="verify">'
                 '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）</div>'
-                f'<div><b>校验状态：</b>未运行（{type(e).__name__}）</div>'
+                f'<div><b>校验状态：</b>{status}</div>'
                 f'<div><b>校验日期：</b>{today}</div>'
                 "</div>")
 

@@ -24,6 +24,11 @@ from .pdf_parser import (
 TOLERANCE_PCT = 0.1  # 容差 0.1%
 RECONCILE_TOLERANCE_PCT = 1.0  # 覆盖容差 1%（放宽，避免四舍五入误判）
 
+# 超过此倍数视为「PDF 解析/单位识别错误」而非「接口数据错误」，只告警不覆盖。
+# 依据：真实的追溯重述差异通常 1.2~2 倍（神华总资产 9038 vs 6278 = 1.44 倍），
+# 极端如短期借款也就 31 倍；而单位识别错误是整百/整万倍的（交行曾算出 999999 倍）。
+IMPLAUSIBLE_DIFF_PCT = 100_000  # 1000 倍
+
 # 合并资产负债表字段 → 中文标签（用于覆盖记录展示）
 _BS_LABEL = {
     "monetary_funds": "货币资金", "accounts_receivable": "应收账款", "inventory": "存货",
@@ -76,6 +81,10 @@ def _compare(golden: dict, api_row: dict | None) -> tuple[list, int]:
     for field in PDF_FIELD_ALIASES.keys():
         g = golden.get(field)
         if g is None:
+            # 两边都没有（如格力年报「主要会计数据」表不披露总股本，接口该年也无值）→
+            # 属「不适用」而非数据错误，不计入校验项，避免拉低通过率造成误读。
+            if api_row is None or api_row.get(field) is None:
+                continue
             items.append({"field": field, "label": _FIELD_LABEL[field],
                           "status": "缺失", "golden": None, "api": None, "diff_pct": None})
             continue
@@ -252,6 +261,11 @@ def reconcile_balance_sheet(code: str, year: int,
         if pdf_val == 0 and api_val == 0:
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
+        if diff > IMPLAUSIBLE_DIFF_PCT:
+            # 差 1000 倍以上几乎必然是 PDF 解析/单位识别错误（如把「百万元」读成「万元」），
+            # 若当作接口错误覆盖，会把正确的接口值改成错的，宁可跳过并告警。
+            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%（疑似 PDF 解析/单位识别错误，非接口错误）")
+            continue
         if diff > RECONCILE_TOLERANCE_PCT:
             corrections.append({
                 "field": field, "label": _BS_LABEL.get(field, field),
@@ -330,6 +344,11 @@ def _reconcile_statement(code: str, year: int, table: str, parser, pdf_dir, data
         if pdf_val == 0 and api_val == 0:
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
+        if diff > IMPLAUSIBLE_DIFF_PCT:
+            # 差 1000 倍以上几乎必然是 PDF 解析/单位识别错误（如把「百万元」读成「万元」），
+            # 若当作接口错误覆盖，会把正确的接口值改成错的，宁可跳过并告警。
+            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%（疑似 PDF 解析/单位识别错误，非接口错误）")
+            continue
         if diff > RECONCILE_TOLERANCE_PCT:
             label = _INCOME_LABEL.get(field, _CASH_FLOW_LABEL.get(field, field))
             corrections.append({
