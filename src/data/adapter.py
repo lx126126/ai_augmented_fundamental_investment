@@ -382,8 +382,19 @@ def build_template_data(code: str) -> dict:
         "current_position": current_position,
         "annual_rates": annual_rates,
         "pie_data": pie_data,
+        "sanity": _sanity_summary(annual, code),
         "narrative_data": narrative_data,
     }
+
+
+def _sanity_summary(annual: pd.DataFrame, code: str) -> list[dict] | None:
+    """业务勾稽体检结果（供报告「数据校验」区展示）：会计恒等式/利润勾稽/比率边界/同比异常。"""
+    try:
+        from src.data.quality import check_annual_sanity
+        r = check_annual_sanity(annual, code)
+        return [{"check": c["check"], "ok": c["ok"], "detail": c["detail"]} for c in r.checks]
+    except Exception:
+        return None
 
 
 def _build_rating(raw_rating: pd.DataFrame) -> dict | None:

@@ -3,7 +3,13 @@
 import pandas as pd
 import pytest
 
-from src.data.quality import CheckResult, check_frame, check_quote, validate_all
+from src.data.quality import (
+    CheckResult,
+    check_annual_sanity,
+    check_frame,
+    check_quote,
+    validate_all,
+)
 
 
 def _bs(total_assets=100.0, total_liabilities=60.0, total_equity=40.0):
@@ -122,3 +128,75 @@ def test_check_quote_skips_missing_hk_pe():
     q = _quote(pe=None)
     # price/pb 合理、pe 缺失 → 整体仍应 ok（pe 缺失是合法情况，非脏值）
     assert check_quote(q, "09992").ok
+
+
+# ---------------------------------------------------------------------------
+# 业务勾稽体检（check_annual_sanity）
+# ---------------------------------------------------------------------------
+def _annual_frame(rows: list[dict]) -> pd.DataFrame:
+    df = pd.DataFrame(rows)
+    df["report_date"] = pd.to_datetime(df["report_date"])
+    df["symbol"] = "600000"
+    return df
+
+
+def test_sanity_flags_broken_accounting_identity():
+    """资产 ≠ 负债 + 权益（用归母权益会导致虚增偏差）应被抓出。"""
+    a = _annual_frame([
+        {"report_date": "2024-12-31", "total_assets": 1000.0,
+         "total_liabilities": 300.0, "total_equity_all": 400.0},  # 差 300 → 30%
+    ])
+    r = check_annual_sanity(a, "600000")
+    failed = {c["check"] for c in r.checks if not c["ok"]}
+    assert any("会计恒等式" in f for f in failed)
+
+
+def test_sanity_passes_when_identity_holds():
+    a = _annual_frame([
+        {"report_date": "2024-12-31", "total_assets": 1000.0,
+         "total_liabilities": 300.0, "total_equity_all": 700.0},
+    ])
+    r = check_annual_sanity(a, "600000")
+    assert not any("会计恒等式" in c["check"] and not c["ok"] for c in r.checks)
+
+
+def test_sanity_yoy_low_base_exempt():
+    """小基数起飞（如泡泡玛特 2018 净利 +6243%）不应判为异常。
+
+    若只看同比幅度，腾讯 2002、泡泡玛特 2018 这类真实高增长会被年年误报，
+    检查就失去意义——故去年同期 < 序列峰值 20% 时豁免。
+    """
+    a = _annual_frame([
+        {"report_date": "2017-12-31", "net_profit": 0.1, "net_profit_yoy_pct": None},
+        {"report_date": "2018-12-31", "net_profit": 6.3, "net_profit_yoy_pct": 6243.0},  # 基数 0.1 << 峰值 6.3
+    ])
+    r = check_annual_sanity(a, "600000")
+    assert not any("净利润同比" in c["check"] and not c["ok"] for c in r.checks)
+
+
+def test_sanity_flags_yoy_spike_on_normal_base():
+    """基数正常时的同比暴增应被抓出（多为单位/口径错误）。
+
+    注意基数与峰值的关系：基数 200 / 峰值 900 = 22% > 低基数豁免线 15%，
+    故不会误豁免；同比 350% > 300% 阈值 → 应判异常。
+    """
+    a = _annual_frame([
+        {"report_date": "2023-12-31", "net_profit": 200.0, "net_profit_yoy_pct": 10.0},
+        {"report_date": "2024-12-31", "net_profit": 900.0, "net_profit_yoy_pct": 350.0},
+    ])
+    r = check_annual_sanity(a, "600000")
+    assert any("净利润同比" in c["check"] and not c["ok"] for c in r.checks)
+
+
+def test_sanity_yoy_thresholds_are_self_consistent():
+    """阈值自洽性：同比阈值换算出的基数占比必须 > 低基数豁免线，否则检查永远不触发。
+
+    同比 >X% ⟹ 基数 < 峰值/(1+X/100)。若该值 ≤ _LOW_BASE_RATIO，所有超阈值同比
+    都会被低基数豁免掉，检查就成了死代码（这是改阈值时最容易踩的坑）。
+    """
+    from src.data.quality import _LOW_BASE_RATIO, _MAX_ABS_YOY_PCT
+    implied_base_ratio = 1.0 / (1.0 + _MAX_ABS_YOY_PCT / 100.0)
+    assert implied_base_ratio > _LOW_BASE_RATIO, (
+        f"同比阈值 {_MAX_ABS_YOY_PCT}% 对应基数占比仅 {implied_base_ratio:.1%}，"
+        f"≤ 低基数豁免线 {_LOW_BASE_RATIO:.0%} → 同比检查永远不会触发"
+    )

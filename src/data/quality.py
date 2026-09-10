@@ -202,6 +202,117 @@ def validate_all(raw: dict[str, pd.DataFrame]) -> CheckResult:
 
 
 # --------------------------------------------------------------------------- #
+# 业务逻辑体检（勾稽关系 + 异常比率）
+# --------------------------------------------------------------------------- #
+# check_financial_tables 只做「结构/空值/正负」断言，查不出「数字看着就不对」的问题
+# （如分红比例 300%、资产≠负债+权益）。这一层补的是会计勾稽与常识边界，
+# 定位为「告警」而非阻断——异常也可能是真实的（如亏损年份净利率为负）。
+
+_IDENTITY_TOL_PCT = 0.5      # 资产 = 负债 + 权益 容差
+_PROFIT_TOL_PCT = 1.0        # 净利润 = 归母 + 少数股东损益 容差
+# 营收/净利同比绝对值上限。定 300%：高成长股真实增速可达 2~3 倍（泡泡玛特 2024 净利 +189%），
+# 设太低会天天误报；单位/口径错误通常是整百整万倍（100 倍 = 10000%），300% 仍足以拦下。
+_MAX_ABS_YOY_PCT = 300.0
+
+# 低基数豁免：去年同期 < 序列峰值 _LOW_BASE_RATIO 时不判同比异常
+# （腾讯 2002 营收 +436%、泡泡玛特 2018 净利 +6243% 都是小基数起飞，非数据错误）。
+# ⚠️ 与 _MAX_ABS_YOY_PCT **必须自洽**：同比 >X% 意味着基数 < 峰值的 1/(1+X/100)，
+# 若 _LOW_BASE_RATIO ≥ 该值，则所有超阈值的同比都被豁免，检查形同虚设。
+# 当前 1/(1+300/100) = 25% > 15% ✓ 检查有效。
+_LOW_BASE_RATIO = 0.15
+
+
+def check_annual_sanity(annual: pd.DataFrame, code: str = "") -> CheckResult:
+    """年度宽表（cleaner.build_annual_financials 输出，单位亿元）业务合理性体检。
+
+    检查项：
+    1. 会计恒等式：资产合计 = 负债合计 + 股东权益合计（**必须用含少数股东的
+       total_equity_all**，用归母 total_equity 会虚增偏差约 13%）
+    2. 利润勾稽：净利润 ≈ 归母净利润 + 少数股东损益
+    3. 常识边界：分红比例/资产负债率/净利率 ∈ [0,100]、总资产与营收为正
+    4. 同比异常：|营收同比|、|净利润同比| 超过 200%（多为单位或口径错误）
+    """
+    res = CheckResult(table=f"sanity:{code or 'annual'}")
+    if annual is None or annual.empty:
+        res.add("非空", False, "年度宽表为空")
+        return res
+
+    def _col(name):
+        return annual[name] if name in annual.columns else None
+
+    years = [int(d.year) for d in annual["report_date"].tolist()]
+    ta, tl, te_all = _col("total_assets"), _col("total_liabilities"), _col("total_equity_all")
+
+    # 1. 会计恒等式
+    if ta is not None and tl is not None and te_all is not None:
+        bad = []
+        for i, y in enumerate(years):
+            a, l, e = ta.iloc[i], tl.iloc[i], te_all.iloc[i]
+            if any(pd.isna(v) for v in (a, l, e)) or not a:
+                continue
+            dev = abs(a - (l + e)) / abs(a) * 100
+            if dev > _IDENTITY_TOL_PCT:
+                bad.append(f"{y}年偏差{dev:.1f}%")
+        res.add("会计恒等式 资产=负债+权益", not bad, "；".join(bad[:5]) or f"{len(years)}年全部吻合")
+
+    # 2. 利润勾稽
+    np_, npp, mi = _col("net_profit"), _col("net_profit_parent"), _col("minority_interest")
+    if np_ is not None and npp is not None and mi is not None:
+        bad = []
+        for i, y in enumerate(years):
+            a, b, c = np_.iloc[i], npp.iloc[i], mi.iloc[i]
+            if pd.isna(a) or pd.isna(b) or not a:
+                continue
+            dev = abs(a - (b + (c if not pd.isna(c) else 0.0))) / abs(a) * 100
+            if dev > _PROFIT_TOL_PCT:
+                bad.append(f"{y}年偏差{dev:.1f}%")
+        res.add("利润勾稽 净利润=归母+少数股东损益", not bad, "；".join(bad[:5]) or f"{len(years)}年全部吻合")
+
+    # 3. 常识边界
+    bounds = {
+        "dividend_payout_pct": (0.0, 150.0),   # 分红比例：超额分红存在但罕见，留到 150
+        "debt_ratio_pct": (0.0, 100.0),        # 资产负债率
+    }
+    for col, (lo, hi) in bounds.items():
+        s = _col(col)
+        if s is None:
+            continue
+        bad = [f"{y}年{v:.1f}" for y, v in zip(years, s)
+               if not pd.isna(v) and not (lo <= v <= hi)]
+        res.add(f"{col} ∈ [{lo},{hi}]", not bad, "；".join(bad[:5]) or "全部在合理区间")
+
+    for col in ("total_assets", "revenue"):
+        s = _col(col)
+        if s is None:
+            continue
+        bad = [f"{y}年{v}" for y, v in zip(years, s) if not pd.isna(v) and v <= 0]
+        res.add(f"{col} 为正", not bad, "；".join(bad[:5]) or "全部为正")
+
+    # 4. 同比异常（带**低基数豁免**）
+    for yoy_col, val_col, label in (("revenue_yoy_pct", "revenue", "营收同比"),
+                                    ("net_profit_yoy_pct", "net_profit", "净利润同比")):
+        s, v = _col(yoy_col), _col(val_col)
+        if s is None:
+            continue
+        vmax = v.abs().max() if v is not None else None
+        bad = []
+        for i, (y, yoy) in enumerate(zip(years, s)):
+            if pd.isna(yoy) or abs(yoy) <= _MAX_ABS_YOY_PCT:
+                continue
+            # 低基数豁免：去年同期绝对值不足该序列峰值的 20% → 高增长属正常
+            # （腾讯 2002 营收 +436%、泡泡玛特 2018 净利 +6243% 都是小基数起飞，非数据错误）
+            if v is not None and vmax and i > 0:
+                base = abs(v.iloc[i - 1]) if not pd.isna(v.iloc[i - 1]) else None
+                if base is not None and base < _LOW_BASE_RATIO * vmax:
+                    continue
+            bad.append(f"{y}年{yoy:.0f}%")
+        res.add(f"|{label}| ≤ {_MAX_ABS_YOY_PCT:.0f}%（低基数豁免）", not bad,
+                "；".join(bad[:5]) or "无异常波动")
+
+    return res
+
+
+# --------------------------------------------------------------------------- #
 # 行情快照校验（日更 DAG 用）：价格/估值合理性，轻量、不阻断（仅告警）
 # --------------------------------------------------------------------------- #
 # 估值合理范围：PE/PB 恒为正；PE 上限 200（超过多为接口脏值或亏损股误报）、

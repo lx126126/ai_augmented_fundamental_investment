@@ -62,6 +62,7 @@ COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供�
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
+SANITY = None              # 业务勾稽体检结果（会计恒等式/利润勾稽/比率边界/同比异常）
 CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
 VAL_CURRENCY_HINT = ""     # 估值面板 PE/PB 币种提示（港股：港元市值÷人民币财务）
 
@@ -408,6 +409,19 @@ def build_graham() -> str:
     )
 
 
+def _sanity_rows() -> str:
+    """业务勾稽体检（会计恒等式 / 利润勾稽 / 比率边界 / 同比异常）在报告里的展示。"""
+    if not SANITY:
+        return ""
+    ok_n = sum(1 for c in SANITY if c["ok"])
+    fails = [c for c in SANITY if not c["ok"]]
+    # 措辞用「待复核」而非「异常」：同比暴增可能是真实业务变化（如泡泡玛特 2025 净利 +309%），
+    # 直接标「异常」会让读者误以为是数据错误。
+    detail = "；".join(f'{c["check"]}（{c["detail"]}）' for c in fails[:3])
+    warn = f'　<span style="color:var(--warn)">待复核：{detail}</span>' if fails else ""
+    return f'<div><b>业务勾稽：</b>{ok_n}/{len(SANITY)} 项通过{warn}</div>'
+
+
 def _stats_hint() -> str:
     """经营统计副标题：银行无流动/非流动划分，标题要跟着实际内容变，不能写死「流动状况」。"""
     t = (CURRENT_POSITION or {}).get("title") or ""
@@ -737,6 +751,7 @@ def build_verify() -> str:
             '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div>'
             f'<div><b>校验结果：</b>{result["passed"]}/{result["total"]} 项与官方年报一致（容差 &lt;0.1%）</div>'
             + "".join(rows)
+            + _sanity_rows()
             + reconcile_rows
             + f'<div><b>校验日期：</b>{today}</div>'
             '<div><b>校验人：</b>李潇</div>'
@@ -747,10 +762,12 @@ def build_verify() -> str:
         is_hk = len(str(COMPANY_CODE)) == 5
         status = ("不适用（港股年报源未接入，金标准校验暂覆盖 A 股）" if is_hk
                   else f"未运行（{type(e).__name__}）")
+        # 业务勾稽体检不依赖官方 PDF，港股同样适用（且港股没有金标准兜底，更该展示）
         return ('<div class="verify">'
                 '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）</div>'
                 f'<div><b>校验状态：</b>{status}</div>'
-                f'<div><b>校验日期：</b>{today}</div>'
+                + _sanity_rows()
+                + f'<div><b>校验日期：</b>{today}</div>'
                 "</div>")
 
 
@@ -1192,7 +1209,7 @@ def _save_narrative(code: str, facts, narrative) -> None:
 
 
 def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE, VAL_CURRENCY_HINT
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
         "港股标的 · 财务数据为人民币，股价/市值为港元"
@@ -1229,6 +1246,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         CURRENT_POSITION = real.get("current_position")
         ANNUAL_RATES = real.get("annual_rates")
         PIE_DATA = real.get("pie_data")
+        SANITY = real.get("sanity")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
