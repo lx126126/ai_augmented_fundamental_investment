@@ -443,12 +443,14 @@ def build_annual_rates() -> str:
     """年增长率（ValueLine Annual Rates）：销售/现金流/盈利/股息/账面价值 CAGR。"""
     if not ANNUAL_RATES:
         return ""
+    # 科目名称与「年度全历史表」保持完全一致（原 ValueLine 美式叫法「销售收入/账面价值」
+    # 与 A 股报表科目对不上，统一改用报表科目名）
     labels = [
-        ("sales", "销售收入"),
-        ("cash_flow", "经营现金流"),
-        ("earnings", "净利润"),
-        ("dividends", "每股股息"),
-        ("book_value", "账面价值（净资产）"),
+        ("sales", "营业总收入"),
+        ("cash_flow", "经营现金流净额"),
+        ("earnings", "归母净利润"),
+        ("dividends", "每股股息（元）"),
+        ("book_value", "归母所有者权益"),
     ]
     rows = []
     for key, label in labels:
@@ -1028,7 +1030,7 @@ TEMPLATE = """<!DOCTYPE html>
 
     <div class="sub-title">近三年季度（@@QUARTER_RANGE@@）</div>
 @@QUARTER_TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表为季度末时点值。</div>
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表/现金流量表为单季度值，资产负债表为季度末时点值；同比增长率为本期对去年同期的对比。</div>
   </div>
 
   <div class="section">

@@ -402,6 +402,22 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     # 单季 ROE = 单季归母净利 / 季末归母净资产
     merged["roe_pct"] = merged["net_profit_parent"] / merged["total_equity"] * 100
 
+    # 同比增长率：本期 vs 去年同期（按 (年, 月) 精确对齐，缺期不会像 shift(4) 那样错位）。
+    # 用 (year, month) 字典回溯而非固定位移，季度/半年度披露都能正确对齐（H1↔H1、Q3↔Q3）。
+    # 去年同期货值为负或缺失时不计算——从亏损转为盈利之类的同比无经济含义。
+    if not merged.empty:
+        ym = list(zip(merged["report_date"].dt.year, merged["report_date"].dt.month))
+        for _col, _out in (("revenue", "revenue_yoy_pct"),
+                           ("net_profit_parent", "net_profit_parent_yoy_pct"),
+                           ("ocf", "ocf_yoy_pct")):
+            if _col not in merged.columns:
+                continue
+            cur = pd.to_numeric(merged[_col], errors="coerce")
+            prev = {(y + 1, m): v for (y, m), v in zip(ym, cur)}
+            base = pd.Series([prev.get(k) for k in ym], index=merged.index, dtype="float64")
+            base = base.where(base > 0)  # 基数为负/0/缺失 → 同比置空
+            merged[_out] = (cur / base - 1) * 100
+
     # 元 → 亿元
     merged = _to_yi(merged)
 

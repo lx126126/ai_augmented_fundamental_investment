@@ -81,7 +81,7 @@ ANNUAL_SPEC = [
     (None, "筹资现金流出（亿元）", "financing_cash_outflow", 0),
     (None, "筹资现金流净额（亿元）", "financing_cash_flow", 0),
     ("核心财务指标", None, None, None),
-    (None, "ROE %", "roe_pct", 2),
+    (None, "净资产收益率（ROE）%", "roe_pct", 2),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
     (None, "营业总收入同比 %", "revenue_yoy_pct", 1),
@@ -106,6 +106,10 @@ QUARTER_SPEC = [
     ("核心财务指标（单季）", None, None, None),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
+    ("同比增长率（对比去年同期）", None, None, None),
+    (None, "营业总收入同比 %", "revenue_yoy_pct", 1),
+    (None, "归母净利润同比 %", "net_profit_parent_yoy_pct", 1),
+    (None, "经营现金流净额同比 %", "ocf_yoy_pct", 1),
 ]
 
 
@@ -678,18 +682,20 @@ def _build_current_position(annual: pd.DataFrame) -> dict | None:
         v = latest.get(col) if col in annual.columns else None
         return None if (v is None or pd.isna(v)) else float(v)
 
+    # 科目名称与「年度全历史表 / 构成饼图」保持完全一致（ValueLine 原名如「现金资产」
+    # 「一年内到期债务」为美式报表口径，与 A 股报表科目名对不上，统一改用报表科目名）
     assets = [
-        ("现金资产", _v("monetary_funds")),
+        ("货币资金", _v("monetary_funds")),
         ("应收账款", _v("accounts_receivable")),
         ("存货", _v("inventory")),
         ("其他流动资产", _v("other_current_assets")),
-        ("流动资产合计", _v("current_assets")),
+        ("流动资产", _v("current_assets")),
     ]
     liabs = [
         ("应付账款", _v("accounts_payable")),
-        ("一年内到期债务", _v("noncurrent_liab_1y")),
+        ("一年内到期的非流动负债", _v("noncurrent_liab_1y")),
         ("其他流动负债", _v("other_current_liabilities")),
-        ("流动负债合计", _v("current_liabilities")),
+        ("流动负债", _v("current_liabilities")),
     ]
     wc = _v("working_capital")
 
