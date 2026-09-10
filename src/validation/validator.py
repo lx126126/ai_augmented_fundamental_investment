@@ -289,7 +289,7 @@ _INCOME_LABEL = {
     "interest_expense": "财务费用", "income_tax": "所得税费用",
 }
 _CASH_FLOW_LABEL = {
-    "ocf": "经营现金流净额", "icf": "投资现金流净额", "fcf": "筹资现金流净额",
+    "ocf": "经营现金流净额", "icf": "投资现金流净额", "financing_cash_flow": "筹资现金流净额",
     "capital_expenditure": "资本开支", "depreciation": "固定资产折旧",
 }
 

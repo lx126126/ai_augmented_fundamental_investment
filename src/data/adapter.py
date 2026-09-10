@@ -38,39 +38,52 @@ def _norm_code(code: str) -> str:
 # ---------------------------------------------------------------------------
 ANNUAL_SPEC = [
     ("利润表", None, None, None),
+    (None, "营业总收入（亿元）", "revenue", 0),
     (None, "营业收入（亿元）", "operating_revenue", 0),
+    (None, "营业总成本（亿元）", "total_operating_cost", 0),
+    (None, "营业利润（亿元）", "operating_profit", 0),
+    (None, "营业外收入（亿元）", "non_operating_income", 2),
+    (None, "营业外支出（亿元）", "non_operating_expense", 2),
+    (None, "利润总额（亿元）", "total_profit", 0),
+    (None, "所得税费用（亿元）", "income_tax", 0),
+    (None, "净利润（亿元）", "net_profit", 0),
     (None, "归母净利润（亿元）", "net_profit_parent", 0),
+    (None, "少数股东损益（亿元）", "minority_interest", 1),
+    (None, "扣非归母净利润（亿元）", "deduct_net_profit", 0),
+    (None, "营业总收入同比 %", "revenue_yoy_pct", 1),
+    (None, "净利润同比 %", "net_profit_yoy_pct", 1),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
-    (None, "经营现金流净额（亿元）", "ocf", 0),
-    (None, "折旧与摊销（亿元）", "depreciation_amortization", 0),
-    (None, "资本开支（亿元）", "capital_expenditure", 0),
-    (None, "所得税率 %", "income_tax_rate", 1),
-    (None, "ROE（摊薄）%", "roe_pct", 1),
-    (None, "ROTC（总资本回报）%", "rotc", 1),
+    (None, "自由现金流（亿元）", "free_cash_flow", 0),
     ("资产负债表", None, None, None),
-    (None, "总资产（亿元）", "total_assets", 0),
-    (None, "总负债（亿元）", "total_liabilities", 0),
-    (None, "净资产（归母）（亿元）", "total_equity", 0),
-    (None, "营运资本（亿元）", "working_capital", 0),
-    (None, "货币资金（亿元）", "monetary_funds", 0),
-    (None, "存货（亿元）", "inventory", 0),
-    (None, "应收账款（亿元）", "accounts_receivable", 0),
-    (None, "长期债务（亿元）", "long_term_debt", 0),
-    (None, "总债务（有息）（亿元）", "total_debt", 0),
-    (None, "商誉（亿元）", "goodwill", 0),
-    ("股本结构", None, None, None),
-    (None, "普通股数量（亿股）", "total_shares_yi", 2),
-    (None, "优先股数量（亿股）", "preferred_shares_yi", 2),
-    ("股东回报", None, None, None),
-    (None, "每股股息（元）", "dividend_per_share", 2),
-    (None, "分红比例 %", "dividend_payout_pct", 1),
-    (None, "股息率 %", "dividend_yield_pct", 1),
-    (None, "留存收益/普通股权益 %", "retained_to_equity", 1),
+    (None, "流动资产（亿元）", "current_assets", 0),
+    (None, "非流动资产（亿元）", "noncurrent_assets", 0),
+    (None, "资产合计（亿元）", "total_assets", 0),
+    (None, "流动负债（亿元）", "current_liabilities", 0),
+    (None, "非流动负债（亿元）", "noncurrent_liabilities", 0),
+    (None, "负债合计（亿元）", "total_liabilities", 0),
+    (None, "股本（亿股）", "share_capital", 2),
+    (None, "归母所有者权益（亿元）", "total_equity", 0),
+    (None, "少数股东权益（亿元）", "minority_equity", 0),
+    (None, "股东权益合计（亿元）", "total_equity_all", 0),
+    (None, "股东权益同比 %", "equity_yoy_pct", 1),
+    (None, "有息负债率 %", "interest_bearing_debt_ratio", 1),
+    ("现金流量表", None, None, None),
+    (None, "经营现金流入（亿元）", "operating_cash_inflow", 0),
+    (None, "经营现金流出（亿元）", "operating_cash_outflow", 0),
+    (None, "经营现金流净额（亿元）", "ocf", 0),
+    (None, "投资现金流入（亿元）", "investing_cash_inflow", 0),
+    (None, "投资现金流出（亿元）", "investing_cash_outflow", 0),
+    (None, "投资现金流净额（亿元）", "icf", 0),
+    (None, "筹资现金流入（亿元）", "financing_cash_inflow", 0),
+    (None, "筹资现金流出（亿元）", "financing_cash_outflow", 0),
+    (None, "筹资现金流净额（亿元）", "financing_cash_flow", 0),
+    (None, "经营现金流/净利润 %", "ocf_to_profit_pct", 1),
 ]
 
 QUARTER_SPEC = [
     ("利润表（单季）", None, None, None),
+    (None, "营业总收入（亿元）", "revenue", 0),
     (None, "营业收入（亿元）", "operating_revenue", 0),
     (None, "归母净利润（亿元）", "net_profit_parent", 0),
     (None, "毛利率 %", "gross_margin_pct", 1),
@@ -215,14 +228,6 @@ def build_template_data(code: str) -> dict:
 
     annual = build_annual_financials(raw)
     quarter = build_quarter_financials(raw)
-
-    annual = annual.copy()
-    if "share_capital" in annual.columns:
-        annual["total_shares_yi"] = annual["share_capital"]  # 已是亿股
-    if "preferred_shares" in annual.columns:
-        annual["preferred_shares_yi"] = annual["preferred_shares"]  # 已是亿股（面值1元）
-    else:
-        annual["preferred_shares_yi"] = 0.0
 
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)

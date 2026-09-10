@@ -401,7 +401,7 @@ CASH_FLOW_ITEMS: dict[str, str] = {
     "购建固定资产、无形资产和其他长期资产所支付的现金": "capital_expenditure",
     "固定资产折旧": "depreciation",
     "投资活动产生的现金流量净额": "icf",
-    "筹资活动产生的现金流量净额": "fcf",
+    "筹资活动产生的现金流量净额": "financing_cash_flow",
 }
 
 
@@ -552,7 +552,7 @@ def parse_income_statement(pdf_path: str | Path) -> dict[str, float]:
 def parse_cash_flow_statement(pdf_path: str | Path) -> dict[str, float]:
     """解析「合并现金流量表」主表，返回 {标准字段: 最新年值(元)}。
 
-    字段对齐 cleaner 输出的 cash_flow 列（ocf/icf/fcf/capital_expenditure/depreciation）。
+    字段对齐 cleaner 输出的 cash_flow 列（ocf/icf/financing_cash_flow/capital_expenditure/depreciation）。
     """
     doc = fitz.open(str(pdf_path))
     pages_text = _extract_statement_pages(

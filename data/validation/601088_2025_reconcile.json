@@ -132,6 +132,14 @@
     },
     {
       "table": "balance_sheet",
+      "field": "minority_equity",
+      "label": "少数股东权益",
+      "api_yi": 916.11,
+      "pdf_yi": 723.44,
+      "diff_pct": 26.63247815990269
+    },
+    {
+      "table": "balance_sheet",
       "field": "total_equity_all",
       "label": "股东权益合计",
       "api_yi": 6036.27,

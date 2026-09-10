@@ -56,16 +56,27 @@ PROFIT_SHEET_MAP = {
     "REPORT_DATE": "report_date",
     "REPORT_TYPE": "report_type",
     "TOTAL_OPERATE_INCOME": "revenue",           # 营业总收入
+    "TOTAL_OPERATE_INCOME_YOY": "revenue_yoy_pct",  # 营业总收入同比增长率（接口已为 %，-1.2 即 -1.2%）
     "OPERATE_INCOME": "operating_revenue",        # 营业收入
     "OPERATE_COST": "operating_cost",             # 营业成本
+    "TOTAL_OPERATE_COST": "total_operating_cost", # 营业总成本（=营业成本+税金及附加+期间费用等）
+    "OPERATE_TAX_ADD": "operate_tax_add",         # 营业税金及附加（利润表瀑布图构成）
     "OPERATE_PROFIT": "operating_profit",         # 营业利润
+    "NONBUSINESS_INCOME": "non_operating_income", # 营业外收入
+    "NONBUSINESS_EXPENSE": "non_operating_expense",  # 营业外支出
     "TOTAL_PROFIT": "total_profit",               # 利润总额
-    "NETPROFIT": "net_profit",                    # 净利润
+    "INCOME_TAX": "income_tax",                   # 所得税费用
+    "NETPROFIT": "net_profit",                    # 净利润（含少数股东损益）
+    "NETPROFIT_YOY": "net_profit_yoy_pct",        # 净利润同比增长率（接口已为 %）
     "PARENT_NETPROFIT": "net_profit_parent",      # 归母净利润
+    "MINORITY_INTEREST": "minority_interest",     # 少数股东损益
+    "DEDUCT_PARENT_NETPROFIT": "deduct_net_profit",  # 归母扣非净利润
     "SALE_EXPENSE": "sell_expense",               # 销售费用（M-Score SGAI）
     "MANAGE_EXPENSE": "admin_expense",            # 管理费用（M-Score SGAI）
-    "INCOME_TAX": "income_tax",                   # 所得税费用
+    "RESEARCH_EXPENSE": "research_expense",       # 研发费用（利润表瀑布图构成）
+    "FINANCE_EXPENSE": "finance_expense",         # 财务费用（总额，利润表瀑布图构成）
     "FE_INTEREST_EXPENSE": "interest_expense",    # 财务费用-利息费用（长期利息近似）
+    "INVEST_INCOME": "invest_income",             # 投资收益（利润表瀑布图构成）
 }
 
 # ---------------------------------------------------------------------------
@@ -79,11 +90,17 @@ BALANCE_SHEET_MAP = {
     "TOTAL_PARENT_EQUITY": "total_equity",        # 归母净资产
     "TOTAL_EQUITY": "total_equity_all",           # 全部股东权益（含少数股东，ROTC 用）
     "TOTAL_CURRENT_ASSETS": "current_assets",     # 流动资产（M-Score AQI）
+    "TOTAL_NONCURRENT_ASSETS": "noncurrent_assets",  # 非流动资产合计
     "MONETARYFUNDS": "monetary_funds",            # 货币资金
     "INVENTORY": "inventory",                     # 存货
     "ACCOUNTS_RECE": "accounts_receivable",       # 应收账款
     "GOODWILL": "goodwill",                       # 商誉
     "FIXED_ASSET": "fixed_assets",                # 固定资产
+    "CIP": "construction_in_progress",            # 在建工程（总资产饼图构成）
+    "INTANGIBLE_ASSET": "intangible_assets",      # 无形资产（总资产饼图构成）
+    "LONG_EQUITY_INVEST": "long_equity_invest",   # 长期股权投资（总资产饼图构成）
+    "OTHER_NONCURRENT_ASSET": "other_noncurrent_assets",  # 其他非流动资产（总资产饼图构成）
+    "MINORITY_EQUITY": "minority_equity",         # 少数股东权益
     "BORROW_FUND": "borrowings",                  # 借款（有息负债核心）
     "LONG_LOAN": "long_term_loan",                # 长期借款
     "SHORT_LOAN": "short_term_loan",              # 短期借款
@@ -110,9 +127,19 @@ BALANCE_SHEET_MAP = {
 CASH_FLOW_MAP = {
     "REPORT_DATE": "report_date",
     "REPORT_TYPE": "report_type",
+    # 经营活动（流入/流出小计 + 净额）
+    "TOTAL_OPERATE_INFLOW": "operating_cash_inflow",   # 经营活动现金流入小计
+    "TOTAL_OPERATE_OUTFLOW": "operating_cash_outflow", # 经营活动现金流出小计
     "NETCASH_OPERATE": "ocf",                     # 经营活动现金流净额
+    # 投资活动（流入/流出小计 + 净额）
+    "TOTAL_INVEST_INFLOW": "investing_cash_inflow",    # 投资活动现金流入小计
+    "TOTAL_INVEST_OUTFLOW": "investing_cash_outflow",  # 投资活动现金流出小计
     "NETCASH_INVEST": "icf",                      # 投资活动现金流净额
-    "NETCASH_FINANCE": "fcf",                     # 筹资活动现金流净额
+    # 筹资活动（流入/流出小计 + 净额）
+    "TOTAL_FINANCE_INFLOW": "financing_cash_inflow",   # 筹资活动现金流入小计
+    "TOTAL_FINANCE_OUTFLOW": "financing_cash_outflow", # 筹资活动现金流出小计
+    "NETCASH_FINANCE": "financing_cash_flow",     # 筹资活动现金流净额（勿与自由现金流 FCF 混淆）
+    # 附注/明细（M-Score DEPI + 自由现金流 FCF 计算用）
     "FA_IR_DEPR": "depreciation",                 # 固定资产折旧（M-Score DEPI）
     # —— ValueLine 补充：资本开支 + 折旧摊销明细 ——
     "CONSTRUCT_LONG_ASSET": "capital_expenditure",      # 购建固定资产等（资本开支）
@@ -181,7 +208,7 @@ HK_BALANCE_SHEET_MAP = {
     "004025999": "total_liabilities",    # 总负债
     "004030999": "total_equity",         # 股东权益（归母净资产，不含少数股东）
     "004028999": "total_equity_all",     # 净资产/总权益（含少数股东，ROTC 用）
-    "004027999": "minority_interest",    # 少数股东权益
+    "004027999": "minority_equity",      # 少数股东权益（与 A 股 minority_equity 对齐，勿用 minority_interest）
     "004002999": "current_assets",       # 流动资产合计
     "004011999": "current_liabilities",  # 流动负债合计
     "004030001": "share_capital_raw",    # 股本（单位特殊，需 EPS 反推校正）
@@ -196,7 +223,7 @@ HK_BALANCE_SHEET_MAP = {
 HK_CASH_FLOW_MAP = {
     "003999": "ocf",                     # 经营业务现金净额
     "005999": "icf",                     # 投资业务现金净额
-    "007999": "fcf",                     # 融资业务现金净额
+    "007999": "financing_cash_flow",     # 融资业务现金净额（勿与自由现金流 FCF 混淆）
     "001009": "depreciation",            # 折旧及摊销
     "005005": "capital_expenditure",     # 购建固定资产（资本开支，取绝对值）
 }

@@ -11,22 +11,30 @@ import pandas as pd
 
 # 金额字段（元 → 亿元；股本面值 1 元，故 share_capital 转后即「亿股」）
 _MONEY_FIELDS = {
-    "operating_revenue", "operating_cost", "net_profit", "net_profit_parent", "ocf",
-    "total_profit", "income_tax", "interest_expense",
+    # 利润表
+    "revenue", "operating_revenue", "operating_cost", "total_operating_cost",
+    "operate_tax_add", "operating_profit", "non_operating_income", "non_operating_expense",
+    "total_profit", "income_tax", "net_profit", "net_profit_parent", "minority_interest",
+    "deduct_net_profit", "sell_expense", "admin_expense", "research_expense",
+    "finance_expense", "interest_expense", "invest_income",
+    # 资产负债表
     "total_assets", "total_liabilities", "total_equity", "total_equity_all",
-    "current_assets", "monetary_funds", "inventory", "accounts_receivable",
-    "borrowings", "goodwill", "interest_bearing_debt",
-    "long_term_loan", "short_term_loan",
+    "current_assets", "noncurrent_assets", "monetary_funds", "inventory", "accounts_receivable",
+    "fixed_assets", "construction_in_progress", "intangible_assets", "long_equity_invest",
+    "other_noncurrent_assets", "minority_equity", "borrowings", "goodwill",
+    "interest_bearing_debt", "long_term_loan", "short_term_loan",
     "share_capital", "preferred_shares",
-    "sell_expense", "admin_expense", "depreciation",
-    # ValueLine 补充字段（元 → 亿元）
-    "current_liabilities", "accounts_payable", "other_current_assets",
-    "other_current_liabilities", "noncurrent_liab_1y", "retained_profit",
-    "bond_payable", "long_payable", "lease_liabilities", "short_bond_payable",
-    "noncurrent_liabilities",
-    "capital_expenditure", "amortize_intangible", "amortize_lpe",
+    "current_liabilities", "noncurrent_liabilities", "accounts_payable",
+    "other_current_assets", "other_current_liabilities", "noncurrent_liab_1y",
+    "retained_profit", "bond_payable", "long_payable", "lease_liabilities",
+    "short_bond_payable", "long_term_debt", "total_debt",
+    # 现金流量表
+    "ocf", "icf", "financing_cash_flow",
+    "operating_cash_inflow", "operating_cash_outflow",
+    "investing_cash_inflow", "investing_cash_outflow",
+    "financing_cash_inflow", "financing_cash_outflow",
+    "depreciation", "capital_expenditure", "amortize_intangible", "amortize_lpe",
     "depre_invest_realestate", "depre_oilgas_bio", "amortize_useright",
-    "long_term_debt", "total_debt",
 }
 
 
@@ -37,8 +45,14 @@ def _annual(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calc_gross_margin(profit_df: pd.DataFrame) -> pd.DataFrame:
-    """从利润表补算毛利率（%）：(营业收入 - 营业成本) / 营业收入 × 100。"""
+    """从利润表补算毛利率（%）：(营业收入 - 营业成本) / 营业收入 × 100。
+
+    顺带补「营业总收入」口径：港股利润表无 revenue（营业总收入）字段，
+    其「营业额」即总收入，fallback 到 operating_revenue（A 股有 revenue 列则不动）。
+    """
     df = profit_df.copy()
+    if "revenue" not in df.columns and "operating_revenue" in df.columns:
+        df["revenue"] = df["operating_revenue"]
     if {"operating_revenue", "operating_cost"}.issubset(df.columns):
         df["gross_margin_pct"] = (
             (df["operating_revenue"] - df["operating_cost"])
@@ -136,19 +150,35 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
     key = ["symbol", "report_date"]
 
-    ps_cols = key + [c for c in ["operating_revenue", "net_profit", "net_profit_parent", "gross_margin_pct", "sell_expense", "admin_expense", "income_tax", "interest_expense", "total_profit"] if c in ps.columns]
-    cf_cols = key + [c for c in ["ocf", "depreciation", "capital_expenditure",
-                                 "amortize_intangible", "amortize_lpe",
-                                 "depre_invest_realestate", "depre_oilgas_bio", "amortize_useright"] if c in cf.columns]
-    bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity", "total_equity_all",
-                                 "current_assets", "monetary_funds", "inventory", "accounts_receivable",
-                                 "interest_bearing_debt", "goodwill",
-                                 "share_capital", "preferred_shares", "audit_opinion",
-                                 "current_liabilities", "accounts_payable", "other_current_assets",
-                                 "other_current_liabilities", "noncurrent_liab_1y", "retained_profit",
-                                 "bond_payable", "long_payable", "lease_liabilities",
-                                 "short_bond_payable", "noncurrent_liabilities",
-                                 "long_term_debt", "total_debt"] if c in bs.columns]
+    ps_cols = key + [c for c in [
+        "revenue", "revenue_yoy_pct", "operating_revenue", "operating_cost",
+        "total_operating_cost", "operate_tax_add", "operating_profit",
+        "non_operating_income", "non_operating_expense", "total_profit",
+        "income_tax", "net_profit", "net_profit_yoy_pct", "net_profit_parent",
+        "minority_interest", "deduct_net_profit", "gross_margin_pct",
+        "sell_expense", "admin_expense", "research_expense", "finance_expense",
+        "interest_expense", "invest_income",
+    ] if c in ps.columns]
+    cf_cols = key + [c for c in [
+        "ocf", "operating_cash_inflow", "operating_cash_outflow",
+        "icf", "investing_cash_inflow", "investing_cash_outflow",
+        "financing_cash_flow", "financing_cash_inflow", "financing_cash_outflow",
+        "depreciation", "capital_expenditure",
+        "amortize_intangible", "amortize_lpe",
+        "depre_invest_realestate", "depre_oilgas_bio", "amortize_useright",
+    ] if c in cf.columns]
+    bs_cols = key + [c for c in [
+        "total_assets", "total_liabilities", "total_equity", "total_equity_all",
+        "current_assets", "noncurrent_assets", "monetary_funds", "inventory",
+        "accounts_receivable", "fixed_assets", "construction_in_progress",
+        "intangible_assets", "long_equity_invest", "other_noncurrent_assets",
+        "minority_equity", "interest_bearing_debt", "goodwill",
+        "share_capital", "preferred_shares", "audit_opinion",
+        "current_liabilities", "noncurrent_liabilities", "accounts_payable",
+        "other_current_assets", "other_current_liabilities", "noncurrent_liab_1y",
+        "retained_profit", "bond_payable", "long_payable", "lease_liabilities",
+        "short_bond_payable", "long_term_debt", "total_debt",
+    ] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",
                                  "debt_ratio_pct", "revenue_yoy_pct", "net_profit_yoy_pct",
                                  "ocf_to_profit_pct", "current_ratio", "quick_ratio"] if c in fi.columns]
@@ -156,14 +186,60 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     merged = ps[ps_cols]
     merged = merged.merge(cf[cf_cols], on=key, how="left")
     merged = merged.merge(bs[bs_cols], on=key, how="left")
-    merged = merged.merge(fi[fi_cols], on=key, how="left")
+    # financial_indicator 与利润表可能重复提供同比字段（revenue_yoy_pct/net_profit_yoy_pct）。
+    # 用 suffixes 让财务指标接口的同名列带 _fi 后缀，再 fillna 兜底：
+    # 利润表接口的同比与「营业总收入/净利润」金额行一一对应（口径更准），优先；
+    # 银行利润表同比列存在但值全 NaN（不适用），或港股无利润表同比列时，回退财务指标接口。
+    merged = merged.merge(fi[fi_cols], on=key, how="left", suffixes=("", "_fi"))
+    for _col in ("revenue_yoy_pct", "net_profit_yoy_pct"):
+        if _col in merged.columns and f"{_col}_fi" in merged.columns:
+            merged[_col] = merged[_col].fillna(merged[f"{_col}_fi"])
+            merged = merged.drop(columns=[f"{_col}_fi"])
 
-    # 净利率兜底：东财 financial_indicator 的 net_margin_pct 对银行/金融股大量缺值
-    # （如交通银行仅 2005 年有值），缺失行用 归母净利润 / 营业收入 现算填充（与季度表口径一致）
-    if "net_margin_pct" in merged.columns and {"net_profit_parent", "operating_revenue"}.issubset(merged.columns):
+    # 净利率统一口径：归母净利润 / 营业收入 × 100（与季度表一致）。
+    # 原用东财 net_margin_pct（净利润含少数股东 / 营业收入），与报告的「归母净利润」
+    # 行分子口径不一致（茅台差约 2pp），改为强制重算覆盖，保证年度/季度口径一致。
+    if {"net_profit_parent", "operating_revenue"}.issubset(merged.columns):
         rev = merged["operating_revenue"].astype(float)
-        calc_nm = merged["net_profit_parent"] / rev.where(rev != 0) * 100
-        merged["net_margin_pct"] = merged["net_margin_pct"].fillna(calc_nm)
+        merged["net_margin_pct"] = merged["net_profit_parent"] / rev.where(rev != 0) * 100
+
+    # —— 三张报表新增派生指标（组件均已换算为亿元）——
+    # 同比兜底：银行利润表无 TOTAL_OPERATE_INCOME_YOY/NETPROFIT_YOY、财务指标「增长率」
+    # 也几乎全空（银行不适用），用金额自算同比填充缺失年份。revenue 对银行已 fallback
+    # 到 operating_revenue（营业收入口径）；net_profit 为净利润（含少数股东）口径，与
+    # NETPROFIT_YOY 一致。
+    if "revenue" in merged.columns and "revenue_yoy_pct" in merged.columns:
+        merged["revenue_yoy_pct"] = merged["revenue_yoy_pct"].fillna(
+            merged["revenue"].astype(float).pct_change() * 100)
+    if "net_profit" in merged.columns and "net_profit_yoy_pct" in merged.columns:
+        merged["net_profit_yoy_pct"] = merged["net_profit_yoy_pct"].fillna(
+            merged["net_profit"].astype(float).pct_change() * 100)
+
+    # 自由现金流 FCF = 经营现金流净额 - 资本开支（购建固定资产等，接口存正数口径）
+    if "ocf" in merged.columns and "capital_expenditure" in merged.columns:
+        capex = merged["capital_expenditure"].fillna(0.0)
+        merged["free_cash_flow"] = merged["ocf"] - capex
+
+    # 经营现金流净额 / 净利润（净现比，统一重算：ocf 与 net_profit 均为亿元，含少数股东口径）
+    if "ocf" in merged.columns and "net_profit" in merged.columns:
+        np_ = merged["net_profit"].astype(float)
+        merged["ocf_to_profit_pct"] = merged["ocf"] / np_.where(np_ != 0) * 100
+
+    # 股东权益同比增长率 = 全部股东权益（含少数股东）同比
+    if "total_equity_all" in merged.columns:
+        eq = merged["total_equity_all"].astype(float)
+        merged["equity_yoy_pct"] = eq.pct_change() * 100
+
+    # 有息负债率 = 有息负债 / 总资产 × 100（有息负债优先完整口径 total_debt，缺失回退长短期借款）
+    if "total_assets" in merged.columns:
+        ta = merged["total_assets"].astype(float)
+        ibd = merged["total_debt"].astype(float) if "total_debt" in merged.columns else None
+        if ibd is not None and "interest_bearing_debt" in merged.columns:
+            ibd = ibd.fillna(merged["interest_bearing_debt"])
+        elif ibd is None and "interest_bearing_debt" in merged.columns:
+            ibd = merged["interest_bearing_debt"].astype(float)
+        if ibd is not None:
+            merged["interest_bearing_debt_ratio"] = ibd / ta.where(ta != 0) * 100
 
     # 分红数据：每股股息（统一口径 dividend_per_share，元/股）、股息率
     if "dividend" in data:
@@ -245,11 +321,14 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     - 单季毛利率 / 净利率 / ROE 由单季值重算
     """
     ps = data["profit_sheet"].sort_values("report_date").reset_index(drop=True)
+    if "revenue" not in ps.columns and "operating_revenue" in ps.columns:
+        ps = ps.copy()
+        ps["revenue"] = ps["operating_revenue"]  # 港股营业额=总收入
     cf = data["cash_flow"].sort_values("report_date").reset_index(drop=True)
     bs = data["balance_sheet"].sort_values("report_date").reset_index(drop=True)
 
     # 累计值差分到单季度（列存在才差分，银行等无营业成本的行业缺 operating_cost）
-    _diff_cols = ["operating_revenue", "net_profit_parent"]
+    _diff_cols = ["revenue", "operating_revenue", "net_profit_parent"]
     if "operating_cost" in ps.columns:
         _diff_cols.append("operating_cost")
     ps = _to_single(ps, _diff_cols)
@@ -266,7 +345,7 @@ def build_quarter_financials(data: dict[str, pd.DataFrame], n_quarters: int = 8)
     bs = _with_interest_debt(bs)
 
     key = ["symbol", "report_date"]
-    ps_cols = key + ["operating_revenue", "net_profit_parent", "gross_margin_pct", "net_margin_pct"]
+    ps_cols = key + ["revenue", "operating_revenue", "net_profit_parent", "gross_margin_pct", "net_margin_pct"]
     cf_cols = key + ["ocf"]
     # 资产负债表字段按列存在性容错（银行等金融股无 monetary_funds/inventory/interest_bearing_debt）
     bs_cols = key + [c for c in ["total_assets", "total_liabilities", "total_equity",
