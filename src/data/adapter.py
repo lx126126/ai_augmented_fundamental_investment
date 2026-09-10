@@ -98,10 +98,6 @@ QUARTER_SPEC = [
     (None, "营业总收入（亿元）", "revenue", 0),
     (None, "营业收入（亿元）", "operating_revenue", 0),
     (None, "归母净利润（亿元）", "net_profit_parent", 0),
-    (None, "毛利率 %", "gross_margin_pct", 1),
-    (None, "净利率 %", "net_margin_pct", 1),
-    (None, "经营现金流净额（亿元）", "ocf", 0),
-    (None, "ROE（单季）%", "roe_pct", 1),
     ("资产负债表（季末）", None, None, None),
     (None, "总资产（亿元）", "total_assets", 0),
     (None, "总负债（亿元）", "total_liabilities", 0),
@@ -111,6 +107,12 @@ QUARTER_SPEC = [
     (None, "应收账款（亿元）", "accounts_receivable", 0),
     (None, "有息负债（亿元）", "interest_bearing_debt", 0),
     (None, "商誉（亿元）", "goodwill", 0),
+    ("现金流量表（单季）", None, None, None),
+    (None, "经营现金流净额（亿元）", "ocf", 0),
+    ("核心财务指标（单季）", None, None, None),
+    (None, "毛利率 %", "gross_margin_pct", 1),
+    (None, "净利率 %", "net_margin_pct", 1),
+    (None, "ROE（单季）%", "roe_pct", 1),
 ]
 
 
