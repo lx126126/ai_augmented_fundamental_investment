@@ -19,6 +19,14 @@ from ..analysis.fraud import fraud_check
 SEGMENT_PALETTE = ["#378ADD", "#E24B4A", "#BA7517", "#888780", "#5B8FF9", "#F6903D", "#61A0A8", "#9270CA"]
 
 
+def _pct(v, total):
+    """占比百分比：≥1% 保留 1 位小数，<1% 保留 2 位（避免极小占比被 round 成 0）。"""
+    if v is None or not total:
+        return None
+    pct = v / total * 100
+    return round(pct, 2) if pct < 1.0 else round(pct, 1)
+
+
 def _norm_code(code: str) -> str:
     """代码规范化：港股剥 .HK 后缀 zfill 5（如 00700.HK→00700），A 股 zfill 6（601088）。
 
@@ -263,7 +271,7 @@ def build_template_data(code: str) -> dict:
         total = sum(v for _, v in latest_revs)
         if total:
             seg_pcts = [
-                {"name": name, "pct": round(v / total * 100, 1)}
+                {"name": name, "pct": _pct(v, total)}
                 for name, v in sorted(latest_revs, key=lambda x: -x[1])
             ]
             main_business = None
@@ -575,7 +583,7 @@ def _build_narrative_data(annual, segments, valuation, company_name, code, compe
         for name, rev in latest_revs:
             seg_summary.append({
                 "name": name,
-                "revenue_pct": round(rev / total * 100, 1) if total else None,
+                "revenue_pct": _pct(rev, total),
                 "margin": _round(margin_map.get(name), 1),
             })
 

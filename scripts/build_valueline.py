@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # 尝试导入数据适配层（可选，无 parquet 数据时降级为示例数据）
 try:
-    from src.data.adapter import build_template_data, _norm_code
+    from src.data.adapter import build_template_data, _norm_code, _pct as _share_pct
     _HAS_DATA = True
 except Exception:
     _HAS_DATA = False
@@ -123,14 +123,13 @@ def build_segments() -> str:
                 '分业务收入构成数据待接入（当前数据源暂未覆盖该标的）。</div>')
     n_periods = len(SEGMENTS[0][2]) if SEGMENTS else 0
 
-    # 各期收入占比（该条线收入 / 当期总收入 × 100）
+    # 各期收入占比（该条线收入 / 当期总收入 × 100；极小占比保留 2 位避免显示成 0）
     shares = []
     for _name, _color, revs, _margins in SEGMENTS:
         s = []
         for i in range(n_periods):
             total = sum((seg[2][i] or 0) for seg in SEGMENTS)
-            v = revs[i]
-            s.append((v / total * 100) if (v is not None and total > 0) else None)
+            s.append(_share_pct(revs[i], total))
         shares.append(s)
 
     # 单一表：每个报告期下分「收入 / 占比 / 利润率」三列
@@ -149,7 +148,7 @@ def build_segments() -> str:
             sh = share_vals[i]
             mg = margins[i]
             rev_txt = _fmt(rev) if rev is not None else "—"
-            sh_txt = f"{sh:.1f}" if sh is not None else "—"
+            sh_txt = _fmt_pct_val(sh)
             mg_txt = f"{mg:.1f}" if mg is not None else "—"
             cells.append(f'<td class="num">{rev_txt}</td>')
             cells.append(f'<td class="num">{sh_txt}</td>')
@@ -168,11 +167,11 @@ def build_segments() -> str:
     total = sum(latest)
     if total > 0:
         bar = "".join(
-            f'<div class="seg" style="width:{v / total * 100:.1f}%;background:{s[1]}"></div>'
+            f'<div class="seg" style="width:{_fmt_pct_val(_share_pct(v, total))}%;background:{s[1]}"></div>'
             for s, v in zip(SEGMENTS, latest)
         )
         legend = "".join(
-            f'<span class="seg-legend"><span class="seg-dot" style="background:{s[1]}"></span>{s[0]} {v / total * 100:.1f}%</span>'
+            f'<span class="seg-legend"><span class="seg-dot" style="background:{s[1]}"></span>{s[0]} {_fmt_pct_val(_share_pct(v, total))}%</span>'
             for s, v in zip(SEGMENTS, latest)
         )
     else:
@@ -196,6 +195,13 @@ def _pct_text(pct):
     if pct > 70:
         return f"{pct:.0f}%", "pct-high", "高位"
     return f"{pct:.0f}%", "", "合理"
+
+
+def _fmt_pct_val(p):
+    """占比数值 → 文本（≥1% 保留 1 位，<1% 保留 2 位，避免极小占比显示成 0）。"""
+    if p is None:
+        return "—"
+    return f"{p:.2f}" if p < 1.0 else f"{p:.1f}"
 
 
 def build_val_grid() -> str:
@@ -411,7 +417,7 @@ def build_business_map() -> str:
 
     # 各业务条线占比（文字，如「消费电器 82.9%、工业制品 9.7%」）
     seg_txt = "、".join(
-        f"{s.get('name', '')} {s.get('pct', 0):.1f}%" for s in segs if s.get("pct") is not None
+        f"{s.get('name', '')} {_fmt_pct_val(s.get('pct'))}%" for s in segs if s.get("pct") is not None
     )
 
     parts = []

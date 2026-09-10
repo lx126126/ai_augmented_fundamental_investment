@@ -32,10 +32,15 @@ def _load_config() -> tuple[str, str, str] | None:
 
 def _build_prompt(data: dict) -> str:
     """把财务数据摘要转成 prompt（数据先行，约束 LLM 不编数）。"""
-    seg_text = "\n".join(
-        f"  - {s['name']}: 收入占比 {s.get('revenue_pct', 'N/A')}%, 利润率 {s.get('margin', 'N/A')}%"
-        for s in data.get("segments", [])
-    ) or "  （无分业务数据）"
+    def _seg_line(s):
+        pct = s.get("revenue_pct")
+        name = s["name"]
+        if pct is not None and pct < 1.0:
+            # 占比 <1% 的杂项类目：只给占比、不给利润率，避免 LLM 过度解读
+            return f"  - {name}: 收入占比 {pct}%（非核心杂项）"
+        return f"  - {name}: 收入占比 {pct if pct is not None else 'N/A'}%, 利润率 {s.get('margin', 'N/A')}%"
+
+    seg_text = "\n".join(_seg_line(s) for s in data.get("segments", [])) or "  （无分业务数据）"
 
     recent = ", ".join(
         f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
@@ -112,7 +117,9 @@ PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 要求：
 1. thesis 给 3 条，risks 给 3 条，每条 20-40 字，具体、可证伪，不要空话套话。
 2. business_model 三个字段各 30-60 字，紧扣分业务数据与行业排名。
-3. 不要出现"根据数据""综上"等套话，直接给结论。"""
+3. 不要出现"根据数据""综上"等套话，直接给结论。
+4. business_model 三个字段各司其职、互不重复：revenue_source 讲「靠什么赚钱」，profit_structure 讲「利润结构与占比」，moat 讲「壁垒」；同一个业务数字不要在多个字段里重复出现。
+5. 标注「非核心杂项」的类目占比极小，不得展开描述其利润率，更不得在 thesis/risks 里解读为「亏损拖累」。"""
 
 
 def generate_narrative(data: dict) -> dict | None:
