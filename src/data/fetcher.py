@@ -605,14 +605,17 @@ def fetch_all_hk(code: str) -> dict[str, pd.DataFrame]:
 
     # 股本反推：share_capital = 股东应占溢利 / 每股基本盈利（人民币元）
     # cleaner 会再 ÷1e8 转「亿元/亿股」，此处保持「元」口径对齐 A 股 share_capital
-    if not fi.empty and {"net_profit_parent", "eps"}.issubset(fi.columns):
-        hp = pd.to_numeric(fi["net_profit_parent"], errors="coerce")
-        eps = pd.to_numeric(fi["eps"], errors="coerce")
+    # 注意：优先用利润表(ps)的 eps/net_profit_parent 反推（港股利润表全历史有值）；
+    # 勿用财务指标(fi)——港股财务指标接口只返回近约 2 年，会截断历史股本。
+    src = ps if (not ps.empty and {"net_profit_parent", "eps"}.issubset(ps.columns)) else fi
+    if not src.empty and {"net_profit_parent", "eps"}.issubset(src.columns):
+        hp = pd.to_numeric(src["net_profit_parent"], errors="coerce")
+        eps = pd.to_numeric(src["eps"], errors="coerce")
         shares = (hp / eps.where(eps != 0)).where(eps != 0)  # 股
-        fi["share_capital"] = shares  # 元口径（面值1元，故=股数）
-        # 合并到 balance_sheet 供 cleaner 使用
+        # 合并到 balance_sheet 供 cleaner 使用（cleaner 从 bs 读 share_capital）
         if not bs.empty:
-            sc = fi[["report_date", "share_capital"]].copy()
+            sc = src[["report_date"]].copy()
+            sc["share_capital"] = shares  # 元口径（面值1元，故=股数）
             bs = bs.merge(sc, on="report_date", how="left")
 
     if not ps.empty:
