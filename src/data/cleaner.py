@@ -241,6 +241,19 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         if ibd is not None:
             merged["interest_bearing_debt_ratio"] = ibd / ta.where(ta != 0) * 100
 
+    # 港股财务指标接口只返回最近约 2 年（ROE/资产负债率历史缺失），用三表自算兜底：
+    # 资产负债率 = 总负债 / 总资产 × 100（两字段全历史均有）
+    if "debt_ratio_pct" in merged.columns and {"total_liabilities", "total_assets"}.issubset(merged.columns):
+        ta2 = merged["total_assets"].astype(float)
+        merged["debt_ratio_pct"] = merged["debt_ratio_pct"].fillna(
+            merged["total_liabilities"] / ta2.where(ta2 != 0) * 100)
+    # ROE = 归母净利 / 平均归母权益 × 100（平均权益 = (期初 + 期末)/2，与港股 ROE_AVG 口径一致）
+    if "roe_pct" in merged.columns and {"net_profit_parent", "total_equity"}.issubset(merged.columns):
+        np_ = merged["net_profit_parent"].astype(float)
+        eq = merged["total_equity"].astype(float)
+        avg_eq = (eq + eq.shift(1)) / 2
+        merged["roe_pct"] = merged["roe_pct"].fillna(np_ / avg_eq.where(avg_eq != 0) * 100)
+
     # 分红数据：每股股息（统一口径 dividend_per_share，元/股）、股息率
     if "dividend" in data:
         dv = _annual_dividend(data["dividend"])
