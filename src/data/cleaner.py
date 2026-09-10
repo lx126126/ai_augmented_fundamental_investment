@@ -41,6 +41,9 @@ _MONEY_FIELDS = {
     "lend_fund", "loan_advance", "buy_resale_finasset", "derivative_finasset",
     "settle_excess_reserve", "accept_deposit_interbank", "derivative_finliab",
     "sell_repo_finasset", "fee_commission_payable",
+    "accept_deposit", "iofi_deposit", "cash_deposit_pbc", "deposit_interbank",
+    "creditor_invest", "loan_pbc", "deposit_certificate", "precious_metal",
+    "amortize_cost_finasset", "fvtoci_finasset", "other_asset",
     # 现金流量表
     "ocf", "icf", "financing_cash_flow",
     "operating_cash_inflow", "operating_cash_outflow",
@@ -203,6 +206,9 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         "lend_fund", "loan_advance", "buy_resale_finasset", "derivative_finasset",
         "settle_excess_reserve", "accept_deposit_interbank", "derivative_finliab",
         "sell_repo_finasset", "fee_commission_payable",
+        "accept_deposit", "iofi_deposit", "cash_deposit_pbc", "deposit_interbank",
+        "creditor_invest", "loan_pbc", "deposit_certificate", "precious_metal",
+        "borrowings", "amortize_cost_finasset", "fvtoci_finasset", "other_asset",
     ] if c in bs.columns]
     fi_cols = key + [c for c in ["net_margin_pct", "roe_pct", "roe_weighted_pct",
                                  "debt_ratio_pct", "revenue_yoy_pct", "net_profit_yoy_pct",

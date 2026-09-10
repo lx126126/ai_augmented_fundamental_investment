@@ -563,6 +563,44 @@ PIE_GROUPS = [
     ]),
 ]
 
+# 银行（金融）版：资产/负债按金融科目分类（银行报表无流动/非流动划分）
+PIE_GROUPS_BANK = [
+    ("资产", "total_assets", [
+        ("发放贷款及垫款", "loan_advance"),
+        ("债权投资", ["creditor_invest", "amortize_cost_finasset"]),
+        ("交易性金融资产", "trading_financial_assets"),
+        ("现金及存放中央银行款项", "cash_deposit_pbc"),
+        ("存放同业款项", "deposit_interbank"),
+        ("拆出资金", "lend_fund"),
+        ("买入返售金融资产", "buy_resale_finasset"),
+        ("衍生金融资产", "derivative_finasset"),
+        ("贵金属", "precious_metal"),
+        ("其他债权投资", ["other_creditor_invest", "fvtoci_finasset"]),
+        ("其他权益工具投资", "other_equity_invest"),
+        ("长期股权投资", "long_equity_invest"),
+        ("固定资产", "fixed_assets"),
+        ("在建工程", "construction_in_progress"),
+        ("投资性房地产", "invest_realestate"),
+        ("递延所得税资产", "defer_tax_asset"),
+        ("无形资产", "intangible_assets"),
+    ]),
+    ("负债", "total_liabilities", [
+        ("吸收存款", "accept_deposit"),
+        ("同业及其他金融机构存放款项", "iofi_deposit"),
+        ("拆入资金", "borrowings"),
+        ("应付债券", "bond_payable"),
+        ("卖出回购金融资产款", "sell_repo_finasset"),
+        ("向中央银行借款", "loan_pbc"),
+        ("衍生金融负债", "derivative_finliab"),
+        ("永续债", "perpetual_bond"),
+        ("同业存单", "deposit_certificate"),
+        ("应付职工薪酬", "staff_salary_payable"),
+        ("应交税费", "tax_payable"),
+        ("递延所得税负债", "defer_tax_liabilities"),
+        ("预计负债", "predict_liabilities"),
+    ]),
+]
+
 
 def _build_pie_data(annual: pd.DataFrame) -> dict | None:
     """构成饼图：最新年报五大类（营业总成本/流动资产/非流动资产/流动负债/非流动负债）的子科目构成。
@@ -581,8 +619,23 @@ def _build_pie_data(annual: pd.DataFrame) -> dict | None:
         v = latest.get(col) if col in annual.columns else None
         return None if (v is None or pd.isna(v)) else float(v)
 
+    def _v_multi(field):
+        """字段别名列表 fallback：依次取第一个「有值」的字段（银行新/旧准则科目名不同）。"""
+        if isinstance(field, (list, tuple)):
+            for f in field:
+                v = _v(f)
+                if v is not None:
+                    return v
+            return None
+        return _v(field)
+
+    # 银行识别：银行报表无流动/非流动划分（无 current_assets/current_liabilities 列），
+    # 且含「吸收存款 / 现金及存放中央银行款项」等银行核心科目 → 改用资产/负债两大类的金融科目方案
+    is_bank = ("accept_deposit" in annual.columns) or ("cash_deposit_pbc" in annual.columns)
+    pie_groups = PIE_GROUPS_BANK if is_bank else PIE_GROUPS
+
     groups = []
-    for title, total_field, items in PIE_GROUPS:
+    for title, total_field, items in pie_groups:
         total = _v(total_field)
         if total is None or total <= 0:
             continue
@@ -590,7 +643,7 @@ def _build_pie_data(annual: pd.DataFrame) -> dict | None:
         deductions = []
         pos_sum = 0.0
         for name, field in items:
-            v = _v(field)
+            v = _v_multi(field)
             if v is None:
                 continue
             if v > 0:

@@ -166,6 +166,18 @@ BALANCE_SHEET_MAP = {
     "DERIVE_FINLIAB": "derivative_finliab",       # 衍生金融负债（流动负债）
     "SELL_REPO_FINASSET": "sell_repo_finasset",   # 卖出回购金融资产款（流动负债）
     "FEE_COMMISSION_PAYABLE": "fee_commission_payable",  # 应付手续费及佣金（流动负债）
+    # —— 银行核心科目（交行等金融企业，资产/负债构成饼图用；无流动/非流动划分）——
+    "ACCEPT_DEPOSIT": "accept_deposit",           # 吸收存款（银行核心负债）
+    "IOFI_DEPOSIT": "iofi_deposit",               # 同业及其他金融机构存放款项（银行口径）
+    "CASH_DEPOSIT_PBC": "cash_deposit_pbc",       # 现金及存放中央银行款项（银行核心资产）
+    "DEPOSIT_INTERBANK": "deposit_interbank",     # 存放同业款项（银行资产）
+    "PRECIOUS_METAL": "precious_metal",           # 贵金属（银行资产）
+    "CREDITOR_INVEST": "creditor_invest",         # 债权投资（银行金融投资）
+    "AMORTIZE_COST_FINASSET": "amortize_cost_finasset",  # 以摊余成本计量的金融资产（银行新准则「债权投资」）
+    "FVTOCI_FINASSET": "fvtoci_finasset",         # 以公允价值计量且其变动计入其他综合收益的金融资产（银行新准则「其他债权投资」）
+    "OTHER_ASSET": "other_asset",                 # 其他资产（银行）
+    "LOAN_PBC": "loan_pbc",                       # 向中央银行借款（银行负债）
+    "DEPOSIT_CERTIFICATE": "deposit_certificate", # 同业存单（银行负债）
 }
 
 # ---------------------------------------------------------------------------
