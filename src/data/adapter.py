@@ -129,8 +129,29 @@ def _fmt(v, digits=1) -> str:
     return f"{float(v):.{digits}f}"
 
 
-def _extract(df: pd.DataFrame, spec) -> list[tuple]:
-    """按 spec 从宽表提取模板结构（值已格式化为字符串）。"""
+def _drop_empty_rows(rows: list[tuple]) -> list[tuple]:
+    """剔除整行无数据的指标行；分组标题若其下指标全被剔除则一并移除。
+
+    银行无「货币资金/存货/营业成本」，港股接口不返回「营业总成本/现金流入流出」等科目，
+    这些行全历史都是「—」，占版面却零信息量（港股年度表一度有 13 行全空）。
+    """
+    kept = [r for r in rows
+            if not (r[1] is not None and r[2] and all(v == "—" for v in r[2]))]
+    out = []
+    for i, row in enumerate(kept):
+        if row[0] is not None:  # 分组标题：仅当紧随其后还有指标行时保留
+            if i + 1 < len(kept) and kept[i + 1][1] is not None:
+                out.append(row)
+            continue
+        out.append(row)
+    return out
+
+
+def _extract(df: pd.DataFrame, spec, drop_empty: bool = False) -> list[tuple]:
+    """按 spec 从宽表提取模板结构（值已格式化为字符串）。
+
+    drop_empty=True 时剔除整行无数据的科目（见 _drop_empty_rows）。
+    """
     rows = []
     for group, name, field, digits in spec:
         if group:
@@ -141,7 +162,7 @@ def _extract(df: pd.DataFrame, spec) -> list[tuple]:
         else:
             vals = ["—"] * len(df)
         rows.append((None, name, vals))
-    return rows
+    return _drop_empty_rows(rows) if drop_empty else rows
 
 
 def _q_label(dt) -> str:
@@ -244,11 +265,11 @@ def build_template_data(code: str) -> dict:
     quarter = (quarter_all.tail(6) if half_yearly else quarter_all).reset_index(drop=True)
 
     years = [d.year for d in annual["report_date"].tolist()]
-    financials = _extract(annual, ANNUAL_SPEC)
+    financials = _extract(annual, ANNUAL_SPEC, drop_empty=True)
 
     # 港股半年度披露（无 Q1/Q3，只有 6 月/12 月）→ 标签用 H1/H2；A 股季报用 Q1-Q4
     quarter_labels = [_period_label(d, half_yearly) for d in quarter["report_date"].tolist()]
-    quarterly = _extract(quarter, QUARTER_SPEC)
+    quarterly = _extract(quarter, QUARTER_SPEC, drop_empty=True)
 
     # 报告期 = 最新季度，如 2026Q1（用于 reports/ 归档目录）
     latest_q = quarter["report_date"].iloc[-1]

@@ -7,7 +7,10 @@
 输出：templates/valueline.html（预览） + reports/{报告期}/601088.html（归档）。
 
 用法：
-    python scripts/build_valueline.py
+    python scripts/build_valueline.py [股票代码] [--daily] [--refresh-narrative]
+
+    --daily              只刷新行情/估值板块，跳过 PDF 校验与 LLM 叙事
+    --refresh-narrative  忽略叙事层缓存，强制重新调用 LLM 生成
 """
 from __future__ import annotations
 import sys
@@ -1025,6 +1028,7 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 @@YEAR_RANGE@@） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">该标的不适用或数据源未提供的科目（整行无数据）已隐藏，未做补零或估算。</div>
 
 @@PIE@@
 
@@ -1124,7 +1128,48 @@ def _load_real_data(code: str) -> dict | None:
         return None
 
 
-def build(code: str = "601088", daily: bool = False) -> None:
+NARRATIVE_CACHE_DIR = Path(__file__).resolve().parent.parent / "data" / "cache" / "narrative"
+
+
+def _facts_hash(facts) -> str:
+    """叙事层输入（事实数据）的稳定哈希，用于判断缓存是否仍适用。"""
+    import hashlib
+    import json
+    blob = json.dumps(facts, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
+
+
+def _load_cached_narrative(code: str, facts):
+    """读叙事层缓存：仅当事实数据哈希一致时复用，数据一变自动失效。
+
+    LLM 输出本身不确定（同样的事实每次生成文本都不同），每次重建都重调既烧 token
+    又让报告内容无意义地漂移。缓存后「数据没变 → 叙事不变」。
+    """
+    import json
+    p = NARRATIVE_CACHE_DIR / f"{code}.json"
+    if not p.exists():
+        return None
+    try:
+        obj = json.loads(p.read_text(encoding="utf-8"))
+        if obj.get("hash") == _facts_hash(facts):
+            return obj.get("narrative")
+    except Exception:
+        return None
+    return None
+
+
+def _save_narrative(code: str, facts, narrative) -> None:
+    import json
+    NARRATIVE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    p = NARRATIVE_CACHE_DIR / f"{code}.json"
+    p.write_text(
+        json.dumps({"hash": _facts_hash(facts), "narrative": narrative},
+                   ensure_ascii=False, indent=1),
+        encoding="utf-8",
+    )
+
+
+def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
     global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, CURRENCY_NOTE, VAL_CURRENCY_HINT
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
@@ -1168,7 +1213,15 @@ def build(code: str = "601088", daily: bool = False) -> None:
         # LLM 生成叙事层（数据先行）。每日刷新跳过（财务数据未变，叙事不变，省 token）
         NARRATIVE = None
         if (not daily) and _HAS_LLM and real.get("narrative_data"):
-            NARRATIVE = generate_narrative(real["narrative_data"])
+            _facts = real["narrative_data"]
+            NARRATIVE = None if refresh_narrative else _load_cached_narrative(code, _facts)
+            if NARRATIVE is None:
+                NARRATIVE = generate_narrative(_facts)
+                if NARRATIVE:
+                    _save_narrative(code, _facts, NARRATIVE)
+                print("  叙事层: LLM 重新生成")
+            else:
+                print("  叙事层: 复用缓存（事实数据未变）")
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -1240,4 +1293,5 @@ def build(code: str = "601088", daily: bool = False) -> None:
 if __name__ == "__main__":
     code = sys.argv[1] if len(sys.argv) > 1 else "601088"
     daily = "--daily" in sys.argv
-    build(code, daily=daily)
+    refresh = "--refresh-narrative" in sys.argv
+    build(code, daily=daily, refresh_narrative=refresh)
