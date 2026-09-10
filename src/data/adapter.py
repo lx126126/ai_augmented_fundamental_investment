@@ -99,20 +99,13 @@ QUARTER_SPEC = [
     (None, "营业收入（亿元）", "operating_revenue", 0),
     (None, "归母净利润（亿元）", "net_profit_parent", 0),
     ("资产负债表（季末）", None, None, None),
-    (None, "总资产（亿元）", "total_assets", 0),
-    (None, "总负债（亿元）", "total_liabilities", 0),
-    (None, "净资产（归母）（亿元）", "total_equity", 0),
     (None, "货币资金（亿元）", "monetary_funds", 0),
     (None, "存货（亿元）", "inventory", 0),
-    (None, "应收账款（亿元）", "accounts_receivable", 0),
-    (None, "有息负债（亿元）", "interest_bearing_debt", 0),
-    (None, "商誉（亿元）", "goodwill", 0),
     ("现金流量表（单季）", None, None, None),
     (None, "经营现金流净额（亿元）", "ocf", 0),
     ("核心财务指标（单季）", None, None, None),
     (None, "毛利率 %", "gross_margin_pct", 1),
     (None, "净利率 %", "net_margin_pct", 1),
-    (None, "ROE（单季）%", "roe_pct", 1),
 ]
 
 
@@ -241,7 +234,7 @@ def build_template_data(code: str) -> dict:
         raise FileNotFoundError(f"{code} 缺 parquet 表: {missing}，请先运行 scripts/fetch_stock.py {code}")
 
     annual = build_annual_financials(raw)
-    quarter = build_quarter_financials(raw)
+    quarter = build_quarter_financials(raw, n_quarters=12)  # 近三年（12 个季度）
 
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)
@@ -657,6 +650,8 @@ def _build_pie_data(annual: pd.DataFrame) -> dict | None:
         if total - pos_sum > 0.01:
             parts.append({"name": "其他", "value": round(total - pos_sum, 2)})
             pos_sum = total
+        # 图例按金额降序阅读（「其他」为兜底项，固定排末尾不参与排序）
+        parts.sort(key=lambda p: (p["name"] == "其他", -p["value"]))
         for p in parts:
             p["pct"] = round(p["value"] / pos_sum * 100, 1)
         groups.append({

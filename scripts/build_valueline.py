@@ -195,11 +195,12 @@ def build_segments() -> str:
     )
 
 
-def _donut_svg(items: list[dict], size: int = 180) -> str:
+def _donut_svg(items: list[dict], size: int = 140) -> str:
     """items: [{"name","value","pct"}] → SVG 环形图（纯 stroke-dasharray 扇形，从 12 点顺时针）。"""
     import math
-    r = 70
-    stroke = 30
+    # 半径/线宽按画布等比缩放：多图并排后卡片变窄，需按 size 缩放且不溢出 viewBox
+    r = size * 0.39
+    stroke = size * 0.167
     C = 2 * math.pi * r
     cx = cy = size / 2
     circles = []
@@ -222,12 +223,12 @@ def _pie_legend(items: list[dict], deductions: list[dict] | None = None) -> str:
         color = PIE_PALETTE[i % len(PIE_PALETTE)]
         rows.append(
             f'<span class="pie-lg"><span class="pie-dot" style="background:{color}"></span>'
-            f'{it["name"]} <b>{it["value"]:.1f}</b><i>{it["pct"]:.1f}%</i></span>'
+            f'<span class="pie-nm">{it["name"]}</span><b>{it["value"]:.1f}</b><i>{it["pct"]:.1f}%</i></span>'
         )
     for d in (deductions or []):
         rows.append(
             f'<span class="pie-lg pie-deduct"><span class="pie-dot" style="background:#c8ced6"></span>'
-            f'{d["name"]} <b>{d["value"]:.1f}</b><i>抵减</i></span>'
+            f'<span class="pie-nm">{d["name"]}</span><b>{d["value"]:.1f}</b><i>抵减</i></span>'
         )
     return '<div class="pie-legend">' + "".join(rows) + "</div>"
 
@@ -257,7 +258,7 @@ def build_pie() -> str:
     year_txt = f"{year} 年报" if year else "最新年报"
     return (
         f'<div class="sub-title">最近年度报告（{year_txt}）主要科目构成</div>'
-        + "".join(cards)
+        + '<div class="pie-row">' + "".join(cards) + "</div>"
         + '<div style="font-size:10px;color:var(--faint);margin-top:6px;">'
         '环形图为各科目金额（亿元）及占已列科目加总比例；「其他」为已列科目与总额的差额（含未单列明细；港股标的资产负债表子科目明细暂未接入）。'
         "</div>"
@@ -842,17 +843,18 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .seg-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .seg-note { color: var(--faint); }
 
-/* 构成饼图（最新年报五大类子科目） */
-.pie-card { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; margin-bottom: 12px; }
-.pie-card:last-child { margin-bottom: 0; }
+/* 构成饼图（最新年报各大类子科目）：多图横向并排，图在上、图例在下 */
+.pie-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.pie-card { flex: 1 1 180px; min-width: 170px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 8px; }
 .pie-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .pie-total { font-size: 10px; font-weight: 400; color: var(--faint); }
-.pie-body { display: flex; align-items: center; gap: 18px; }
-.pie-legend { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 10.5px; color: var(--muted); align-content: flex-start; }
-.pie-lg { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pie-body { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.pie-legend { width: 100%; display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--muted); }
+.pie-lg { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.pie-nm { flex: 1; overflow: hidden; text-overflow: ellipsis; }
 .pie-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
-.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
-.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; }
+.pie-lg b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; min-width: 48px; text-align: right; }
+.pie-lg i { color: var(--faint); font-style: normal; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
 .pie-deduct b { color: var(--faint); }
 .pie-deduct i { color: var(--faint); }
 
@@ -966,9 +968,10 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   .bizmap-name { flex-basis: 60px; }
   .peer-name { flex-basis: 56px; }
 
-  /* 构成饼图：手机端环形图与图例上下堆叠 */
-  .pie-body { flex-direction: column; align-items: flex-start; gap: 10px; }
+  /* 构成饼图：手机端一行一张，科目名可换行显示完整 */
+  .pie-card { flex: 1 1 100%; min-width: 0; }
   .pie-lg { white-space: normal; }
+  .pie-nm { overflow: visible; text-overflow: clip; white-space: normal; }
 
   /* 宽表保持横向滚动（.table-scroll 已有 overflow-x:auto） */
   table.dense { font-size: 9px; }
@@ -1020,15 +1023,12 @@ TEMPLATE = """<!DOCTYPE html>
   <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 @@YEAR_RANGE@@） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
-    <div class="sub-title">近两年季度（@@QUARTER_RANGE@@）</div>
-@@QUARTER_TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表为季度末时点值。</div>
-
-    <div class="sub-title">业务收入构成（@@SEGMENT_RANGE@@）</div>
-@@SEGMENTS@@
-    <div style="font-size:10px;color:var(--faint);margin-top:3px;">注：示例数据，仅演示模板版式，非实时行情，不作投资依据；正式版覆盖招股书及上市前披露数据。</div>
 
 @@PIE@@
+
+    <div class="sub-title">近三年季度（@@QUARTER_RANGE@@）</div>
+@@QUARTER_TABLE@@
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表为单季度值，资产负债表为季度末时点值。</div>
   </div>
 
   <div class="section">
