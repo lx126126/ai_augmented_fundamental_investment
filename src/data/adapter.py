@@ -234,13 +234,15 @@ def build_template_data(code: str) -> dict:
         raise FileNotFoundError(f"{code} 缺 parquet 表: {missing}，请先运行 scripts/fetch_stock.py {code}")
 
     annual = build_annual_financials(raw)
-    quarter = build_quarter_financials(raw, n_quarters=12)  # 近三年（12 个季度）
+    # 近三年：季度披露取 12 期；半年度披露（港股，只有 6/12 月）取 6 期，否则跨度会变成 6 年
+    quarter_all = build_quarter_financials(raw, n_quarters=12)
+    half_yearly = not (quarter_all["report_date"].dt.month.isin([3, 9]).any())
+    quarter = (quarter_all.tail(6) if half_yearly else quarter_all).reset_index(drop=True)
 
     years = [d.year for d in annual["report_date"].tolist()]
     financials = _extract(annual, ANNUAL_SPEC)
 
     # 港股半年度披露（无 Q1/Q3，只有 6 月/12 月）→ 标签用 H1/H2；A 股季报用 Q1-Q4
-    half_yearly = not (quarter["report_date"].dt.month.isin([3, 9]).any())
     quarter_labels = [_period_label(d, half_yearly) for d in quarter["report_date"].tolist()]
     quarterly = _extract(quarter, QUARTER_SPEC)
 
