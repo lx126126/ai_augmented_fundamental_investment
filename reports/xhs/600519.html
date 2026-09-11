@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#dfe4ea; font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         -webkit-font-smoothing:antialiased; }
+  .slide { width:390px; background:#f5f7fa; color:#1a2330; padding:22px 22px 18px;
+            position:relative; overflow:hidden; }
+  .slide + .slide { margin-top:16px; }
+
+  /* 头部 */
+  .hd { display:flex; justify-content:space-between; align-items:center;
+         padding-bottom:12px; border-bottom:2px solid #0f3d6e; }
+  .brand { font-size:12px; font-weight:700; color:#0f3d6e; letter-spacing:.8px; }
+  .pager { font-size:11px; color:#8a97a6; font-weight:600; }
+  .ttl { font-size:21px; font-weight:800; color:#0f3d6e; margin:16px 0 2px;
+          line-height:1.25; }
+  .ttl .sub { display:block; font-size:12px; font-weight:400; color:#8a97a6;
+               margin-top:5px; letter-spacing:.3px; }
+  .body { margin-top:14px; }
+
+  /* 封面 */
+  .co-name { font-size:32px; font-weight:800; color:#0f3d6e; letter-spacing:1px;
+              line-height:1.12; }
+  .co-meta { margin-top:9px; font-size:13px; color:#8a97a6; }
+  .co-meta .code { font-weight:700; color:#1a2330; font-size:14px; }
+  .co-meta .sep { margin:0 7px; color:#e3e8ef; }
+  .price { margin-top:20px; }
+  .price-num { font-size:42px; font-weight:800; color:#c0392b; line-height:1;
+                letter-spacing:-.5px; }
+  .price-lbl { font-size:11px; color:#8a97a6; margin-top:7px; }
+  .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-top:20px; }
+  .stat { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+           padding:13px 12px; }
+  .stat-n { font-size:19px; font-weight:800; color:#1a2330; }
+  .stat-l { font-size:11px; color:#8a97a6; margin-top:4px; }
+  .badges { margin-top:16px; display:flex; flex-direction:column; gap:8px; }
+  .badge { background:#eef3fb; border:1px solid #c9d8ec; border-radius:8px;
+            padding:10px 12px; display:flex; gap:9px; align-items:baseline; }
+  .bd-k { font-size:11px; color:#14508c; font-weight:700; flex:0 0 auto; }
+  .bd-v { font-size:12.5px; color:#1a2330; font-weight:600; }
+  .cover-tip { margin-top:18px; font-size:11.5px; color:#8a97a6; text-align:center;
+                padding:11px 0; border-top:1px dashed #e3e8ef; }
+
+  /* 通用块 */
+  .sec-t { font-size:14.5px; font-weight:700; color:#1a2330; margin:18px 0 10px;
+            display:flex; align-items:baseline; gap:7px; }
+  .sec-t:first-child { margin-top:0; }
+  .sec-s { font-size:10.5px; font-weight:400; color:#8a97a6; }
+  .lead { font-size:13.5px; line-height:1.75; color:#1a2330; background:#ffffff;
+           border:1px solid #e3e8ef; border-left:3px solid #0f3d6e;
+           border-radius:6px; padding:13px 14px; }
+
+  /* 键值 / 迷你卡 */
+  .mini-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .mini { background:#ffffff; border:1px solid #e3e8ef; border-radius:9px;
+           padding:11px 9px; text-align:center; }
+  .mini-n { font-size:15px; font-weight:800; color:#0f3d6e; }
+  .mini-l { font-size:10px; color:#8a97a6; margin-top:4px; }
+  .mini-y { font-size:10.5px; margin-top:3px; font-weight:600; }
+
+  /* 产销量（茅台酒 / 系列酒 拆分） */
+  .plist { display:flex; flex-direction:column; gap:8px; }
+  .pline { background:#ffffff; border:1px solid #e3e8ef; border-radius:9px;
+            padding:10px 12px; }
+  .pline-h { display:flex; justify-content:space-between; align-items:baseline;
+              margin-bottom:7px; }
+  .pline-n { font-size:13px; font-weight:700; color:#1a2330; }
+  .pline-r { font-size:9.5px; color:#8a97a6; }
+  .pline-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .pline-cell { display:flex; justify-content:space-between; align-items:baseline;
+                 background:#eef3fb; border-radius:6px; padding:5px 8px; }
+  .pline-k { font-size:9.5px; color:#5a6b7c; }
+  .pline-v { font-size:11.5px; font-weight:700; color:#0f3d6e; white-space:nowrap; }
+  .pline-y { font-size:9.5px; margin-left:5px; }
+  .pnote { margin-top:7px; font-size:9.5px; color:#5a6b7c; line-height:1.65; }
+
+  /* 产品切片 */
+  .segs { display:flex; flex-direction:column; gap:10px; }
+  .seg { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+          padding:12px 13px; }
+  .seg-top { display:flex; justify-content:space-between; align-items:baseline; }
+  .seg-name { font-size:14.5px; font-weight:700; color:#1a2330; }
+  .seg-pct { font-size:17px; font-weight:800; color:#0f3d6e; }
+  .seg-bar { height:6px; background:#e3e8ef; border-radius:3px; margin:9px 0 8px;
+              overflow:hidden; }
+  .seg-fill { height:100%; background:linear-gradient(90deg,#0f3d6e,#7fa8d4);
+               border-radius:3px; }
+  .seg-meta { display:flex; justify-content:space-between; font-size:11px;
+               color:#5a6b7c; }
+
+  /* 渠道 */
+  .ch-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .ch-card { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+              padding:13px 12px; }
+  .ch-name { font-size:13px; font-weight:700; color:#1a2330; }
+  .ch-pct { font-size:24px; font-weight:800; color:#0f3d6e; margin:6px 0 3px; }
+  .ch-amt { font-size:11.5px; color:#5a6b7c; }
+  .ch-yoy { font-size:11.5px; margin-top:6px; }
+  .ch-margin { font-size:10.5px; color:#8a97a6; margin-top:4px; }
+  .imt { margin-top:10px; background:#ffffff; border:1px dashed #c9d8ec; border-radius:9px;
+          padding:11px 13px; display:flex; justify-content:space-between; align-items:center; }
+  .imt-lbl { font-size:12px; color:#5a6b7c; }
+  .imt-v { font-size:17px; font-weight:800; color:#14508c; }
+
+  .regs { display:flex; flex-direction:column; gap:9px; }
+  .reg-row { display:grid; grid-template-columns:46px 1fr auto auto; gap:8px;
+              align-items:center; font-size:11.5px; }
+  .reg-k { color:#5a6b7c; font-weight:600; }
+  .reg-w { height:8px; background:#e3e8ef; border-radius:4px; overflow:hidden; }
+  .reg-bar { display:block; height:100%; background:#7fa8d4; border-radius:4px; }
+  .reg-v { color:#1a2330; font-weight:600; white-space:nowrap; }
+  .reg-y { white-space:nowrap; font-weight:600; }
+
+  .deal { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .deal-item { background:#ffffff; border:1px solid #e3e8ef; border-radius:9px;
+                padding:12px; text-align:center; }
+  .deal-n { display:block; font-size:19px; font-weight:800; color:#0f3d6e; }
+  .deal-l { display:block; font-size:10.5px; color:#8a97a6; margin-top:4px; }
+  .deal-d { display:block; font-size:10.5px; color:#5a6b7c; margin-top:3px; }
+
+  /* 指标卡 */
+  .mgrid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .mcard { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+            padding:14px 13px; }
+  .mcard-l { font-size:11.5px; color:#8a97a6; }
+  .mcard-n { font-size:26px; font-weight:800; color:#0f3d6e; margin:7px 0 5px; }
+  .mcard-d { font-size:10.5px; color:#5a6b7c; line-height:1.5; }
+
+  /* 成本构成 */
+  .costs { display:flex; flex-direction:column; gap:8px; }
+  .cost-row { display:grid; grid-template-columns:74px 1fr auto; gap:9px; align-items:center;
+               font-size:11.5px; }
+  .cost-k { color:#5a6b7c; }
+  .cost-w { height:9px; background:#e3e8ef; border-radius:4px; overflow:hidden; }
+  .cost-bar { display:block; height:100%; background:#b8860b; opacity:.8; border-radius:4px; }
+  .cost-v { color:#1a2330; font-weight:600; white-space:nowrap; }
+  .ded { margin-top:9px; font-size:11px; color:#5a6b7c; background:#ffffff;
+          border:1px dashed #e3e8ef; border-radius:7px; padding:9px 11px; line-height:1.6; }
+
+  /* 质量体检 */
+  .qual { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+           padding:12px 13px; }
+  .qual-item { display:flex; justify-content:space-between; gap:10px; font-size:11.5px;
+                padding:6px 0; }
+  .qual-item + .qual-item { border-top:1px dashed #e3e8ef; }
+  .q-l { color:#5a6b7c; flex:0 0 auto; }
+  .q-v { color:#1a2330; font-weight:600; text-align:right; }
+  .q-v.ok { color:#1e8e5a; }
+
+  /* 柱状图 */
+  .chart { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+            padding:13px 12px; }
+  .legend { font-size:11px; color:#8a97a6; margin-bottom:12px; }
+  .legend .lg, .legend2 .lg { display:inline-block; width:10px; height:10px; border-radius:2px;
+                               margin-right:5px; vertical-align:middle; }
+  .bars { display:flex; gap:8px; align-items:flex-end; height:138px; }
+  .bg { flex:1; display:flex; flex-direction:column; align-items:center; height:100%; }
+  .bcols { display:flex; gap:3px; align-items:flex-end; flex:1; width:100%; justify-content:center; }
+  .bcol { width:13px; border-radius:3px 3px 0 0; position:relative; min-height:2px; }
+  .bcol.rev { background:#14508c; }
+  .bcol.prof { background:#c0392b; }
+  .bval { position:absolute; top:-13px; left:50%; transform:translateX(-50%);
+           font-size:8.5px; color:#8a97a6; white-space:nowrap; }
+  .byear { font-size:10px; color:#8a97a6; margin-top:6px; }
+
+  /* 季度 */
+  .qgrid { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+  .qcard { background:#ffffff; border:1px solid #e3e8ef; border-radius:9px;
+            padding:12px; }
+  .q-l { font-size:11px; color:#8a97a6; }
+  .q-n { font-size:19px; font-weight:800; color:#1a2330; margin:6px 0 4px; }
+  .q-y { font-size:11px; }
+
+  /* 估值卡 */
+  .vgrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .vcard { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+            padding:12px 9px; text-align:center; }
+  .vcard-l { font-size:10.5px; color:#8a97a6; }
+  .vcard-n { font-size:20px; font-weight:800; color:#1a2330; margin:6px 0 4px; }
+  .vcard-d { font-size:9.5px; color:#8a97a6; line-height:1.45; }
+  .vcard-p { font-size:9.5px; color:#5a6b7c; margin-top:5px; }
+  .vcard-z { font-size:10.5px; font-weight:700; margin-top:3px; color:#14508c; }
+
+  /* PE 位置条 */
+  .pc { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+         padding:20px 16px 12px; }
+  .pc-track { position:relative; height:12px; background:#e3e8ef; border-radius:6px; }
+  .pc-fill { position:absolute; left:0; top:0; height:100%;
+              background:linear-gradient(90deg,#dbe7f5,#7fa8d4); border-radius:6px; }
+  .pc-now { position:absolute; top:-5px; width:3px; height:22px; background:#0f3d6e;
+             border-radius:2px; transform:translateX(-50%); }
+  .pc-med { position:absolute; top:-5px; width:2px; height:22px; background:#8a97a6;
+             transform:translateX(-50%); }
+  .pc-lbls { position:relative; height:18px; margin-top:7px; }
+  .pc-l { position:absolute; transform:translateX(-50%); font-size:10px;
+           white-space:nowrap; }
+  .pc-l.now { color:#0f3d6e; font-weight:800; }
+  .pc-l.med { color:#8a97a6; }
+
+  /* 价格区间 */
+  .rng { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+          padding:16px 14px 12px; }
+  .rng-track { height:9px; border-radius:5px; position:relative;
+                background:linear-gradient(90deg,#1e8e5a,#e3e8ef,#c0392b); opacity:.85; }
+  .rng-now { position:absolute; top:-4px; width:4px; height:17px; background:#1a2330;
+              border-radius:2px; transform:translateX(-50%); }
+  .rng-marks { display:flex; justify-content:space-between; font-size:10px;
+                color:#8a97a6; margin-top:8px; }
+
+  /* 分红图 */
+  .divwrap { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+              padding:12px 10px 6px; }
+  .legend2 { font-size:10.5px; color:#8a97a6; margin:9px 0 0; text-align:center; }
+
+  /* 现金流 */
+  .cf-head { background:#0f3d6e; border-radius:10px; padding:15px 16px; color:#fff; }
+  .cf-h-l { font-size:11.5px; opacity:.82; }
+  .cf-h-n { font-size:30px; font-weight:800; margin:7px 0 5px; letter-spacing:-.5px; }
+  .cf-h-y { font-size:11.5px; opacity:.9; }
+  .cf-h-y .upv, .cf-h-y .dnv, .cf-h-y .flat { color:#ffd7d1 !important; opacity:1; }
+  .flow { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+           padding:12px 13px; margin-top:10px; }
+  .flow-row { display:grid; grid-template-columns:34px 1fr 22px 1fr; gap:5px;
+               align-items:baseline; font-size:12.5px; padding:5px 0; }
+  .flow-k { color:#8a97a6; font-size:11px; }
+  .flow-cur { font-weight:700; color:#1a2330; }
+  .flow-arrow { color:#8a97a6; text-align:center; font-size:10px; }
+  .flow-prev { color:#8a97a6; }
+  .flow-hint { font-size:10.5px; color:#5a6b7c; margin-top:8px; padding-top:8px;
+                border-top:1px dashed #e3e8ef; line-height:1.6; }
+  .cft { background:#ffffff; border:1px solid #e3e8ef; border-radius:10px;
+          padding:6px 13px; }
+  .cft-row { display:flex; align-items:center; gap:7px; font-size:11px; padding:8px 0; }
+  .cft-row + .cft-row { border-top:1px dashed #e3e8ef; }
+  .cft-k { flex:1; color:#1a2330; line-height:1.4; }
+  .cft-v { font-weight:700; white-space:nowrap; }
+  .tag { font-size:9px; padding:2px 6px; border-radius:3px; white-space:nowrap;
+          font-weight:700; }
+  .tag.fin { background:#fdf0ee; color:#c0392b; }
+  .tag.biz { background:#eef3fb; color:#14508c; }
+  .adj { margin-top:10px; background:#eef7f1; border:1px solid #c4e3d2; border-radius:10px;
+          padding:13px 14px; }
+  .adj-t { font-size:11.5px; font-weight:700; color:#1e8e5a; }
+  .adj-v { margin:8px 0 6px; display:flex; align-items:baseline; gap:8px; }
+  .adj-n { font-size:22px; font-weight:800; color:#1e8e5a; }
+  .adj-p { font-size:11px; color:#5a6b7c; }
+  .adj-note { font-size:10.5px; color:#5a6b7c; line-height:1.6; }
+
+  /* 风险 */
+  .risks { display:flex; flex-direction:column; gap:9px; }
+  .risk { display:flex; gap:10px; background:#ffffff; border:1px solid #e3e8ef;
+           border-radius:9px; padding:12px 13px; }
+  .risk-i { flex:0 0 19px; height:19px; border-radius:50%; background:#fdf0ee;
+             color:#c0392b; font-size:11px; font-weight:800; text-align:center;
+             line-height:19px; }
+  .risk-t { font-size:12px; line-height:1.7; color:#1a2330; }
+  .fact { display:flex; gap:9px; font-size:12px; line-height:1.7; color:#1a2330;
+           padding:6px 0; }
+  .fact-d { flex:0 0 6px; height:6px; border-radius:50%; background:#1e8e5a;
+             margin-top:8px; }
+  .comp-note { margin-top:12px; font-size:11px; color:#5a6b7c; line-height:1.7;
+                background:#ffffff; border:1px solid #e3e8ef; border-radius:8px;
+                padding:11px 12px; }
+  .disclaimer { margin-top:16px; font-size:9.5px; color:#8a97a6; line-height:1.75;
+                 border-top:1px solid #e3e8ef; padding-top:12px; }
+
+  /* 一句话 */
+  .takeaway { margin-top:14px; background:#eef3fb; border-left:3px solid #14508c;
+               border-radius:6px; padding:12px 13px; font-size:12px; line-height:1.75;
+               color:#1a2330; }
+  .tk-lbl { display:inline-block; font-size:10px; font-weight:800; color:#fff;
+             background:#14508c; padding:2px 7px; border-radius:3px; margin-right:7px;
+             vertical-align:1px; }
+
+  .foot { margin-top:14px; font-size:9.5px; color:#8a97a6; line-height:1.65;
+           border-top:1px solid #e3e8ef; padding-top:10px; }
+
+  .upv { color:#c0392b; font-weight:700; }
+  .dnv { color:#1e8e5a; font-weight:700; }
+  .flat { color:#8a97a6; }
+</style>
+</head>
+<body>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">1 / 9</span></div><div class="ttl"></div><div class="body">
+    <div class="co">
+      <div class="co-name">贵州茅台</div>
+      <div class="co-meta"><span class="code">600519</span><span class="sep">·</span>白酒Ⅱ 行业第 1 / 19 家</div>
+    </div>
+    <div class="price">
+      <div class="price-num">¥ 1,275.16</div>
+      <div class="price-lbl">2026-09-11 收盘</div>
+    </div>
+    <div class="stat-grid"><div class="stat"><div class="stat-n">1.59 万亿</div><div class="stat-l">总市值</div></div><div class="stat"><div class="stat-n">1,720.5 亿</div><div class="stat-l">2025 营收</div></div><div class="stat"><div class="stat-n">823.2 亿</div><div class="stat-l">2025 净利</div></div><div class="stat"><div class="stat-n">33.65%</div><div class="stat-l">ROE</div></div></div>
+    <div class="badges">
+      <div class="badge"><span class="bd-k">林奇分类</span><span class="bd-v">稳健成长型</span></div>
+      <div class="badge"><span class="bd-k">格雷厄姆质量</span><span class="bd-v">高</span></div>
+    </div>
+    <div class="cover-tip">往下 8 张 · 从「它做什么」看到「该盯住什么」</div>
+    </div><div class="foot">更新于 2026Q2 · 数据来源：东方财富 / 巨潮资讯年报</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">2 / 9</span></div><div class="ttl">它是做什么的<span class="sub">业务与产品结构</span></div><div class="body"><div class="lead">以茅台酒为核心产品，通过酿造生产与包装销售获取收入，茅台酒贡献85.7%的收入，系列酒补充14.3%。</div><div class="sec-t">产品结构 <span class="sec-s">2026H1</span></div><div class="segs"><div class="seg"><div class="seg-top"><span class="seg-name">茅台酒</span><span class="seg-pct">85.7%</span></div><div class="seg-bar"><div class="seg-fill" style="width:85.7%"></div></div><div class="seg-meta"><span>收入 777.2 亿</span><span>同比 <span class="upv">+2.8%</span></span><span>毛利率 93.5%</span></div></div><div class="seg"><div class="seg-top"><span class="seg-name">系列酒</span><span class="seg-pct">14.3%</span></div><div class="seg-bar"><div class="seg-fill" style="width:14.3%"></div></div><div class="seg-meta"><span>收入 129.3 亿</span><span>同比 <span class="dnv">-6.0%</span></span><span>毛利率 76.1%</span></div></div></div><div class="sec-t">产销量 <span class="sec-s">2025 年报 · 吨</span></div><div class="plist"><div class="pline"><div class="pline-h"><span class="pline-n">茅台酒</span><span class="pline-r">收入 1,465 亿（<span class="upv">+0.4%</span>）</span></div><div class="pline-grid"><div class="pline-cell"><span class="pline-k">产量</span><span class="pline-v">5.85 万吨<span class="pline-y"><span class="upv">+3.9%</span></span></span></div><div class="pline-cell"><span class="pline-k">销量</span><span class="pline-v">4.68 万吨<span class="pline-y"><span class="upv">+0.7%</span></span></span></div></div></div><div class="pline"><div class="pline-h"><span class="pline-n">其他系列酒</span><span class="pline-r">收入 223 亿（<span class="dnv">-9.8%</span>）</span></div><div class="pline-grid"><div class="pline-cell"><span class="pline-k">产量</span><span class="pline-v">5.77 万吨<span class="pline-y"><span class="upv">+19.8%</span></span></span></div><div class="pline-cell"><span class="pline-k">销量</span><span class="pline-v">3.84 万吨<span class="pline-y"><span class="upv">+3.9%</span></span></span></div></div></div></div><div class="pnote">酒类合计 产量 11.61 万吨（+11.2%）· 销量 8.51 万吨（+2.1%）</div><div class="pnote">库存 34.00 万吨 ＝ 半成品基酒 31.52 万吨 ＋ 成品酒 2.48 万吨</div><div class="pnote">口径：生产量为当年基酒产量（含茅台酒与系列酒基酒），不是成品酒出库量</div><div class="takeaway"><span class="tk-lbl">一句话</span>「产量」是当年酿出的基酒，不是卖出去的酒——茅台酒从生产到出厂至少五年，所以产量和库存量看的是「几年后能卖多少」。这也是为什么产量会明显大于销量，且茅台酒与系列酒的产量几乎各占一半。</div></div><div class="foot">收入占比与同比 = 2026H1「销售情况」表；毛利率口径为 2025 年报；产销量口径为 2025 年报「产品情况」「产品期末库存量」表</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">3 / 9</span></div><div class="ttl">酒是怎么卖出去的<span class="sub">渠道与商业模式</span></div><div class="body"><div class="sec-t">两条腿走路 <span class="sec-s">按渠道</span></div><div class="ch-grid"><div class="ch-card"><div class="ch-name">直销</div><div class="ch-pct">57.3%</div><div class="ch-amt">519.6 亿</div><div class="ch-yoy">同比 <span class="upv">+29.9%</span></div><div class="ch-margin">毛利率 94.6%</div></div><div class="ch-card"><div class="ch-name">批发代理</div><div class="ch-pct">42.7%</div><div class="ch-amt">387.0 亿</div><div class="ch-yoy">同比 <span class="dnv">-21.6%</span></div><div class="ch-margin">毛利率 87.9%</div></div></div><div class="imt"><span class="imt-lbl">i茅台（自营电商）</span><span class="imt-v">402.6 亿元</span></div><div class="sec-t">卖到哪里 <span class="sec-s">按地区</span></div><div class="regs"><div class="reg-row"><span class="reg-k">国内</span><span class="reg-w"><span class="reg-bar" style="width:98.9%"></span></span><span class="reg-v">896.2 亿 · 98.9%</span><span class="reg-y"><span class="upv">+3.7%</span></span></div><div class="reg-row"><span class="reg-k">国外</span><span class="reg-w"><span class="reg-bar" style="width:2%"></span></span><span class="reg-v">10.4 亿 · 1.1%</span><span class="reg-y"><span class="dnv">-64.2%</span></span></div></div><div class="sec-t">经销商网络 <span class="sec-s">期末</span></div><div class="deal"><div class="deal-item"><span class="deal-n">2,307 家</span><span class="deal-l">国内经销商</span><span class="deal-d">增 220 / 减 266</span></div><div class="deal-item"><span class="deal-n">119 家</span><span class="deal-l">国外经销商</span><span class="deal-d">增 14 / 减 21</span></div></div><div class="takeaway"><span class="tk-lbl">一句话</span>渠道结构正在换挡：直销（含 i 茅台）收入同比 +29.9%、批发代理 −21.6%。直销毛利率 94.6% 也高于批发代理的 87.9%，卖同样的酒，直营更赚。</div></div><div class="foot">收入与同比 = 2026 半年报「销售情况」表；毛利率口径为 2025 年报</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">4 / 9</span></div><div class="ttl">它有多能赚<span class="sub">盈利能力与财务质量</span></div><div class="body"><div class="mgrid"><div class="mcard"><div class="mcard-l">ROE（净资产收益率）</div><div class="mcard-n">33.65%</div><div class="mcard-d">每一元净资产赚回多少</div></div><div class="mcard"><div class="mcard-l">毛利率</div><div class="mcard-n">91.2%</div><div class="mcard-d">卖酒的差价空间</div></div><div class="mcard"><div class="mcard-l">净利率</div><div class="mcard-n">48.8%</div><div class="mcard-d">每一元收入最后剩下多少</div></div><div class="mcard"><div class="mcard-l">资产负债率</div><div class="mcard-n">16.4%</div><div class="mcard-d">几乎没有靠借钱经营</div></div></div><div class="sec-t">钱花在哪 <span class="sec-s">营业总成本 573.7 亿</span></div><div class="costs"><div class="cost-row"><span class="cost-k">税金及附加</span><span class="cost-w"><span class="cost-bar" style="width:47.2%"></span></span><span class="cost-v">273.5 亿 · 47.2%</span></div><div class="cost-row"><span class="cost-k">营业成本</span><span class="cost-w"><span class="cost-bar" style="width:25.7%"></span></span><span class="cost-v">148.9 亿 · 25.7%</span></div><div class="cost-row"><span class="cost-k">管理费用</span><span class="cost-w"><span class="cost-bar" style="width:14.3%"></span></span><span class="cost-v">83.2 亿 · 14.3%</span></div><div class="cost-row"><span class="cost-k">销售费用</span><span class="cost-w"><span class="cost-bar" style="width:12.5%"></span></span><span class="cost-v">72.5 亿 · 12.5%</span></div><div class="cost-row"><span class="cost-k">研发费用</span><span class="cost-w"><span class="cost-bar" style="width:1%"></span></span><span class="cost-v">1.9 亿 · 0.3%</span></div></div><div class="ded">财务费用为负 -8.15 亿 —— 存款利息收入大于利息支出，账上钱多到「越放越赚」</div><div class="sec-t">财务质量体检 <span class="sec-s">2025 年报</span></div><div class="qual"><div class="qual-item"><span class="q-l">审计意见</span><span class="q-v ok">标准无保留意见</span></div><div class="qual-item"><span class="q-l">财务粉饰 M-Score</span><span class="q-v ok">-2.84（识别阈值 -1.78，低于阈值即无粉饰迹象）</span></div><div class="qual-item"><span class="q-l">流动比率</span><span class="q-v">5.09（流动资产 ÷ 流动负债）</span></div><div class="qual-item"><span class="q-l">财务异常红旗项</span><span class="q-v ok">0 项</span></div></div><div class="takeaway"><span class="tk-lbl">一句话</span>高毛利、高净利、低负债是这家公司最显著的特征：赚得多、几乎不借钱、账上现金还能生息。</div></div><div class="foot">指标口径：2025 年报（归母）</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">5 / 9</span></div><div class="ttl">长得有多快<span class="sub">成长轨迹</span></div><div class="body"><div class="sec-t">近 5 年营收 / 净利 <span class="sec-s">亿元</span></div><div class="chart"><div class="legend"><span class="lg" style="background:#14508c"></span>营业总收入<span class="lg" style="background:#c0392b;margin-left:14px;"></span>归母净利润</div><div class="bars"><div class="bg"><div class="bcols"><div class="bcol rev" style="height:62.9%"><span class="bval">1,095</span></div><div class="bcol prof" style="height:30.1%"><span class="bval">525</span></div></div><div class="byear">2021</div></div><div class="bg"><div class="bcols"><div class="bcol rev" style="height:73.2%"><span class="bval">1,276</span></div><div class="bcol prof" style="height:36.0%"><span class="bval">627</span></div></div><div class="byear">2022</div></div><div class="bg"><div class="bcols"><div class="bcol rev" style="height:86.5%"><span class="bval">1,506</span></div><div class="bcol prof" style="height:42.9%"><span class="bval">747</span></div></div><div class="byear">2023</div></div><div class="bg"><div class="bcols"><div class="bcol rev" style="height:100.0%"><span class="bval">1,741</span></div><div class="bcol prof" style="height:49.5%"><span class="bval">862</span></div></div><div class="byear">2024</div></div><div class="bg"><div class="bcols"><div class="bcol rev" style="height:98.8%"><span class="bval">1,720</span></div><div class="bcol prof" style="height:47.3%"><span class="bval">823</span></div></div><div class="byear">2025</div></div></div></div><div class="sec-t">年化增速 <span class="sec-s">近 5 年复合</span></div><div class="mini-grid"><div class="mini"><div class="mini-n">11.9%</div><div class="mini-l">营收 5 年</div></div><div class="mini"><div class="mini-n">12.0%</div><div class="mini-l">净利 5 年</div></div><div class="mini"><div class="mini-n">21.9%</div><div class="mini-l">分红 5 年</div></div></div><div class="sec-t">最近一期怎么样 <span class="sec-s">26Q2</span></div><div class="qgrid"><div class="qcard"><div class="q-l">单季营业收入</div><div class="q-n">367.9 亿</div><div class="q-y">同比 <span class="dnv">-5.2%</span></div></div><div class="qcard"><div class="q-l">单季归母净利</div><div class="q-n">172.7 亿</div><div class="q-y">同比 <span class="dnv">-6.9%</span></div></div><div class="qcard"><div class="q-l">上半年累计营收</div><div class="q-n">922.8 亿</div><div class="q-y">同比 <span class="upv">+1.3%</span></div></div><div class="qcard"><div class="q-l">上半年累计净利</div><div class="q-n">445.2 亿</div><div class="q-y">同比 <span class="dnv">-2.0%</span></div></div></div><div class="takeaway"><span class="tk-lbl">一句话</span>看这家公司要分清两件事：过去五年营收年化 +11.9% 是一条漂亮的长期曲线；但最近一期单季营收同比 −5.2%、上半年累计仅 +1.3%，长期成长与短期停滞同时存在。</div></div><div class="foot">年报口径（归母）· 单季为 2026Q2，累计为 2026 上半年</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">6 / 9</span></div><div class="ttl">现在贵不贵<span class="sub">估值与历史分位</span></div><div class="body"><div class="vgrid"><div class="vcard"><div class="vcard-l">市盈率 PE</div><div class="vcard-n">19.6</div><div class="vcard-d">股价 ÷ 每股收益</div><div class="vcard-p">近10年 1.4% 分位</div><div class="vcard-z">历史低位</div></div><div class="vcard"><div class="vcard-l">市净率 PB</div><div class="vcard-n">6.34</div><div class="vcard-d">股价 ÷ 每股净资产</div><div class="vcard-p">近10年 6.8% 分位</div><div class="vcard-z">历史低位</div></div><div class="vcard"><div class="vcard-l">股息率</div><div class="vcard-n">4.05%</div><div class="vcard-d">每股分红 ÷ 股价</div><div class="vcard-p">近10年 98.5% 分位</div><div class="vcard-z">历史高位</div></div></div><div class="sec-t">现在的 PE 在十年区间里的位置</div><div class="pc"><div class="pc-track"><span class="pc-fill" style="width:49.6%"></span><span class="pc-now" style="left:49.6%"></span><span class="pc-med" style="left:86.2%"></span></div><div class="pc-lbls"><span class="pc-l now" style="left:49.6%">现在 19.6</span><span class="pc-l med" style="left:86.2%">十年中位数 34.0</span></div></div><div class="sec-t">现价在近一年区间的位置 <span class="sec-s">前复权</span></div><div class="rng"><div class="rng-track"><div class="rng-now" style="left:31.9%"></div></div><div class="rng-marks"><span>最低 1,151.01</span><span>现价 1,275.16</span><span>最高 1,539.98</span></div></div><div class="takeaway"><span class="tk-lbl">一句话</span>分位数说的是「这个数字在它自己近十年的历史里排第几」，不构成好坏判断。另外股息率的分位方向与 PE/PB 相反：股息率 = 每股分红 ÷ 股价，分位越高说明按现价能拿到的股息回报越高。</div></div><div class="foot">行情日 2026-09-11 · 分位基于近 10 年历史序列（2016-09-12 起） · 未复权最高价 1,568.00</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">7 / 9</span></div><div class="ttl">分红给了多少<span class="sub">股东回报</span></div><div class="body"><div class="sec-t">每股分红（柱）与分红比例（线） <span class="sec-s">元 / %</span></div><div class="divwrap"><svg viewBox="0 0 342 190" width="100%" role="img" aria-label="每股股息与分红比例历史"><rect x="40.5" y="144.5" width="16.6" height="17.5" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="70.1" y="133.6" width="16.6" height="28.4" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="99.7" y="124.4" width="16.6" height="37.6" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="129.3" y="118.0" width="16.6" height="44.0" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="158.9" y="112.1" width="16.6" height="49.9" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="188.5" y="106.0" width="16.6" height="56.0" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="218.1" y="95.0" width="16.6" height="67.0" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="247.7" y="82.2" width="16.6" height="79.8" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="277.3" y="28.8" width="16.6" height="133.2" rx="2" fill="#14508c" fill-opacity="0.6"/><rect x="306.9" y="27.7" width="16.6" height="134.3" rx="2" fill="#14508c" fill-opacity="0.95"/><polyline points="48.8,137.0 78.4,136.9 108.0,133.3 137.6,133.2 167.2,133.2 196.8,133.2 226.4,133.2 256.0,133.2 285.6,36.4 315.2,19.9" fill="none" stroke="#c0392b" stroke-width="1.8" stroke-linejoin="round"/><circle cx="48.8" cy="137.0" r="2.3" fill="#c0392b"/><circle cx="78.4" cy="136.9" r="2.3" fill="#c0392b"/><circle cx="108.0" cy="133.3" r="2.3" fill="#c0392b"/><circle cx="137.6" cy="133.2" r="2.3" fill="#c0392b"/><circle cx="167.2" cy="133.2" r="2.3" fill="#c0392b"/><circle cx="196.8" cy="133.2" r="2.3" fill="#c0392b"/><circle cx="226.4" cy="133.2" r="2.3" fill="#c0392b"/><circle cx="256.0" cy="133.2" r="2.3" fill="#c0392b"/><circle cx="285.6" cy="36.4" r="2.3" fill="#c0392b"/><circle cx="315.2" cy="19.9" r="2.3" fill="#c0392b"/><text x="332.0" y="165.0" font-size="8" fill="#c0392b" text-anchor="start">45%</text><text x="332.0" y="19.0" font-size="8" fill="#c0392b" text-anchor="start">80%</text><text x="30.0" y="165.0" font-size="8" fill="#8a97a6" text-anchor="end">0</text><text x="30.0" y="30.7" font-size="8" fill="#8a97a6" text-anchor="end">52</text><text x="48.8" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2016</text><text x="108.0" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2018</text><text x="167.2" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2020</text><text x="226.4" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2022</text><text x="285.6" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2024</text><text x="315.2" y="176.0" text-anchor="middle" font-size="8.5" fill="#8a97a6">2025</text></svg></div><div class="legend2"><span class="lg" style="background:#14508c"></span>每股股息（左轴，元）<span class="lg" style="background:#c0392b;margin-left:12px;"></span>分红比例（右轴，% 占归母净利）</div><div class="mini-grid"><div class="mini"><div class="mini-n">51.98 元</div><div class="mini-l">2025 每股分红</div></div><div class="mini"><div class="mini-n">651 亿</div><div class="mini-l">分红总额</div></div><div class="mini"><div class="mini-n">79.1%</div><div class="mini-l">分红比例</div></div></div><div class="takeaway"><span class="tk-lbl">一句话</span>分红比例长期停在 51.0% 附近，2025 年抬到了 79.1% —— 这不是随机波动，而是公司把「赚到的钱分给股东」的比例系统性地提高了。</div></div><div class="foot">按分红实施年度统计 · 分红比例 = 现金分红 ÷ 当年归母净利 · 股息率 4.05%</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">8 / 9</span></div><div class="ttl">现金流怎么看<span class="sub">一条容易被误读的数据</span></div><div class="body"><div class="cf-head"><div class="cf-h-l">2026H1 经营现金流净额</div><div class="cf-h-n">706.9 亿</div><div class="cf-h-y">同比 <span class="upv">+438.8%</span></div></div><div class="flow"><div class="flow-row"><span class="flow-k">流入</span><span class="flow-cur">1,092.5</span><span class="flow-arrow">vs</span><span class="flow-prev">980.0</span></div><div class="flow-row"><span class="flow-k">流出</span><span class="flow-cur">385.6</span><span class="flow-arrow">vs</span><span class="flow-prev">848.8</span></div><div class="flow-hint">单位：亿元。右边为2025H1。流入只增一成、流出掉一半 —— 这不是「卖酒变好了」能解释的</div></div><div class="sec-t">主要是哪几个科目在动 <span class="sec-s">变动额</span></div><div class="cft"><div class="cft-row"><span class="cft-k">存放中央银行和同业款项净增加额</span><span class="tag fin">财务公司</span><span class="cft-v"><span class="dnv">-473.1%</span> 亿</span></div><div class="cft-row"><span class="cft-k">客户存款和同业存放款项净增加额</span><span class="tag fin">财务公司</span><span class="cft-v"><span class="upv">+99.0%</span> 亿</span></div><div class="cft-row"><span class="cft-k">销售商品、提供劳务收到的现金</span><span class="tag biz">主业</span><span class="cft-v"><span class="upv">+33.4%</span> 亿</span></div><div class="cft-row"><span class="cft-k">收到其他与经营活动有关的现金</span><span class="tag biz">主业</span><span class="cft-v"><span class="dnv">-19.6%</span> 亿</span></div></div><div class="adj"><div class="adj-t">剔除财务公司科目后</div><div class="adj-v"><span class="adj-n">379.7 亿</span><span class="adj-p">vs 372.6 亿，同比 <span class="upv">+1.9%</span></span></div><div class="adj-note">财务公司（吸收存款/缴存央行/同业拆放）科目对主业景气度无指示意义，剔除后才能看「卖酒收钱」本身的变化</div></div><div class="takeaway"><span class="tk-lbl">一句话</span>表观 +438.8% 的现金流「大幅改善」并非主业回款爆发：剔除财务公司（吸收存款、缴存央行、同业拆放）科目后，主业经营性现金净额同比只有 +1.9% —— 回款基本持平。</div></div><div class="foot">经营活动现金流＝流入 − 流出；财务公司科目属资产负债表资金搬动，反映不了卖酒景气度</div></section>
+<section class="slide"><div class="hd"><span class="brand">ValueLine 一页研报</span><span class="pager">9 / 9</span></div><div class="ttl">该盯住什么<span class="sub">风险与结论</span></div><div class="body"><div class="sec-t">关键数据速览 <span class="sec-s">纯数字陈述</span></div><div class="fact"><span class="fact-d"></span>盈利与杠杆：ROE 33.65%，资产负债率 16.4%，流动比率 5.09</div><div class="fact"><span class="fact-d"></span>估值位置：PE 19.6（近 10 年 1.4% 分位），PB 6.34（6.8% 分位）</div><div class="fact"><span class="fact-d"></span>股东回报：股息率 4.05%，分红比例 79.1%（近 10 年 98.5% 分位）</div><div class="fact"><span class="fact-d"></span>2025 年报：营收 1,720.5 亿，归母净利 823.2 亿</div><div class="sec-t">读这家公司要盯住什么</div><div class="risks"><div class="risk"><span class="risk-i">1</span><span class="risk-t">2025年营收1720.5亿较2024年1741.4亿下降，净利823.2亿较862.3亿下降，增长出现停滞。</span></div><div class="risk"><span class="risk-i">2</span><span class="risk-t">茅台酒收入占比85.7%，产品结构高度单一，若核心单品需求波动将直接冲击整体业绩。</span></div><div class="risk"><span class="risk-i">3</span><span class="risk-t">行业营收前五中五粮液405.3亿、汾酒387.2亿等对手规模虽小，但若加速追赶可能侵蚀份额。</span></div></div><div class="comp-note">行业位置：白酒Ⅱ 1/19，2025 年营收 1,720.5 亿，行业总额 3,618.1 亿，份额 47.6%</div><div class="disclaimer">本图仅呈现客观数据与事实描述，不含任何价格点位、仓位或买卖建议，不构成投资建议。数据来源：东方财富、巨潮资讯定期报告。市场有风险，阅读者应独立判断。</div></div><div class="foot">全部数字可在 ValueLine 一页研报中逐项核对</div></section>
+</body>
+</html>
