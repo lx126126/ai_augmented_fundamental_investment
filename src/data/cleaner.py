@@ -506,6 +506,59 @@ def build_segments(seg_df: pd.DataFrame, lookback_years: int = 2):
     return period_labels, result
 
 
+def forward_adjust_kline(kline: pd.DataFrame, dividend: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """前复权（腾讯/同花顺「减法」口径）：qfq(t) = 原始价(t) − Σ 除权日晚于 t 的每股派息。
+
+    为什么必须显式复现这个口径：同一根 K 线在不同 App 上是不同的数——茅台 2026-02-06
+    的高点，不复权 1568.00、腾讯前复权 1539.98、新浪前复权 1531.75（比例法）。
+    用户在腾讯自选股里看到 1539，报告里写 1568 就会被当成数据错误。
+    本函数已交叉验证与腾讯一致：2025-08-01 收盘 1417.000 → 前复权 1365.019，
+    差额 51.981 恰等于其后两次派息 23.957 + 28.0242 之和。
+
+    除权日取不到时不做任何调整并置 qfq_available=False —— 调用方据此降级到不复权口径，
+    好过给出一个用 report_date 当除权日算出来的错数（两者可差半年）。
+    """
+    out = kline.copy()
+    meta: dict = {"available": False, "n_events": 0, "events": []}
+    if kline is None or kline.empty or dividend is None or dividend.empty:
+        return out, meta
+    if "ex_date" not in dividend.columns:
+        return out, meta
+
+    dv = dividend.copy()
+    if "dividend_per_share" not in dv.columns:
+        if "dividend_per_10" not in dv.columns:
+            return out, meta
+        dv["dividend_per_share"] = dv["dividend_per_10"] / 10
+    dv = dv.dropna(subset=["ex_date", "dividend_per_share"])
+    dv = dv[dv["dividend_per_share"] > 0].sort_values("ex_date")
+    if dv.empty:
+        return out, meta
+
+    dates = pd.to_datetime(out["report_date"])
+    adj = pd.Series(0.0, index=out.index, dtype="float64")
+    events: list[dict] = []
+    for _, r in dv.iterrows():
+        ex = pd.Timestamp(r["ex_date"])
+        dps = float(r["dividend_per_share"])
+        adj.loc[dates < ex] += dps  # 除权日之前的价格都要下调这一次派息
+        events.append({"ex_date": ex.date(), "dps": round(dps, 4)})
+
+    for col in ("open", "high", "low", "close"):
+        if col in out.columns:
+            out[col + "_qfq"] = out[col] - adj
+
+    lo, hi = dates.min(), dates.max()
+    meta.update({
+        "available": True,
+        "n_events": len(events),
+        # 只保留落在 K 线区间附近的除权事件，供报告脚注说明「区间内派了几次、共多少」
+        "events_in_range": [e for e in events if lo <= pd.Timestamp(e["ex_date"]) <= hi],
+        "events": events,
+    })
+    return out, meta
+
+
 def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     """估值面板：PE/PB/股息率/52周股价区间/估值分位。
 
@@ -527,9 +580,42 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
     net_profit = annual["net_profit_parent"].iloc[-1]  # 最新年报归母净利（亿元）
     pe = mcap_now / net_profit if net_profit and net_profit > 0 else None
 
+    # 股息率（市值口径）：最近一个有分红数据的年度，分红总额 ÷ 当前市值 × 100。
+    # 旧口径是「年内各次派息的股息率之和」——分母是每次派息当时的股价，与 PE/PB
+    # 用的「当前市值」不是同一个分母，所以 4.0%（旧）和 4.1%（市值口径）并存，
+    # 也没法算历史分位（XHS 卡片上那个空着的「分位 —」就是它）。
+    #
+    # 同时回传该年度，避免面板把 2025 全年股息率标成含义模糊的「最新报告期」
+    # ——2026 中报分红行存在但为空，容易被误读成「2026 年股息率」。
     dividend_yield = None
-    if "dividend_yield_pct" in annual.columns:
-        dividend_yield = annual["dividend_yield_pct"].iloc[-1]
+    dividend_year = None
+    dividend_total = None
+    dividend_per_share = None
+    dividend_payout_pct = None
+    dividend_history: list[dict] = []
+    dv_cols = [c for c in ["dividend_per_share", "dividend_total", "dividend_payout_pct"]
+               if c in annual.columns]
+    if "dividend_total" in dv_cols:
+        dv_all = annual[["report_date"] + dv_cols].dropna(subset=["dividend_total"]).sort_values("report_date")
+        dv_all = dv_all[dv_all["dividend_total"] > 0]
+        if not dv_all.empty:
+            last = dv_all.iloc[-1]
+            dividend_year = int(pd.Timestamp(last["report_date"]).year)
+            dividend_total = float(last["dividend_total"])
+            if pd.notna(last.get("dividend_per_share")):
+                dividend_per_share = float(last["dividend_per_share"])
+            if pd.notna(last.get("dividend_payout_pct")):
+                dividend_payout_pct = float(last["dividend_payout_pct"])
+            if mcap_now:
+                dividend_yield = dividend_total / mcap_now * 100
+            # 历史每股分红金额（近 10 个分红年度，供报告展示分红连续性）
+            for _, r in dv_all.tail(10).iterrows():
+                dividend_history.append({
+                    "year": int(pd.Timestamp(r["report_date"]).year),
+                    "dps": float(r["dividend_per_share"]) if pd.notna(r.get("dividend_per_share")) else None,
+                    "total": float(r["dividend_total"]),
+                    "payout_pct": float(r["dividend_payout_pct"]) if pd.notna(r.get("dividend_payout_pct")) else None,
+                })
 
     total_shares_yi = annual["share_capital"].iloc[-1] if "share_capital" in annual.columns else None  # 已是亿股
 
@@ -543,37 +629,77 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
 
     # 分位（当前值在历史序列中的百分位）
     pb_pctile = (pb["value"] < pb_now).mean() * 100
-    pe_pctile = _pe_pctile(mcap, annual)
+    pe_s = _pe_series(mcap, annual)
+    pe_pctile = float((pe_s < pe_s.iloc[-1]).mean() * 100) if not pe_s.empty else None
+    dy_s = _dividend_yield_series(annual, mcap)
+    dividend_pctile = float((dy_s < dy_s.iloc[-1]).mean() * 100) if not dy_s.empty else None
+    dividend_series_n = int(len(dy_s))
+
+    # PE 十年走势图序列：与 PE 分位同一条序列，近 10 年降采样到 ≤180 点
+    # （SVG 体积可控，且 180 个点足够画出趋势，再多也只是像素级差别）
+    pe_chart: list[dict] = []
+    pe_median = None
+    pe_range = None
+    if not pe_s.empty:
+        pe_win = pe_s[pe_s.index >= (pe_s.index.max() - pd.DateOffset(years=10))]
+        pe_median = float(pe_win.median())
+        step = max(1, -(-len(pe_win) // 180))  # 整数向上取整
+        pe_win = pe_win.iloc[::step]
+        pe_chart = [{"d": d.date(), "pe": round(float(v), 2)} for d, v in pe_win.items()]
+        pe_range = {
+            "start": pe_win.index.min().date(),
+            "end": pe_win.index.max().date(),
+            "lo": float(pe_win.min()),
+            "hi": float(pe_win.max()),
+        }
+
+    # 序列元信息：供报告标注分位口径（跨度/采样数），使「X% 分位」可被独立复核
+    series_meta = {
+        "val_series_start": pd.Timestamp(mcap["report_date"].min()).date(),
+        "val_series_end": pd.Timestamp(mcap["report_date"].max()).date(),
+        "val_series_n": int(len(mcap)),
+    }
 
     return {
         "pe": pe,
         "pb": pb_now,
         "dividend_yield": dividend_yield,
+        "dividend_year": dividend_year,
+        "dividend_total": dividend_total,
+        "dividend_per_share": dividend_per_share,
+        "dividend_payout_pct": dividend_payout_pct,
+        "dividend_pctile": dividend_pctile,
+        "dividend_series_n": dividend_series_n,
+        "dividend_history": dividend_history,
         "price_low": price_low,
         "price_now": price_now,
         "price_high": price_high,
         "pe_pctile": pe_pctile,
         "pb_pctile": pb_pctile,
+        "pe_chart": pe_chart,
+        "pe_median": pe_median,
+        "pe_range": pe_range,
+        **series_meta,
     }
 
 
-def _pe_pctile(mcap: pd.DataFrame, annual: pd.DataFrame) -> float | None:
-    """PE 近10年分位：用「历史市值 ÷ 同期已披露归母净利」构造历史 PE 序列。
+def _pe_series(mcap: pd.DataFrame, annual: pd.DataFrame) -> pd.Series:
+    """历史 PE 序列（index 为采样日）= 各采样日市值 ÷ 该日已披露的最近年报归母净利。
 
     市值是日频序列，净利是年报低频序列——把年报净利按 report_date 升序
     forward-fill 到每个市值采样日（该日市场只看得见已披露的最近年报净利），
-    再算 PE = 市值/净利，当前 PE 在历史 PE 序列中的百分位。
+    再算 PE = 市值/净利。PE 分位与 PE 十年走势图共用这一条序列，避免两处口径打架。
 
-    缺陷规避：不再用「市值分位」近似（市值因公司成长天然右移，会把
+    缺陷规避：不用「市值分位」近似（市值因公司成长天然右移，会把
     「公司变大」误判成「估值变贵」，导致成熟白马股 PE 分位常年 99%+）。
     """
     if "net_profit_parent" not in annual.columns:
-        return None
+        return pd.Series(dtype=float)
     np_annual = annual[["report_date", "net_profit_parent"]].dropna(
         subset=["net_profit_parent"]
     ).sort_values("report_date")
     if np_annual.empty:
-        return None
+        return pd.Series(dtype=float)
 
     # 市值日频序列 → 关联「该日已披露的最近年报净利」（merge_asof 向后取 <= 日期）
     mcap_sorted = mcap[["report_date", "value"]].sort_values("report_date")
@@ -583,10 +709,45 @@ def _pe_pctile(mcap: pd.DataFrame, annual: pd.DataFrame) -> float | None:
         on="report_date",
         direction="backward",
     )
-    pe_series = merged["value"] / merged["net_profit_parent"]
-    pe_series = pe_series[merged["net_profit_parent"] > 0]  # 剔除净利非正的样本
+    keep = merged["net_profit_parent"] > 0  # 剔除净利非正的样本
+    s = pd.Series(
+        (merged["value"] / merged["net_profit_parent"])[keep].to_numpy(),
+        index=pd.DatetimeIndex(merged["report_date"][keep]),
+        name="pe",
+    )
+    return s.dropna()
 
-    if pe_series.empty:
-        return None
-    pe_now = pe_series.iloc[-1]
-    return float((pe_series < pe_now).mean() * 100)
+
+# 分红年度 Y 的派息要到次年 4 月末（年报 + 股东大会决议）才为市场所知。
+# 直接用 report_date 对齐会把「事后才知道的分红」提前到当年 12-31，系统性高估历史股息率。
+_DIV_DISCLOSURE_LAG = pd.DateOffset(months=4)
+
+
+def _dividend_yield_series(annual: pd.DataFrame, mcap: pd.DataFrame) -> pd.Series:
+    """历史股息率序列（%）= 各采样日「市场已知的最近年度分红总额」÷ 该日市值 × 100。
+
+    与 PE 序列同一套 merge_asof 思路，唯一差别是分红总额要按披露时点后移
+    （见 _DIV_DISCLOSURE_LAG），否则每年 1-4 月这一段会用到当时还不存在的数据。
+    """
+    if "dividend_total" not in annual.columns:
+        return pd.Series(dtype=float)
+    dv = annual[["report_date", "dividend_total"]].dropna(subset=["dividend_total"])
+    dv = dv[dv["dividend_total"] > 0].sort_values("report_date")
+    if dv.empty:
+        return pd.Series(dtype=float)
+    dv = dv.assign(effective=dv["report_date"] + _DIV_DISCLOSURE_LAG)
+    m = mcap[["report_date", "value"]].sort_values("report_date").rename(columns={"value": "mcap"})
+    merged = pd.merge_asof(
+        m,
+        dv[["effective", "dividend_total"]],
+        left_on="report_date",
+        right_on="effective",
+        direction="backward",
+    )
+    s = merged["dividend_total"] / merged["mcap"] * 100
+    keep = merged["dividend_total"].notna()
+    return pd.Series(
+        s[keep].to_numpy(),
+        index=pd.DatetimeIndex(merged["report_date"][keep]),
+        name="dividend_yield",
+    ).dropna()

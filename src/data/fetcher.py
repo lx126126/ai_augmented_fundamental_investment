@@ -7,11 +7,37 @@
 from __future__ import annotations
 
 import os
+import re
+import threading
 
 # 环境变量可能有 Veee 代理残留（15236），AKShare 拉国内站点（东财/新浪/百度/腾讯）
 # 必须禁用代理直连，否则接口可能超时或返回空数据。
 for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
     os.environ.pop(_k, None)
+
+
+def _force_direct_connection() -> None:
+    """禁止 requests/urllib 走代理，强制直连。
+
+    🔴 只 pop 环境变量不够：macOS 上 `urllib.request.getproxies()` 在环境变量为空时
+    会继续读**系统网络配置**（`getproxies_macosx_sysconf` → `_scproxy`），所以
+    requests 仍然会走系统代理。实测后果：`stock_zh_a_hist`（push2his.eastmoney.com）
+    稳定抛 `ProxyError: ... RemoteDisconnected`，而其它东财接口恰好被代理放行，
+    表现为「只有日 K 拉不到」这种极难定位的局部故障。
+
+    这里把两个上游取值函数置空。注意 `requests.utils` 里 `getproxies` 是按值导入的，
+    不能直接 patch 它；但 `getproxies` 内部是按模块全局查找这两个函数的，
+    所以 patch 它们能穿透到 requests。
+    """
+    try:
+        import urllib.request as _ur
+        _ur.getproxies_environment = lambda: {}
+        _ur.getproxies_macosx_sysconf = lambda: {}
+    except Exception:  # 非 macOS / 极老解释器：静默跳过，不影响主流程
+        pass
+
+
+_force_direct_connection()
 
 import akshare as ak
 import pandas as pd
@@ -109,10 +135,16 @@ def fetch_cash_flow(code: str) -> pd.DataFrame:
 
 @retry()
 def fetch_dividend(code: str) -> pd.DataFrame:
-    """分红送配：每10股派息、股息率、总股本（普通股数量）。"""
+    """分红送配：每10股派息、股息率、总股本（普通股数量）、除权除息日。"""
     raw = ak.stock_fhps_detail_em(symbol=code)
     df = _remap(raw, DIVIDEND_MAP).copy()
     df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
+    # 除权除息日：算前复权序列的唯一时间锚点。未实施分配的行（预案/预披露）为空，
+    # 统一 coerce 成 NaT —— 绝不能拿 report_date 兜底当除权日，两者相差可达半年
+    # （茅台 2025 年度分红：报告期 2025-12-31，实际除权日 2026-06-26），
+    # 用报告期会把 2026 年 1-6 月的价格整段错误下调 28 元。
+    if "ex_date" in df.columns:
+        df["ex_date"] = pd.to_datetime(df["ex_date"], errors="coerce").astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     df["dividend_yield_pct"] = df["dividend_yield"] * 100  # 小数 → 百分比
     return df
@@ -152,11 +184,53 @@ def fetch_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None
     return df
 
 
+_QUOTE_TS_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$")
+
+
+def _parse_quote_time(raw) -> pd.Timestamp | None:
+    """解析腾讯行情快照时间戳（f[30]，形如 20260911115521）。
+
+    容错：非 14 位纯数字、或年份明显不合理（<2000）时返回 None。
+    港股等其它字段布局下，同一位置可能是无关字段，此处不猜、直接放弃。
+    """
+    if raw is None:
+        return None
+    m = _QUOTE_TS_RE.match(str(raw).strip())
+    if not m:
+        return None
+    y, mo, d, h, mi, s = (int(g) for g in m.groups())
+    if y < 2000:
+        return None
+    try:
+        return pd.Timestamp(y, mo, d, h, mi, s)
+    except ValueError:
+        return None
+
+
+def _is_intraday(ts) -> bool | None:
+    """该快照是否处于交易时段（A 股 09:30–11:30 / 13:00–15:00）。
+
+    True  → 价格是盘中价，报告不得标「最新收盘」。
+    False → 已收盘（或非交易日，时间戳停在上一交易日的 15:00）。
+    None  → 时间戳缺失，无法判断，由调用方保守处理。
+    """
+    if ts is None or pd.isna(ts):
+        return None
+    if ts.weekday() >= 5:  # 周末不可能有成交
+        return False
+    minutes = ts.hour * 60 + ts.minute
+    return (9 * 60 + 30) <= minutes < 15 * 60
+
+
 def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
-    """腾讯行情：公司名、现价、PE(TTM)、PB、总市值、52周高低（实时精确）。
+    """腾讯行情：公司名、现价、PE(TTM)、PB、总市值、快照时间戳。
+
+    ⚠️ 本接口的 52 周高低字段（f[47]/f[48]）**已知与实际成交价不符**：
+    实测 600519 腾讯返回 1413.64，而东财不复权日 K 近一年真实最高为
+    1568.00（2026-02-06），差异足以让「现价在区间中的位置」从 28.9% 画成 44.8%。
+    故价格区间一律以 fetch_kline 为准；本接口的 price_52w_* 仅作兜底保留。
 
     走 qt.gtimg.cn（腾讯域名，网络受限时东财 push2 的替代）。
-    字段：name/price/pe/pb/market_cap/price_52w_high/price_52w_low
     market：可选交易所前缀（如港股传 "hk"），默认按 A 股规则推断。
     """
     import requests
@@ -169,7 +243,6 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
         r.raise_for_status()
     except Exception:
         return None
-    import re
     m = re.search(r'="([^"]*)"', r.text)
     if not m:
         return None
@@ -182,7 +255,7 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
         except (ValueError, TypeError):
             return default
     # 腾讯行情字段布局：A 股与港股不同（港股 f[46] 是英文名而非 PB）。
-    # A 股: f[39]=PE(TTM), f[46]=PB, f[45]=总市值, f[47]=52周高, f[48]=52周低
+    # A 股: f[30]=快照时间戳, f[39]=PE(TTM), f[46]=PB, f[45]=总市值, f[47]=52周高, f[48]=52周低
     # 港股: f[57]=PE(TTM), f[58]=PB, f[45]=总市值, f[48]=52周高, f[49]=52周低
     if market == "hk":
         pe_idx, pb_idx, high_idx, low_idx = 57, 58, 48, 49
@@ -190,6 +263,7 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     else:
         pe_idx, pb_idx, high_idx, low_idx = 39, 46, 47, 48
         div_yield_idx = None  # A 股股息率由分红接口 dividend_yield_pct 提供
+    ts = _parse_quote_time(f[30] if len(f) > 30 else None)
     row = {
         "name": f[1],
         "price": _num(f[3]),
@@ -199,10 +273,131 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
         "price_52w_high": _num(f[high_idx]),
         "price_52w_low": _num(f[low_idx]),
         "symbol": code.zfill(6),
+        # 快照时间戳：此前被整段丢弃，导致 quote_date 恒为 None、
+        # 报告「发布日期」退化成生成日、估值面板把盘中价误标成「最新收盘」。
+        "report_date": ts,
+        "change": _num(f[31]) if len(f) > 31 else None,
+        "change_pct": _num(f[32]) if len(f) > 32 else None,
+        "is_intraday": _is_intraday(ts),
     }
     if div_yield_idx is not None:
         row["dividend_yield"] = _num(f[div_yield_idx])
     return pd.DataFrame([row])
+
+
+_KLINE_COL_MAP = {
+    "日期": "report_date", "date": "report_date",
+    "开盘": "open", "收盘": "close", "最高": "high", "最低": "low",
+    "成交量": "volume", "成交额": "amount",
+    "涨跌幅": "change_pct",
+    # ⚠️ 不要把腾讯的 "turnover" 映射成 "amount"：腾讯日 K 同时返回 turnover 与
+    # amount 两列，映射成同名会导致 parquet 写入报 Duplicate column names。
+    "turnover": "turnover",
+}
+
+_KLINE_TIMEOUT_S = 25  # 单源墙钟超时
+_TIMEOUT = object()    # 超时哨兵
+
+
+def _call_with_timeout(fn, timeout_s: float, *args):
+    """在守护线程里调用 fn，超时即放弃。
+
+    为什么必须有超时保护：akshare 的 stock_zh_a_hist 的 timeout 参数默认 None
+    = **无限等待**，而实测某些网络环境下该接口的连接会被链路静默挂死
+    （既不返回也不报错）。没有保护时整条数据管道会永久卡住——实测卡死 9 分钟
+    无任何输出，最后靠人工中断才发现。用守护线程是为了超时后不影响进程退出。
+    """
+    box: dict = {}
+
+    def _run():
+        try:
+            box["v"] = fn(*args)
+        except BaseException as exc:  # noqa: BLE001 - 需要把异常带回主线程
+            box["e"] = exc
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout_s)
+    if t.is_alive():
+        return _TIMEOUT
+    if "e" in box:
+        raise box["e"]
+    return box.get("v")
+
+
+def _kline_source_em(sym: str, start: str, end: str):
+    # 该源的 timeout 默认 None = 无限等待，必须显式给值
+    return ak.stock_zh_a_hist(symbol=sym, period="daily", start_date=start,
+                              end_date=end, adjust="", timeout=10)
+
+
+def _kline_source_tx(sym: str, start: str, end: str):
+    return ak.stock_zh_a_hist_tx(symbol=_em_symbol(sym).lower(),
+                                 start_date=start, end_date=end, adjust="")
+
+
+def _kline_source_sina(sym: str, start: str, end: str):
+    return ak.stock_zh_a_daily(symbol=_em_symbol(sym).lower(),
+                               start_date=start, end_date=end, adjust="")
+
+
+# 日 K 数据源（按项目「主源东财、备用腾讯/新浪」策略排序）
+# 🔴 实测教训：部分网络环境下 push2his.eastmoney.com（东财 K 线）会被链路直接重置
+# （ConnectionError: RemoteDisconnected）甚至静默挂死，而其它东财接口恰好正常 ——
+# 表现为「只有日 K 拉不到」的局部故障。故必须多源回退 + 超时保护。
+_KLINE_SOURCES = (
+    ("东财", _kline_source_em),
+    ("腾讯", _kline_source_tx),
+    ("新浪", _kline_source_sina),
+)
+
+
+def fetch_kline(code: str, days: int = 400, sources=_KLINE_SOURCES) -> pd.DataFrame | None:
+    """日 K 线（不复权，多源回退）：作为「近一年价格区间」的权威口径。
+
+    为什么单独拉这张表：腾讯行情 q= 接口的 52 周高低字段与实际成交价不符。
+    实测 600519：行情接口给 1413.64 / 1156.62，而东财、腾讯、新浪三家的日 K
+    一致给出近一年 1568.00 / 1151.01。差异足以让报告里「现价在区间中的位置」
+    从真实的 28.9% 画成 44.8% —— 这是会直接对外错的数字。
+
+    仅支持 A 股；港股日 K 接口不同（stock_hk_hist），此处返回 None 交由调用方回退。
+
+    Returns:
+        标准列 report_date/open/high/low/close/volume/amount/change_pct/symbol/src，
+        全部为不复权口径。全部数据源失败时返回 None。
+    """
+    symbol = str(code).strip().split(".")[0]
+    if not symbol.isdigit() or len(symbol) != 6:
+        return None
+    end = pd.Timestamp.today().normalize()
+    start = end - pd.Timedelta(days=days)
+    s_str, e_str = start.strftime("%Y%m%d"), end.strftime("%Y%m%d")
+
+    for src_name, fn in sources:
+        try:
+            raw = _call_with_timeout(fn, _KLINE_TIMEOUT_S, symbol, s_str, e_str)
+        except Exception:
+            continue  # 该源不可用（网络/限流/接口变更）→ 换下一个
+        if raw is _TIMEOUT or raw is None or len(raw) == 0:
+            continue
+        df = raw.rename(columns=_KLINE_COL_MAP)
+        df = df.loc[:, ~df.columns.duplicated()]  # 防御：源改动导致重名列
+        if "report_date" not in df.columns or "close" not in df.columns:
+            continue
+        df = df.copy()
+        df["report_date"] = pd.to_datetime(df["report_date"])
+        df["symbol"] = symbol
+        # 数据溯源：写明本表来自哪个源，供校验记录/审计用
+        df["src"] = src_name
+        keep = ["report_date", "open", "high", "low", "close",
+                "volume", "amount", "change_pct", "symbol", "src"]
+        out = (df[[c for c in keep if c in df.columns]]
+               .dropna(subset=["close"])
+               .sort_values("report_date")
+               .reset_index(drop=True))
+        if not out.empty:
+            return out
+    return None
 
 
 def _hk_code(code: str) -> str:
@@ -562,6 +757,10 @@ def fetch_all(code: str, start_year: str = "2005") -> dict[str, pd.DataFrame]:
     quote = fetch_quote(code)
     if quote is not None:
         data["quote"] = quote
+    # 日 K（不复权）：近一年价格区间的权威口径，详见 fetch_kline 文档字符串
+    kline = fetch_kline(code)
+    if kline is not None and not kline.empty:
+        data["kline"] = kline
     rating = fetch_rating(code)
     if rating is not None:
         data["rating"] = rating

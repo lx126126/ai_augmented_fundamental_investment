@@ -1,0 +1,59 @@
+# fqf 依赖清单（根目录级 —— 覆盖 src/ scripts/ tests/ 的运行依赖）
+#
+# 为什么有这个文件：此前仓库只有 airflow/requirements.txt，本地开发环境完全没有固化，
+# 换机器只能靠猜。本文件是 2026-09-11 在 macOS x86_64 / Python 3.13.12 上
+# 从零重建并实测通过的一组版本 —— 对应测试结果：131 passed, 9 skipped, 0 failed。
+#
+# 用法：
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#   playwright install chromium      # playwright 的浏览器二进制要单独下
+
+# ---------- 数据处理 ----------
+pandas==3.0.5
+numpy==2.5.3
+
+# ---------- 数仓 ----------
+duckdb==1.5.5
+
+# ---------- 数据源 ----------
+akshare==1.18.94
+
+# ---------- 抓取与解析 ----------
+requests==2.34.2
+
+# ⚠️ playwright 不要升到 1.49+：新版内置了「Playwright does not support chromium on mac12」
+# 的硬性拦截，而本机是 macOS 12.7.6 (Monterey) x86_64，装了也起不来浏览器。
+# 1.48.0 绑定的 Chromium 130 可在 macOS 12 上跑（下载回来的 ffmpeg 包名就叫
+# ffmpeg_mac12_special-1010，可见该版本仍官方支持 Monterey）。
+# 若将来升级 macOS 到 13+，可解锁新版本；否则请锁死在本行。
+playwright==1.48.0
+PyMuPDF==1.28.2          # 代码里是 import fitz。fitz 已标记废弃，后续可平滑改为 import pymupdf
+
+# ---------- 后端 API ----------
+fastapi==0.141.1
+uvicorn==0.52.4
+
+# ---------- 数据库驱动 ----------
+psycopg2-binary==2.9.13
+
+# ---------- 测试 ----------
+pytest==9.1.1
+
+# ---------- 隐式依赖：代码里检索不到 import，但缺了会挂 ----------
+pyarrow==25.0.1
+# 为什么必须写进来：pandas 读写 parquet 的引擎。
+# 缺它时 tests/test_storage.py、tests/test_warehouse.py 会报
+#   ImportError: Unable to find a usable engine; tried using: 'pyarrow', 'fastparquet'
+# 因为代码里没有 `import pyarrow`，任何基于 import 的依赖扫描都会漏掉它。
+
+# ---------- 注意：jsonpath 只有源码包，pip 直接装会失败 ----------
+# akshare 依赖 jsonpath，而 jsonpath 在 PyPI 上只发布 sdist（jsonpath==0.82.2）。
+# 直接 `pip install akshare` 时，pip 会在「下载并解包」环节稳定报：
+#   OSError: EEXIST: file already exists, mkdir '.../pip-install-xxxx/jsonpath_xxxx'
+# 变通做法（已验证）：手工给它打一个 wheel 再装。wheel 规范上就是一个特定结构的 zip：
+#   jsonpath.py
+#   jsonpath-0.82.2.dist-info/{METADATA,WHEEL,top_level.txt,RECORD}
+# 打完 `pip install jsonpath-0.82.2-py3-none-any.whl`，pip 会正常校验 RECORD 并安装。
+# 装上之后 jsonpath 这个依赖就被满足了，此时再 `pip install akshare` 即可通过。
+# 若将来 pip 修掉了这个 bug，本段可删，直接 pip install -r requirements.txt 即可。
