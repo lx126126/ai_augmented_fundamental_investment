@@ -187,6 +187,41 @@ PB 近10年分位：{(data.get('valuation') or {}).get('pb_pctile', 'N/A')}%
 6. {_NA_RULE}"""
 
 
+def chat_json(system: str, prompt: str, max_tokens: int = 2000,
+              temperature: float = 0.3) -> dict | None:
+    """通用 JSON 生成入口：调用 DeepSeek 并解析 JSON；未配置 key / 调用失败返回 None。
+
+    与 generate_narrative 的区别是「不绑定具体任务」，季度财报解读等新增场景直接复用，
+    避免每加一个 LLM 场景就复制一遍 requests + json.loads。
+    """
+    cfg = _load_config()
+    if not cfg:
+        print("[llm] 未配置 DEEPSEEK_API_KEY，跳过本次生成")
+        return None
+    key, model, base = cfg
+    try:
+        r = requests.post(
+            f"{base}/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "response_format": {"type": "json_object"},
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            timeout=120,
+        )
+        r.raise_for_status()
+        return json.loads(r.json()["choices"][0]["message"]["content"])
+    except Exception as e:
+        print(f"[llm] 调用失败: {e}")
+        return None
+
+
 def generate_narrative(data: dict) -> dict | None:
     """调用 DeepSeek，生成叙事层 JSON。失败返回 None。"""
     cfg = _load_config()

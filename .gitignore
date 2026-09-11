@@ -4,6 +4,10 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+.pytest_cache/
+# 测试临时目录。用通配是为了覆盖 --basetemp 的各种变体名
+# （只写死 .pytest_tmp/ 时，一次 `.pytest_tmp_fresh` 就会污染 git status）。
+.pytest_tmp*/
 
 # 个人练习脚本（不入库）；正式的 pytest 测试在 tests/ 目录，须入库
 /test*.py

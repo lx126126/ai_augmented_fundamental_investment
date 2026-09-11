@@ -13,6 +13,7 @@
     --refresh-narrative  忽略叙事层缓存，强制重新调用 LLM 生成
 """
 from __future__ import annotations
+import os
 import sys
 from pathlib import Path
 
@@ -33,6 +34,13 @@ try:
 except Exception:
     _HAS_LLM = False
 
+# 尝试导入季度财报解读（可选，无 key / 无网络时降级为占位）
+try:
+    from src.report.quarterly_review import get_or_generate as get_quarter_review
+    _HAS_QREVIEW = True
+except Exception:
+    _HAS_QREVIEW = False
+
 # 示例数据（仅降级用；真实渲染用 adapter 从 parquet 读取）
 from _sample_data import (
     SAMPLE_YEARS,
@@ -41,6 +49,32 @@ from _sample_data import (
     SAMPLE_QUARTERLY,
     SAMPLE_SEGMENTS,
 )
+
+
+def _env(name: str, default: str | None = None) -> str | None:
+    """读环境变量，缺失时回退读仓库根目录 .env（与 src/report/llm._load_config 同口径）。"""
+    val = os.environ.get(name)
+    if val is None:
+        env_path = Path(__file__).resolve().parent.parent / ".env"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line.startswith(f"{name}="):
+                    val = line.split("=", 1)[1].strip()
+                    break
+    val = (val or "").strip()
+    return val or default
+
+
+def _verifier_row() -> str:
+    """校验人署名。
+
+    ⚠️ 此前该行硬编码真实姓名，而报告会用于公开发布（小红书 / 小程序），等于在
+    每份对外材料上署名泄露真实身份。改为从 REPORT_VERIFIER 读取；未配置时
+    整行不渲染（隐私安全的默认值）。
+    """
+    name = _env("REPORT_VERIFIER")
+    return f'<div><b>校验人：</b>{name}</div>' if name else ""
 
 # 当前渲染用的数据（默认示例，build() 时若 parquet 存在则被真实数据覆盖）
 YEARS = SAMPLE_YEARS
@@ -61,6 +95,8 @@ PIE_DATA = None          # 构成饼图（最新年报五大类子科目构成�
 COMPANY_NAME = "中国神华"  # 公司名（真实数据时由 adapter 提供）
 COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
+QUARTER_REVIEW = None      # 季度财报解读（定期报告原文 + 单季事实 → DeepSeek）
+OPERATING = None           # 经营结构：分产品/渠道/地区 收入占比·毛利率·同比 + 年度经营计划
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
 SANITY = None              # 业务勾稽体检结果（会计恒等式/利润勾稽/比率边界/同比异常）
 CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
@@ -305,14 +341,344 @@ def build_val_grid() -> str:
     dy = f"{v['dividend_yield']:.1f}<small>%</small>" if v.get("dividend_yield") else "—"
     pe_pct, pe_cls, _ = _pct_text(v.get("pe_pctile"))
     pb_pct, pb_cls, _ = _pct_text(v.get("pb_pctile"))
+    dy_pct, dy_cls, _ = _pct_text(v.get("dividend_pctile"))
+
+    def _fmt_dt(x, fmt: str) -> str | None:
+        return x.strftime(fmt) if hasattr(x, "strftime") else None
+
+    # 价格口径标注：盘中价 / 收盘价。此前恒标「最新收盘」，但行情快照可能取自交易时段内
+    # （实测 600519 快照时间为 11:55），把盘中价标成「收盘」是对外可被证伪的错误。
+    intraday = v.get("is_intraday")
+    hhmm = _fmt_dt(v.get("quote_time"), "%H:%M")
+    if intraday and hhmm:
+        price_note = f"盘中价 {hhmm}"
+    else:
+        _d = _fmt_dt(v.get("price_now_date") or v.get("quote_date"), "%m-%d")
+        if _d is None:
+            price_note = "最新价"
+        else:
+            price_note = f"{'收盘价' if intraday is False else '最新价'} {_d}"
+
+    # 股息率口径 = 最近年度分红总额 ÷ 当前市值，与 PE/PB 同分母（当前市值），
+    # 所以它能像 PE/PB 一样给历史分位。年度必须标出来：2026 中报分红行存在但为空，
+    # 不标年度会让人误读成「2026 年股息率」。
+    _dy_year = v.get("dividend_year")
+    dy_lbl = f"股息率（{_dy_year} 年度）" if _dy_year else "股息率"
+    dy_note = f"近10年分位 {dy_pct}" if dy_pct != "—" else "分位 —"
+
+    # 每股股息卡片：把「每股股息 / 分红总额 / 分红比例」三个口径放在一起，
+    # 单看股息率无法判断是「分红多」还是「股价跌下来的」。
+    dps = v.get("dividend_per_share")
+    dps_txt = f"{dps:.2f}<small>元/股</small>" if dps else "—"
+    _dt, _dp = v.get("dividend_total"), v.get("dividend_payout_pct")
+    _bits = []
+    if _dt:
+        _bits.append(f"分红总额 {_dt:.1f} 亿")
+    if _dp:
+        _bits.append(f"分红比例 {_dp:.1f}%")
+    dps_note = " · ".join(_bits) if _bits else "—"
+
     return (
         '<div class="val-grid">'
-        f'<div class="val-item"><div class="lbl">总市值</div><div class="v">{mcap_txt}</div><div class="pct">最新收盘</div></div>'
+        f'<div class="val-item"><div class="lbl">总市值</div><div class="v">{mcap_txt}</div><div class="pct">{price_note}</div></div>'
         f'<div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">{pe}</div><div class="pct {pe_cls}">近10年分位 {pe_pct}</div></div>'
         f'<div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">{pb}</div><div class="pct {pb_cls}">近10年分位 {pb_pct}</div></div>'
-        f'<div class="val-item"><div class="lbl">股息率</div><div class="v" style="color:var(--up)">{dy}</div><div class="pct">最新报告期</div></div>'
+        f'<div class="val-item"><div class="lbl">{dy_lbl}</div><div class="v" style="color:var(--up)">{dy}</div><div class="pct {dy_cls}">{dy_note}</div></div>'
+        f'<div class="val-item"><div class="lbl">每股股息</div><div class="v">{dps_txt}</div><div class="pct">{dps_note}</div></div>'
         "</div>"
     )
+
+
+def build_pe_chart() -> str:
+    """PE（TTM）近十年走势图：自绘 SVG，无外部依赖，可直接被 Playwright 导成 PNG/PDF。
+
+    「PE 19.5 处近 10 年 1% 分位」是这份报告里最强的估值断言，但只给一个分位数，
+    读者分不清是「十年低位横盘」还是「刚从高位砸下来」——走势图就是这条断言的证据。
+    序列与 PE 分位同源（见 cleaner._pe_series），不会出现「图上是 25 倍、文案说 19.5 倍」。
+    """
+    if not VALUATION:
+        return ""
+    series = VALUATION.get("pe_chart") or []
+    if len(series) < 8:
+        return ""
+    med = VALUATION.get("pe_median")
+    rng = VALUATION.get("pe_range") or {}
+    lo = rng.get("lo") if rng.get("lo") is not None else min(p["pe"] for p in series)
+    hi = rng.get("hi") if rng.get("hi") is not None else max(p["pe"] for p in series)
+    if hi <= lo:
+        hi = lo + 1.0
+
+    # 上下各留 10% 余量，避免极值点贴着边框
+    span = hi - lo
+    lo2, hi2 = lo - span * 0.10, hi + span * 0.10
+    W, H, PL, PR, PT, PB = 960, 200, 54, 14, 16, 30
+    pw, ph = W - PL - PR, H - PT - PB
+    n = len(series)
+
+    def _x(i: int) -> float:
+        return PL + (i / (n - 1)) * pw
+
+    def _y(val: float) -> float:
+        return PT + (hi2 - val) / (hi2 - lo2) * ph
+
+    pts = [(_x(i), _y(p["pe"])) for i, p in enumerate(series)]
+    # 末点强制对齐「估值面板里的 PE」：面板的 PE 取自行情接口、序列末点是自算值，
+    # 两者通常只差 0.0x，但一旦有差异，图上写 19.5x、面板写 20.3x 就成了同页矛盾。
+    now_pe = VALUATION.get("pe") or series[-1]["pe"]
+    pts[-1] = (pts[-1][0], _y(now_pe))
+    line = " ".join(f"{x:.1f},{y:.1f}" for x, y in pts)
+    area = f"{PL:.1f},{PT + ph:.1f} " + line + f" {PL + pw:.1f},{PT + ph:.1f}"
+
+    # 横向参考线：最低 / 中位数 / 最高（中位数为虚线，是「贵不贵」的锚）
+    ticks = []
+    for val, lab in ((hi, f"{hi:.0f}x"), (med, f"{med:.0f}x"), (lo, f"{lo:.0f}x")):
+        if val is None:
+            continue
+        yv = _y(val)
+        if not (PT - 1 <= yv <= PT + ph + 1):
+            continue
+        dash = ' stroke-dasharray="4 3"' if lab == f"{med:.0f}x" and med is not None else ""
+        ticks.append(
+            f'<line x1="{PL}" y1="{yv:.1f}" x2="{PL + pw:.1f}" y2="{yv:.1f}" '
+            f'stroke="var(--line)" stroke-width="0.6"{dash}/>'
+            f'<text x="{PL - 6}" y="{yv + 3:.1f}" text-anchor="end" font-size="11" '
+            f'fill="var(--faint)">{lab}</text>'
+        )
+
+    med_lab = ""
+    if med is not None:
+        # 白描边（paint-order: stroke）给文字垫底：中位线横穿折线区，不垫底会读不清
+        med_lab = (f'<text x="{PL + 6}" y="{_y(med) - 5:.1f}" font-size="11" '
+                   f'fill="var(--muted)" stroke="#ffffff" stroke-width="3" paint-order="stroke">'
+                   f'近十年中位数 {med:.1f}x</text>')
+
+    # 现值：点 + 标签（标签右对齐并夹在绘图区内，避免贴边被裁）
+    nx, ny = pts[-1]
+    now_lab_y = max(PT + 11, ny - 11)
+    now_pt = (
+        f'<circle cx="{nx:.1f}" cy="{ny:.1f}" r="3.5" fill="var(--accent-2)"/>'
+        f'<text x="{nx:.1f}" y="{now_lab_y:.1f}" text-anchor="end" font-size="12" '
+        f'font-weight="600" fill="var(--accent)" stroke="#ffffff" stroke-width="3" '
+        f'paint-order="stroke">现值 {now_pe:.1f}x</text>'
+    )
+
+    # 横轴：起点 / 终点（年月，避免只写年份无法判断跨度）
+    d0, d1 = series[0]["d"], series[-1]["d"]
+    xlab = (
+        f'<text x="{PL}" y="{H - 10}" font-size="10" fill="var(--faint)">{d0.strftime("%Y-%m")}</text>'
+        f'<text x="{PL + pw:.1f}" y="{H - 10}" text-anchor="end" font-size="10" '
+        f'fill="var(--faint)">{d1.strftime("%Y-%m")}</text>'
+    )
+
+    return (
+        '<div class="pe-chart">'
+        '<div class="pe-title">PE（TTM）近十年走势'
+        '<span class="pe-note">与「近10年分位」同一条序列 · 历史市值 ÷ 同期已披露年报归母净利</span></div>'
+        f'<svg viewBox="0 0 {W} {H}" width="100%" role="img" '
+        f'aria-label="PE 十年走势，现值 {now_pe:.1f} 倍，中位数 {med:.1f} 倍">'
+        f'<polygon points="{area}" fill="var(--accent-2)" fill-opacity="0.07"/>'
+        + "".join(ticks)
+        + med_lab
+        + f'<polyline points="{line}" fill="none" stroke="var(--accent-2)" stroke-width="1.4"/>'
+        + now_pt
+        + xlab
+        + "</svg></div>"
+    )
+
+
+def build_div_history() -> str:
+    """分红历史：上下两块面板，共用同一条年份轴。
+
+    上面板 = 分红比例（%，折线），下面板 = 每股股息（元，柱）。
+
+    为什么拆成两块而不是挤在一张双轴图里（上一版的失败教训）：
+    1. 上一版在柱顶又叠了「分红总额」数字。分红总额 = 每股股息 × 股本，而茅台股本十年未变，
+       两条曲线形状完全重合，是纯粹的冗余编码；更要命的是它占据了柱顶位置，与右侧
+       「现值 xx%」标注在最后一年直接压在一起（实测 651 与「现值 79.1%」重叠）。
+    2. 同时把「比例」轴拉满到 0–100%，而数据只在 51–79% 之间活动，台阶被压成一条平线；
+       下面板与上面板各自用贴合数据的量程，51.9% 的十年平坦段与 2024 年的跳动才分得开。
+    3. 双轴图还有一个隐性代价：读者无法判断两根柱子的高度差对应右轴多少个百分点。
+       拆成两块后每块只有一个量纲，不需要在脑子里做轴换算。
+
+    分红总额不再是图形，改为写在标题右侧的一句话摘要——它是结论不是趋势，不必占图形。
+    """
+    if not VALUATION:
+        return ""
+    hist = [h for h in (VALUATION.get("dividend_history") or []) if h.get("dps")]
+    if len(hist) < 3:
+        return ""
+
+    W = 960
+    PL, PR = 46, 30
+    pw = W - PL - PR
+    PH = 74                      # 单块绘图区高度
+    PT1 = 18                     # 上面板（分红比例）顶
+    PT2 = PT1 + PH + 34          # 下面板（每股股息）顶，34 = 上面板轴标签 + 间隙
+    XL = PT2 + PH + 17           # 年份标签基线
+    H = XL + 8
+
+    n = len(hist)
+    base1 = PT1 + PH
+    base2 = PT2 + PH
+
+    def _x(c: int) -> float:
+        return PL + (c + 0.5) / n * pw
+
+    def _nice(v: float, step: float) -> float:
+        return step * (int(v / step) + (1 if v % step else 0))
+
+    # ---- 上面板：分红比例（%）----
+    pcts = [h["payout_pct"] for h in hist if h.get("payout_pct")]
+    p_min, p_max = (min(pcts), max(pcts)) if pcts else (0.0, 100.0)
+    p_lo = max(0.0, (int((p_min - 6) // 5)) * 5)
+    p_hi = _nice(p_max + 6, 5.0)
+    if p_hi - p_lo < 20:
+        p_hi = p_lo + 20
+
+    def _yp(v: float) -> float:
+        return base1 - (v - p_lo) / (p_hi - p_lo) * PH
+
+    # ---- 下面板：每股股息（元）----
+    dps_max = max(h["dps"] for h in hist)
+    d_hi = _nice(dps_max * 1.10, 10.0)
+
+    def _yd(v: float) -> float:
+        return base2 - (v / d_hi) * PH
+
+    # 年份轴（两块共用，只画一次）
+    xlabels = "".join(
+        f'<text x="{_x(c):.1f}" y="{XL}" text-anchor="middle" font-size="10" '
+        f'fill="var(--faint)">{h["year"]}</text>'
+        for c, h in enumerate(hist)
+    )
+
+    # 上面板网格 + 左刻度（%）
+    grid1, tick1 = [], []
+    for v in (p_lo, (p_lo + p_hi) / 2, p_hi):
+        y = _yp(v)
+        grid1.append(
+            f'<line x1="{PL}" y1="{y:.1f}" x2="{PL + pw:.1f}" y2="{y:.1f}" '
+            f'stroke="var(--line)" stroke-width="0.5" stroke-opacity="0.7"/>'
+        )
+        tick1.append(
+            f'<text x="{PL - 6}" y="{y + 3:.1f}" text-anchor="end" font-size="9.5" '
+            f'fill="var(--faint)">{v:.0f}%</text>'
+        )
+
+    # 下面板网格 + 左刻度（元）
+    grid2, tick2 = [], []
+    for v in (0, d_hi / 2, d_hi):
+        y = _yd(v)
+        grid2.append(
+            f'<line x1="{PL}" y1="{y:.1f}" x2="{PL + pw:.1f}" y2="{y:.1f}" '
+            f'stroke="var(--line)" stroke-width="0.5" stroke-opacity="0.7"/>'
+        )
+        tick2.append(
+            f'<text x="{PL - 6}" y="{y + 3:.1f}" text-anchor="end" font-size="9.5" '
+            f'fill="var(--faint)">{v:.0f}</text>'
+        )
+
+    # 上面板：折线（缺值断线，不插值——插值会凭空造出一个派息率）
+    pts = [(c, h["payout_pct"]) for c, h in enumerate(hist) if h.get("payout_pct")]
+
+    # 十年中位数（虚线位置）。放在标题里说明，而不是贴着虚线左侧写注释：
+    # 左侧第一个数据点（2016 = 51.0%）的数值标签与虚线几乎同高，两段文本会直接叠在
+    # 一起（实测截图里「十年中位数 51.9%」把「51.0%」压住了）。虚线已把「常态在哪」
+    # 画出来，文字只需说明它是什么，放右上角不会碰到任何数据。
+    med = None
+    if pts:
+        vals = sorted(v for _, v in pts)
+        med = (vals[len(vals) // 2] if len(vals) % 2
+               else (vals[len(vals) // 2 - 1] + vals[len(vals) // 2]) / 2)
+
+    # 面板小标题（左上角）
+    ptitle = (
+        f'<text x="{PL}" y="{PT1 - 6}" font-size="10" font-weight="600" '
+        f'fill="var(--muted)">分红比例（%）</text>'
+        + (f'<text x="{PL + pw}" y="{PT1 - 6}" text-anchor="end" font-size="9.5" '
+           f'fill="var(--faint)">虚线 = 十年中位数 {med:.1f}%</text>' if med is not None else "")
+        + f'<text x="{PL}" y="{PT2 - 6}" font-size="10" font-weight="600" '
+          f'fill="var(--muted)">每股股息（元）</text>'
+    )
+    poly = " ".join(f"{_x(c):.1f},{_yp(v):.1f}" for c, v in pts)
+    line = (
+        f'<polyline points="{poly}" fill="none" stroke="var(--warn)" '
+        f'stroke-width="1.6" stroke-linejoin="round"/>' if poly else ""
+    )
+    dots = "".join(
+        f'<circle cx="{_x(c):.1f}" cy="{_yp(v):.1f}" r="2.5" fill="var(--warn)"/>'
+        for c, v in pts
+    )
+
+    # 十年平坦段的中位参考线（不写死 51.9%，换标的自适应）
+    ref = ""
+    if med is not None:
+        my = _yp(med)
+        ref = (
+            f'<line x1="{PL}" y1="{my:.1f}" x2="{PL + pw:.1f}" y2="{my:.1f}" '
+            f'stroke="var(--warn)" stroke-width="0.8" stroke-dasharray="4 3" '
+            f'stroke-opacity="0.55"/>'
+        )
+
+    # 上面板：只在「比例发生变化」的年份标数（2016–2023 全等于 51.9%，标十个数字纯属噪音）
+    plabels = []
+    prev_v = None
+    for c, v in pts:
+        changed = prev_v is None or abs(v - prev_v) >= 0.5
+        prev_v = v
+        if not changed and c != len(hist) - 1:
+            continue
+        ly = _yp(v) + (14 if c == pts[-1][0] else -6)
+        anchor = "end" if c >= n - 2 else "middle"
+        dx = -4 if c >= n - 2 else 0
+        plabels.append(
+            f'<text x="{_x(c) + dx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" '
+            f'font-size="10" font-weight="600" fill="var(--warn)">{v:.1f}%</text>'
+        )
+
+    # 下面板：柱 + 每股股息数值（标在柱顶，是这块面板唯一的数字）
+    bw = min(40.0, pw / n * 0.52)
+    bars, dlabels = [], []
+    for c, h in enumerate(hist):
+        x = _x(c)
+        y = _yd(h["dps"])
+        last_one = c == n - 1
+        bars.append(
+            f'<rect x="{x - bw / 2:.1f}" y="{y:.1f}" width="{bw:.1f}" '
+            f'height="{base2 - y:.1f}" rx="2" fill="var(--accent-2)" '
+            f'fill-opacity="{"0.95" if last_one else "0.68"}"/>'
+        )
+        dlabels.append(
+            f'<text x="{x:.1f}" y="{y - 4:.1f}" text-anchor="middle" font-size="9.5" '
+            f'fill="var(--muted)">{h["dps"]:.2f}</text>'
+        )
+
+    yrs = f'{hist[0]["year"]}–{hist[-1]["year"]}'
+    last = hist[-1]
+    note = (
+        f'{yrs} · 最新 {last["year"]} 分红总额 {last["total"]:.0f} 亿 · 比例 {last["payout_pct"]:.1f}%'
+        if last.get("total") and last.get("payout_pct") else yrs
+    )
+
+    return (
+        '<div class="div-hist">'
+        f'<div class="dh-title">分红历史：比例台阶与每股股息'
+        f'<span class="dh-note">{note}</span></div>'
+        f'<svg viewBox="0 0 {W} {H}" width="100%" role="img" '
+        f'aria-label="分红历史（{yrs}）：上为分红比例、下为每股股息">'
+        + "".join(grid1) + "".join(tick1)
+        + "".join(grid2) + "".join(tick2)
+        + ptitle + ref + line + dots + "".join(plabels)
+        + "".join(bars) + "".join(dlabels)
+        + xlabels
+        + "</svg>"
+        + '<div class="dh-legend">'
+        '<span class="lg"><span class="sw line" style="background:var(--warn)"></span>分红比例（占归母净利，%）</span>'
+        '<span class="lg"><span class="sw" style="background:var(--accent-2)"></span>每股股息（元）</span>'
+        '<span class="lg"><span class="sw" style="background:var(--warn);height:2px;opacity:.55"></span>十年中位数参考线</span>'
+        "</div></div>"
+    )
+
 
 
 def build_market_row() -> str:
@@ -325,19 +691,74 @@ def build_market_row() -> str:
     pos = (now - low) / (high - low) * 100 if high > low else 50
     # 股价数据日期（与头部「发布日期」一致）
     qd = v.get("quote_date")
-    date_note = f'<span class="cp-note" style="font-weight:400;">股价日期 {qd.isoformat()}</span>' if qd else ""
+    date_note = f'<span class="cp-note" style="font-weight:400;"> · 股价日期 {qd.isoformat()}</span>' if qd else ""
+    # 高低点发生日期：给出日期才能被独立复核（此前只给数值，无法验证）
+    def _d(x) -> str:
+        return f' <span class="cp-note" style="font-weight:400;">{x.strftime("%m-%d")}</span>' if hasattr(x, "strftime") else ""
+    lo_d, hi_d = _d(v.get("price_low_date")), _d(v.get("price_high_date"))
+    # 口径标注：区间取自近一年日 K（默认前复权，与腾讯自选股一致；取不到除权日时降级不复权）
+    src_note = v.get("price_range_src")
+    src_txt = f'<span class="cp-note" style="font-weight:400;"> · {src_note}</span>' if src_note else ""
+
+    # 复权口径脚注：不复权值 + 区间内除权明细。没有这一行，读者拿 App 里的不复权价
+    # 来对（或反过来）就会认为数字错了——2026-02-06 那个高点 1568.00 / 1539.98 差 28.02，
+    # 差的正是 2026-06-26 那次派息，必须写明。
+    adj_events = v.get("price_adjust_events") or []
+    raw_hi = v.get("price_high_raw")
+    raw_lo = v.get("price_low_raw")
+    note_html = ""
+    if v.get("price_adjusted"):
+        bits = ["口径：<b>前复权</b>（腾讯「减法」口径，已剔除分红除权造成的价格跳空）"]
+        if raw_hi is not None and raw_lo is not None:
+            bits.append(f"不复权区间 {raw_lo:.2f} ~ {raw_hi:.2f}")
+        if adj_events:
+            ev = "、".join(
+                f'{e["ex_date"].strftime("%Y-%m-%d")} 每股派 {e["dps"]:.4f} 元' for e in adj_events
+            )
+            tot = sum(float(e["dps"]) for e in adj_events)
+            bits.append(f"区间内除权 {len(adj_events)} 次、合计 {tot:.4f} 元/股（{ev}）")
+        note_html = f'<div class="pr-note">{" · ".join(bits)}。</div>'
+    elif src_note:
+        note_html = '<div class="pr-note">口径：不复权（未取到除权除息日，无法计算前复权）。</div>'
+
     return (
         '<div class="market-row">'
         '<div class="price-range">'
-        f'<div class="pr-title">52周价格区间（元）{date_note}</div>'
+        f'<div class="pr-title">52周价格区间（元）{src_txt}{date_note}</div>'
         f'<div class="pr-bar"><div class="pr-marker" style="left:{pos:.1f}%"></div></div>'
         '<div class="pr-labels">'
-        f'<span>52周最低 <b>{low:.2f}</b></span>'
+        f'<span>52周最低 <b>{low:.2f}</b>{lo_d}</span>'
         f'<span>现价 <b>{now:.2f}</b></span>'
-        f'<span>52周最高 <b>{high:.2f}</b></span>'
-        "</div></div>"
+        f'<span>52周最高 <b>{high:.2f}</b>{hi_d}</span>'
+        "</div>"
+        + note_html
+        + "</div>"
         + build_consensus()
         + "</div>"
+    )
+
+
+def build_val_note() -> str:
+    """估值口径脚注。
+
+    「PE 19.5 处于近 10 年 1% 分位」是本报告里最强的断言，也最容易被专业读者质疑，
+    所以必须把构造方法写在纸面上：现值取自行情接口，分位来自自建序列，两者分母口径
+    不同，属近似值。不写清楚 = 不可复核。
+    """
+    if not VALUATION:
+        return ""
+    v = VALUATION
+    start, n = v.get("val_series_start"), v.get("val_series_n")
+    span = f"起点 {start.strftime('%Y-%m')}" if hasattr(start, "strftime") else "近 10 年"
+    cnt = f"{n} 个交易日采样（周频）" if n else "日频采样"
+    return (
+        '<div class="val-note">'
+        "口径说明：PE(TTM)·PB(MRQ) <b>现值</b>取自行情接口；<b>PE 历史分位</b>由「历史市值 ÷ "
+        "同期已披露年报归母净利」构造序列计算，<b>PB 历史分位</b>直接用行情 PB 序列"
+        f"（{span}，{cnt}）。<b>股息率</b> = 最近年度分红总额（每股股息 × 总股本）÷ 当前市值，"
+        "与 PE/PB 同分母；<b>股息率分位</b>用同构序列计算，其中分红总额按「次年 4 月末起计入」"
+        "处理（年报与股东大会决议的披露时点）。各分位序列的分母口径与现值不完全一致，分位为近似值。"
+        "</div>"
     )
 
 
@@ -366,8 +787,14 @@ def build_consensus() -> str:
     bar = '<div class="rating-bar">' + "".join(segs) + "</div>" if segs else ""
 
     eps = r.get("eps_forecast", [])
-    eps_txt = " / ".join(f"{e['year']} {e['eps']:.2f}" for e in eps if e.get("eps") is not None)
-    eps_line = f'<div style="margin-top:5px;">预测每股收益：{eps_txt} 元</div>' if eps_txt else ""
+    # 统一加 E 后缀：与已披露的实际 EPS 区分开，避免读者把机构预估当成既成事实
+    eps_txt = " / ".join(
+        f"{e['year']}E {e['eps']:.2f}" for e in eps if e.get("eps") is not None
+    )
+    eps_line = (
+        f'<div style="margin-top:5px;">机构预测每股收益（E）：{eps_txt} 元</div>'
+        if eps_txt else ""
+    )
 
     # 目标价（港股经济通有，A 股无）
     tp = r.get("target_price")
@@ -384,29 +811,29 @@ def build_consensus() -> str:
     )
 
 
-def build_graham() -> str:
-    if not GRAHAM:
-        return ""
-    g = GRAHAM
-    debt = f"{g['debt_ratio']:.1f}%" if g.get("debt_ratio") is not None else "—"
-    cur = f"{g['current_ratio']:.2f}" if g.get("current_ratio") is not None else "—"
-    if g.get("profit_stable") is None:
-        stable = "—"
-    else:
-        stable = "连续正盈利" if g["profit_stable"] else "存在亏损年份"
-    if g.get("net_cash") is None:
-        net_cash = "—"
-    else:
-        net_cash = "净现金" if g["net_cash"] > 0 else "有息负债＞货币资金"
-    return (
-        '<div class="graham">'
-        '<div class="g-title">格雷厄姆质量体检</div>'
-        f'<div class="g-row"><span>资产负债率</span><b>{debt}</b></div>'
-        f'<div class="g-row"><span>流动比率</span><b>{cur}</b></div>'
-        f'<div class="g-row"><span>盈利稳定性（5年）</span><b>{stable}</b></div>'
-        f'<div class="g-row"><span>净现金 / 有息负债</span><b>{net_cash}</b></div>'
-        "</div>"
-    )
+def build_graham_badge() -> str:
+    """头部「格雷厄姆质量」徽章：评级 + 四项体检数据。
+
+    这四项（资产负债率 / 流动比率 / 盈利稳定性 / 净现金）原本单独占一个面板，但都是
+    「一句话说得完」的静态体检值，撑不起一块版面；并入头部徽章后，估值段只留真正需要
+    解释的内容（估值分位、走势、分红），版面效率更高，也不影响信息完整性。
+
+    评级词沿用 LLM 给的定性判断，括号里的依据改用体检四项原始数据——LLM 原来写的依据
+    （ROE / 分红比例）与估值面板重复，换成这四项才不浪费一整块版面的信息。
+    """
+    g = GRAHAM or {}
+    raw = (_narr(["graham_badge"]) or "").strip()
+    rating = raw.split("（")[0].split("(")[0].strip() or "—"
+    bits = []
+    if g.get("debt_ratio") is not None:
+        bits.append(f"资产负债率 {g['debt_ratio']:.1f}%")
+    if g.get("current_ratio") is not None:
+        bits.append(f"流动比率 {g['current_ratio']:.2f}")
+    if g.get("profit_stable") is not None:
+        bits.append("近5年连续盈利" if g["profit_stable"] else "近5年存在亏损")
+    if g.get("net_cash") is not None:
+        bits.append("净现金" if g["net_cash"] > 0 else "有息负债＞货币资金")
+    return f"{rating}（{' · '.join(bits)}）" if bits else rating
 
 
 def _sanity_rows() -> str:
@@ -647,6 +1074,244 @@ def build_competition() -> str:
     )
 
 
+def _quarter_review_hint() -> str:
+    """季度解读段的副标题：标明依据的是哪一期报告，让读者知道这段在讲什么时间范围。"""
+    meta = (QUARTER_REVIEW or {}).get("_meta") or {}
+    kind = meta.get("kind") or "最新定期报告"
+    return f"AI 摘要 · 依据 {kind}原文 + 单季财务数据"
+
+
+def build_quarter_review() -> str:
+    """季度财报解读：LLM 基于「最新定期报告原文 + 单季财务事实」生成的三段解读。
+
+    原文取不到时（一季报/三季报通常没有管理层讨论章节）不隐藏这一段，而是把
+    「未获取到原文」如实写出来——读者需要知道这段结论的证据强度有多少。
+    """
+    if not QUARTER_REVIEW:
+        return ('<div style="font-size:11px;color:var(--faint);padding:8px 0;">'
+                '季度财报解读待生成（需配置 DEEPSEEK_API_KEY，且能访问巨潮资讯网）。</div>')
+    r = QUARTER_REVIEW
+    meta = r.get("_meta") or {}
+
+    def _p(key: str) -> str:
+        txt = (r.get(key) or "").strip()
+        return f"<p>{txt}</p>" if txt else '<p style="color:var(--faint)">—</p>'
+
+    watch = r.get("watch") or []
+    if isinstance(watch, str):
+        watch = [watch]
+    watch_html = "".join(f"<li>{w}</li>" for w in watch if str(w).strip())
+    watch_block = (
+        f'<ul class="qr-watch">{watch_html}</ul>' if watch_html
+        else '<p style="color:var(--faint)">—</p>'
+    )
+
+    # 证据来源如实标注：有原文 / 无原文，是这段解读可信度的分水岭
+    src_bits = []
+    if meta.get("title"):
+        src_bits.append(f'依据：{meta["title"]}')
+    if meta.get("has_mdd"):
+        src_bits.append(f'原文「管理层讨论与分析」{meta.get("mdd_chars", 0)} 字')
+    else:
+        note = meta.get("note") or "未获取到报告原文"
+        src_bits.append(f'<span style="color:var(--warn)">{note}，管理层观点部分无原文支撑</span>')
+    src_bits.append("由 DeepSeek 基于上述材料生成，AI 摘要非本人观点")
+
+    return (
+        '<div class="qrev">'
+        '<div class="qr-grid">'
+        f'<div class="qr-col"><div class="qr-h">季度数据表现</div>{_p("data_read")}</div>'
+        f'<div class="qr-col"><div class="qr-h">经营结构解读</div>{_p("structure")}</div>'
+        f'<div class="qr-col"><div class="qr-h">管理层观点与战略</div>{_p("management")}</div>'
+        "</div>"
+        + _cashflow_block(r)
+        + f'<div class="qr-watch-wrap"><div class="qr-h">投资者需要关注</div>{watch_block}</div>'
+        f'<div class="qr-foot">{" · ".join(src_bits)}</div>'
+        "</div>"
+        + build_operating_structure_block()
+    )
+
+
+def _cashflow_block(review: dict) -> str:
+    """现金流异动归因：LLM 的科目级解释 + 一条口径对照条（总额 vs 剔除财务公司后）。
+
+    对照条是硬性的一部分而不是装饰：市场对「经营现金流同比 +438%」的第一反应是
+    「回款大幅改善」，而这类跳变在带财务公司的公司里十有八九来自吸收存款/缴存央行/
+    同业拆放的搬动。把两个口径并排放在一句话里，读者不必读正文就知道该信哪个。
+    """
+    txt = (review.get("cashflow") or "").strip()
+    ocf = (OPERATING or {}).get("现金流归因") or {}
+    yoy = ocf.get("净额同比_pct")
+    adj = ocf.get("剔除财务公司科目后") or {}
+    strip = ""
+    if ocf:
+        bits = [f'{ocf.get("期间") or ""} 经营现金流净额 '
+                f'{(ocf.get("经营活动产生的现金流量净额_亿元") or {}).get("本期", 0):,.1f} 亿元']
+        if yoy is not None:
+            cls = "up" if yoy > 0 else "down"
+            bits.append(f'同比 <b class="{cls}">{yoy:+.1f}%</b>')
+        if adj.get("同比_pct") is not None:
+            cls2 = "up" if adj["同比_pct"] > 0 else "down"
+            bits.append(
+                f'剔除财务公司科目后 <b class="{cls2}">{adj["同比_pct"]:+.1f}%</b>'
+                f'（{adj.get("上期_亿元", 0):,.1f} → {adj.get("经营性现金净额_亿元", 0):,.1f} 亿元）'
+            )
+        strip = f'<div class="cf-strip">{" · ".join(bits)}</div>'
+    items = (ocf.get("主要变动科目") or [])[:4]
+    rows = "".join(
+        f'<tr><td class="cf-name">{s["科目"]}'
+        + ('<span class="cf-tag">财务公司</span>' if s.get("是否财务公司科目") else "")
+        + "</td>"
+        f'<td class="op-num">{s.get("本期_亿元"):,.1f}</td>'
+        f'<td class="op-num">{s.get("上期_亿元"):,.1f}</td>'
+        f'<td class="op-num">{_op_chg(s.get("变动_亿元"))}</td></tr>'
+        for s in items if s.get("本期_亿元") is not None
+    )
+    table = (
+        '<table class="op-table cf-table"><thead><tr>'
+        '<th>主要变动科目</th><th>本期（亿元）</th><th>上期（亿元）</th><th>变动（亿元）</th>'
+        f'</tr></thead><tbody>{rows}</tbody></table>'
+    ) if rows else ""
+    if not txt and not strip and not table:
+        return ""
+    return (
+        '<div class="qr-cf-wrap">'
+        '<div class="qr-h">现金流异动归因</div>'
+        + (f'<p>{txt}</p>' if txt else "")
+        + strip + table
+        + "</div>"
+    )
+
+
+def _op_yoy(v) -> str:
+    """同比着色：涨红跌绿（A 股习惯），并显式带正负号。"""
+    if v is None:
+        return '<span class="op-na">—</span>'
+    cls = "op-up" if v > 0 else ("op-down" if v < 0 else "op-na")
+    return f'<span class="{cls}">{v:+.1f}%</span>'
+
+
+def _op_chg(v) -> str:
+    """金额变动着色：与 _op_yoy 同色系，但单位是亿元、显式带正负号（不是百分比）。"""
+    if v is None:
+        return '<span class="op-na">—</span>'
+    cls = "op-up" if v > 0 else ("op-down" if v < 0 else "op-na")
+    return f'<span class="{cls}">{v:+,.1f}</span>'
+
+
+def build_operating_structure_block() -> str:
+    """经营结构表：分产品/渠道/地区的收入·占比·同比·毛利率，附年度经营计划。
+
+    这张表存在的理由：只看合并利润表，读者无法回答「增长到底来自哪」。
+    2026H1 茅台整体营收 +1.3%，但拆开看是直销 +29.9%、批发代理 -21.6%，
+    渠道结构的位移才是当期最关键的事实——这类信息只存在于定期报告原文，接口里没有。
+    """
+    if not OPERATING:
+        return ""
+    op = OPERATING
+    cuts = op.get("切片") or {}
+    order = [c for c in ("产品", "渠道", "地区", "行业") if cuts.get(c)]
+    if not order:
+        return ""
+
+    total = None
+    for c in order:
+        s = sum(r.get("收入_亿元") or 0 for r in cuts[c])
+        if s:
+            total = s
+            break
+
+    rows_html = []
+    for cut in order:
+        for i, r in enumerate(cuts[cut]):
+            cut_cell = f'<td class="op-cut" rowspan="{len(cuts[cut])}">{cut}</td>' if i == 0 else ""
+            mg = r.get("毛利率_pct")
+            rows_html.append(
+                "<tr>"
+                + cut_cell
+                + f'<td class="op-name">{r["名称"]}</td>'
+                + f'<td class="op-num">{r["收入_亿元"]:,.1f}</td>'
+                + f'<td class="op-num">{r["占比_pct"]:,.1f}%</td>'
+                + f'<td class="op-num">{_op_yoy(r.get("收入同比_pct"))}</td>'
+                + f'<td class="op-num">{f"{mg:.1f}%" if mg is not None else "—"}</td>'
+                + "</tr>"
+            )
+
+    # 口径脚注：占比是「占酒类收入」而非占营业总收入；毛利率与收入不同报告期
+    notes = []
+    if total:
+        notes.append(f"占比为占酒类收入（三切面合计 {total:,.1f} 亿元）的比例")
+    if op.get("毛利率口径"):
+        notes.append(
+            f"毛利率来自 {op['毛利率口径']}，与本期收入（{op.get('期间')}）非同报告期，"
+            "仅表示该切面的盈利水平"
+        )
+
+    extra = []
+    if op.get("i茅台_亿元"):
+        im = op["i茅台_亿元"]
+        share = None
+        for r in cuts.get("渠道", []):
+            if r["名称"] == "直销" and r.get("收入_亿元"):
+                share = im / r["收入_亿元"] * 100
+        extra.append(
+            f'"i 茅台"数字营销平台酒类不含税收入 <b>{im:,.1f} 亿元</b>'
+            + (f"（占直销收入 {share:.1f}%）" if share else "")
+        )
+    dl = op.get("经销商") or {}
+    if dl:
+        bits = []
+        for region in ("国内", "国外"):
+            d = dl.get(region)
+            if not d:
+                continue
+            s = f"{region} {d['期末_家']:,} 家"
+            chg = []
+            if d.get("增加_家") is not None:
+                chg.append(f"+{d['增加_家']}")
+            if d.get("减少_家") is not None:
+                chg.append(f"-{d['减少_家']}")
+            if chg:
+                s += f"（期末较期初 {'/'.join(chg)}）"
+            bits.append(s)
+        if bits:
+            extra.append("经销商 " + " · ".join(bits))
+
+    plan = op.get("年度经营计划") or {}
+    plan_html = ""
+    if plan.get("要点") or plan.get("主题"):
+        chips = "".join(f'<span class="op-chip">{t}</span>' for t in (plan.get("要点") or []))
+        quant = plan.get("量化目标")
+        if quant:
+            quant_txt = f"量化目标：{quant}"
+        else:
+            quant_txt = "量化目标：公司未披露量化营收增长目标，仅给出上述方向性部署"
+        plan_html = (
+            '<div class="op-plan">'
+            f'<div class="op-plan-h">{plan.get("年度") or ""} 年度经营计划'
+            + (f'　主题：{plan["主题"]}' if plan.get("主题") else "")
+            + "</div>"
+            + (f'<div class="op-chips">{chips}</div>' if chips else "")
+            + f'<div class="op-quant">{quant_txt}</div>'
+            "</div>"
+        )
+
+    return (
+        '<div class="operating">'
+        f'<div class="op-title">经营结构 <span class="op-note">'
+        f'来源：{op.get("报告") or "定期报告"}（{op.get("期间")}）</span></div>'
+        '<table class="op-table"><thead><tr>'
+        '<th>切片</th><th>名称</th><th>收入（亿元）</th><th>占比</th><th>收入同比</th><th>毛利率</th>'
+        "</tr></thead><tbody>"
+        + "".join(rows_html)
+        + "</tbody></table>"
+        + (f'<div class="op-foot">{"；".join(notes)}。</div>' if notes else "")
+        + (f'<div class="op-foot">{" · ".join(extra)}。</div>' if extra else "")
+        + plan_html
+        + "</div>"
+    )
+
+
 def build_thesis() -> str:
     items = NARRATIVE.get("thesis", []) if NARRATIVE else []
     if not items:
@@ -767,8 +1432,8 @@ def build_verify() -> str:
             + _sanity_rows()
             + reconcile_rows
             + f'<div><b>校验日期：</b>{today}</div>'
-            '<div><b>校验人：</b>李潇</div>'
-            "</div>"
+            + _verifier_row()
+            + "</div>"
         )
     except Exception as e:
         # 港股无巨潮年报源，校验本就不适用——直接抛异常类型（KeyError）读者看不懂
@@ -786,6 +1451,18 @@ def build_verify() -> str:
 
 # ============ CSS ============
 CSS = """
+/* ⚠️ 样式改这里，不要改 templates/valueline.html。
+   构建脚本把下面这段 CSS 注入模板 head 的样式元素（占位符 @@CSS@@），
+   再写到 templates/valueline.html 与 reports/<期>/<code>.html —— 那两个都是产物，
+   直接改会被下一次构建整体覆盖，且完全不报错（页面只是少了新加的规则）。
+   踩过一次：新板块的段落退回浏览器默认 16px，在一堆 11.5px 段落里格外显眼。
+
+   🔴 本注释里绝对不能出现样式元素/脚本元素的「闭合标签字面量」。
+   HTML 解析器在样式元素内只认那个字符串，一旦出现就会提前结束样式块，
+   后面的整份 CSS 会被当成正文渲染 —— 页面照样能打开、不报错，只是样式全丢。
+   （真实事故：为了写清用法在注释里引了闭合标签，结果整页字号回到 13px、
+     宽表失去 table-layout:fixed 被撑到 1260px、长图导出右边多出一条白边。） */
+
 :root {
   --ink: #1a2330;
   --muted: #5c6b7a;
@@ -839,6 +1516,76 @@ body {
 .sec-title .hint { font-size: 11px; font-weight: 400; color: var(--faint); }
 .sub-title { font-size: 12px; font-weight: 600; color: var(--muted); margin: 14px 0 7px; }
 .disclaim { font-size: 10px; color: var(--faint); margin-bottom: 8px; }
+.val-note { font-size: 10px; color: var(--faint); line-height: 1.7; margin-top: 9px; }
+
+/* PE 十年走势图（自绘 SVG） */
+.pe-chart { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.pe-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.pe-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.pe-chart svg { display: block; }
+
+/* 分红历史合图（柱 = 每股股息 / 柱顶 = 分红总额 / 折线 = 分红比例） */
+.div-hist { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.dh-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.dh-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+.dh-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 7px; font-size: 10px; color: var(--muted); }
+.dh-legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+.dh-legend .sw { width: 12px; height: 9px; border-radius: 2px; display: inline-block; }
+.dh-legend .sw.line { height: 2px; border-radius: 0; }
+
+/* 经营结构（分产品/渠道/地区）与年度经营计划 */
+.operating { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.op-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.op-note { font-size: 10px; font-weight: 400; color: var(--faint); }
+/* 表体 11.5px = 本板块正文（.qr-col p）的字号，表头低 1px 做层级。
+   同一板块里正文与两张表（经营结构 / 现金流归因）必须共用一套字阶，
+   否则会出现「11.5 / 11 / 10」三种尺寸并排，看起来像三个人拼的版面。 */
+.op-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.op-table th { font-size: 10.5px; font-weight: 600; color: var(--muted); text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--bg-soft); }
+.op-table th:first-child, .op-table th:nth-child(2) { text-align: left; }
+.op-table td { padding: 4px 6px; border-bottom: 1px solid var(--line-soft); }
+.op-table tr:last-child td { border-bottom: none; }
+.op-cut { color: var(--accent-2); font-weight: 600; font-size: 10px; }
+.op-name { color: var(--ink); }
+.op-num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.op-up { color: var(--up); font-weight: 600; }
+.op-down { color: var(--down); font-weight: 600; }
+.op-na { color: var(--faint); }
+.op-foot { margin-top: 7px; font-size: 10px; color: var(--faint); line-height: 1.7; }
+.op-plan { margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); }
+.op-plan-h { font-size: 11px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+.op-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.op-chip { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: var(--bg-soft); color: var(--muted); border: 1px solid var(--line-soft); }
+.op-quant { margin-top: 7px; font-size: 10px; color: var(--warn); }
+
+/* 季度财报解读 */
+.qrev { padding: 12px 14px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.qr-grid { display: flex; gap: 16px; }
+.qr-col { flex: 1; }
+.qr-h { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 5px; }
+.qr-col p, .qr-watch-wrap p { font-size: 11.5px; line-height: 1.8; color: #33404f; }
+.qr-watch-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px dashed var(--line); }
+/* 现金流异动归因：正文字号/行高/颜色必须与「季度数据表现 / 经营结构解读」逐项相同。
+   漏写这段规则时，<p> 会退回浏览器默认 16px + var(--ink)，在一堆 11.5px/#33404f 的
+   段落里明显像是从别的板块粘过来的——而且不报错，只有肉眼看才看得出来。 */
+.qr-cf-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.qr-cf-wrap p { font-size: 11.5px; line-height: 1.8; color: #33404f; }
+.cf-strip { margin-top: 4px; font-size: 11.5px; line-height: 1.8; color: var(--muted); }
+.cf-strip b { font-weight: 700; }
+.cf-strip b.up { color: var(--up); }
+.cf-strip b.down { color: var(--down); }
+.cf-table { margin-top: 7px; }
+.cf-table th { font-size: 10.5px; }   /* 与 .op-table th 同尺寸（op-table th 为 10px，此处统一抬高） */
+.cf-table th:first-child, .cf-table td:first-child { text-align: left; }
+/* 科目名列用 var(--ink)，与下方「经营结构」表的 .op-name 同色；
+   数值列沿用 .op-num 的 var(--muted)。两张表里同类单元格必须同色。 */
+.cf-name { color: var(--ink); }
+.cf-tag { margin-left: 5px; padding: 0 5px; border-radius: 8px; font-size: 10px;
+  background: var(--bg-soft); border: 1px solid var(--line-soft); color: var(--faint); }
+.qr-watch { list-style: none; }
+.qr-watch li { font-size: 11.5px; line-height: 1.7; color: #33404f; padding: 4px 0 4px 16px; position: relative; }
+.qr-watch li::before { content: ""; position: absolute; left: 3px; top: 11px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-2); }
+.qr-foot { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 10px; color: var(--faint); line-height: 1.7; }
 
 /* 全历史宽表 */
 .table-scroll { overflow-x: auto; }
@@ -934,6 +1681,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .pr-marker { position: absolute; top: -3px; width: 2px; height: 14px; background: var(--accent-2); border-radius: 1px; }
 .pr-labels { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
 .pr-labels b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pr-note { margin-top: 6px; font-size: 9.5px; line-height: 1.6; color: var(--faint); }
+.pr-note b { color: var(--muted); }
 .consensus { padding: 12px 14px; background: var(--bg-soft); border-radius: 8px; font-size: 11px; color: var(--muted); line-height: 1.9; }
 .consensus b { color: var(--ink); }
 .rating-bar { display: flex; height: 18px; border-radius: 4px; overflow: hidden; margin: 6px 0; }
@@ -989,6 +1738,11 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 .fraud .f-row b.bad { color: var(--up); }
 .fraud .f-score { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11.5px; color: var(--ink); }
 .fraud .f-score b.ok { color: var(--down); }
+/* 「未覆盖检测项」说明行：只在数据源缺项时出现（如港股无审计意见字段），
+   长期没人看到过，所以一直漏着样式 → 一旦出现就是 16px 默认字号。
+   按本板块的脚注层级补上（比 f-row 小、比正文浅）。 */
+.fraud .f-note { margin-top: 7px; padding-top: 6px; border-top: 1px dashed var(--line);
+  font-size: 10.5px; line-height: 1.7; color: var(--faint); }
 
 /* 列表 */
 .thesis, .risk { list-style: none; }
@@ -1018,7 +1772,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   /* 横排卡片改纵向堆叠 */
   .biz-row { flex-direction: column; gap: 2px; }
   .biz-k { flex: none; }
-  .val-grid, .market-row, .cp-grid, .comp-grid, .seg-row { flex-direction: column; gap: 10px; }
+  .val-grid, .market-row, .cp-grid, .comp-grid, .seg-row, .qr-grid { flex-direction: column; gap: 10px; }
   .tp-grid { flex-wrap: wrap; }
 
   /* 业务版图 / 竞争地位 */
@@ -1078,6 +1832,21 @@ TEMPLATE = """<!DOCTYPE html>
   </div>
 
   <div class="section">
+    <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算@@VAL_CURRENCY_HINT@@</span></div>
+    <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
+@@VAL_GRID@@
+@@MARKET_ROW@@
+@@PE_CHART@@
+@@DIV_HISTORY@@
+@@VAL_NOTE@@
+  </div>
+
+  <div class="section">
+    <div class="sec-title">季度财报解读 <span class="hint">@@QUARTER_REVIEW_HINT@@</span></div>
+@@QUARTER_REVIEW@@
+  </div>
+
+  <div class="section">
     <div class="sec-title">核心财务数据（上市以来全历史 @@YEAR_RANGE@@） <span class="hint">单位：亿元 / 亿股 / %</span></div>
 @@TABLE@@
     <div style="font-size:10px;color:var(--faint);margin-top:6px;">该标的不适用或数据源未提供的科目（整行无数据）已隐藏，未做补零或估算。</div>
@@ -1086,21 +1855,13 @@ TEMPLATE = """<!DOCTYPE html>
 
     <div class="sub-title">近三年季度（@@QUARTER_RANGE@@）</div>
 @@QUARTER_TABLE@@
-    <div style="font-size:10px;color:var(--faint);margin-top:6px;">利润表/现金流量表为单季度值，资产负债表为季度末时点值；同比增长率为本期对去年同期的对比。</div>
+    <div style="font-size:10px;color:var(--faint);margin-top:6px;">单季 = 本季发生额；资产负债表为季度末时点值。「单季同比」对去年同一季度。</div>
   </div>
 
   <div class="section">
     <div class="sec-title">经营统计（ValueLine 口径） <span class="hint">@@STATS_HINT@@</span></div>
 @@CURRENT_POSITION@@
 @@ANNUAL_RATES@@
-  </div>
-
-  <div class="section">
-    <div class="sec-title">估值与市场 <span class="hint">数据来源：百度估值 + 财报计算@@VAL_CURRENCY_HINT@@</span></div>
-    <div class="disclaim">市场数据与第三方机构观点汇总，非投资建议。</div>
-@@VAL_GRID@@
-@@MARKET_ROW@@
-@@GRAHAM@@
   </div>
 
   <div class="section">
@@ -1222,7 +1983,7 @@ def _save_narrative(code: str, facts, narrative) -> None:
 
 
 def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
         "港股标的 · 财务数据为人民币，股价/市值为港元"
@@ -1260,6 +2021,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         ANNUAL_RATES = real.get("annual_rates")
         PIE_DATA = real.get("pie_data")
         SANITY = real.get("sanity")
+        OPERATING = real.get("operating_structure")
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
@@ -1275,6 +2037,13 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
                 print("  叙事层: LLM 重新生成")
             else:
                 print("  叙事层: 复用缓存（事实数据未变）")
+        # 季度财报解读：抓最新定期报告原文 + 单季财务事实 → DeepSeek（同样按事实哈希缓存）
+        QUARTER_REVIEW = None
+        if (not daily) and _HAS_QREVIEW and real.get("quarter_review_facts"):
+            QUARTER_REVIEW = get_quarter_review(
+                code, real["quarter_review_facts"], refresh=refresh_narrative
+            )
+            print("  季度财报解读: " + ("已生成" if QUARTER_REVIEW else "跳过（无 API key 或生成失败）"))
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -1291,7 +2060,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
 
     industry = (COMPETITION or {}).get("industry") or _narr(["industry"], "行业待接入")
     lynch_type = _narr(["lynch_type"], "待分析")
-    graham_badge = _narr(["graham_badge"], "待分析")
+    graham_badge = build_graham_badge()
 
     html = (
         TEMPLATE
@@ -1306,7 +2075,11 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         .replace("@@SEGMENT_RANGE@@", segment_range)
         .replace("@@VAL_GRID@@", build_val_grid())
         .replace("@@MARKET_ROW@@", build_market_row())
-        .replace("@@GRAHAM@@", build_graham())
+        .replace("@@PE_CHART@@", build_pe_chart())
+        .replace("@@DIV_HISTORY@@", build_div_history())
+        .replace("@@VAL_NOTE@@", build_val_note())
+        .replace("@@QUARTER_REVIEW@@", build_quarter_review())
+        .replace("@@QUARTER_REVIEW_HINT@@", _quarter_review_hint())
         .replace("@@BIZ@@", build_business_model())
         .replace("@@COMPETITION@@", build_competition())
         .replace("@@CURRENT_POSITION@@", build_current_position())
