@@ -89,3 +89,42 @@ def test_market_view_and_action_prompts_are_clean():
         p = fn(_data())
         assert "None" not in p
         assert _NA_RULE.strip()[:12] in p
+
+
+# ---------------------------------------------------------------------------
+# 验证计划的时间锚点：必须是「已披露的最新报告期（含季报/中报）」，而不是最新年报年份
+# ---------------------------------------------------------------------------
+
+def _verif_prompt(**over):
+    from src.report.llm import _build_verification_prompt
+    return _build_verification_prompt(_data(**over), [
+        {"id": "graham", "name": "格雷厄姆", "verdict": "可关注", "edge": "PE 分位低", "concern": "增长失速"},
+    ])
+
+
+def test_verification_anchor_uses_latest_disclosed_quarter():
+    """给了 latest_period（如 2026Q2）时，锚点必须用它，且明确它不是未来时点。
+
+    事故（2026-09 茅台日记）：锚点只写「已披露的最新报告期：2025 年（年报）」，
+    而数据其实已到 2026Q2。模型据此把「2026 中报」当成待验证的未来时点写进
+    「下次验证触发点」——那份中报当期早已披露，验证点永远无法验证，
+    而「可证伪」正是这个板块存在的意义。
+    """
+    p = _verif_prompt(latest_period="2026Q2")
+    assert "2026Q2" in p
+    # 不能再把「最新年报 = 已披露的最新报告期」混为一谈
+    assert "已披露的最新报告期：2025 年报" not in p
+    assert "最新年报为 2025 年" in p   # 年报年份仍如实出现（作为补充信息）
+
+
+def test_verification_anchor_falls_back_without_latest_period():
+    """没有 latest_period（老调用点）时退回「{年份} 年报」，不抛异常。"""
+    p = _verif_prompt()
+    assert "已披露的最新报告期：2025 年报" in p
+
+
+def test_verification_anchor_ignores_sanitized_na():
+    """latest_period 为空时 sanitize 会写成 'N/A'，不能被当成有效报告期印出来。"""
+    p = _verif_prompt(latest_period=None)
+    assert "已披露的最新报告期：N/A" not in p
+    assert "已披露的最新报告期：2025 年报" in p

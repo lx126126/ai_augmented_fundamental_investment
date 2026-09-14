@@ -554,6 +554,15 @@ def _build_verification_prompt(data: dict, perspectives: list[dict]) -> str:
     val = _as_dict(data.get("valuation"))
     today = _date.today().strftime("%Y-%m-%d")
 
+    # 已披露的最新报告期：优先用季度/中报口径（如 2026Q2），缺失时退回「最新年报」。
+    # ⚠️ 不能直接用 latest_year：它是最新年报的年份，通常比实际已披露的最新报告期
+    # 早一年半载。写错会让模型把「2026 中报」当成待验证的未来时点（其实早披露了），
+    # 产出一个永远无法验证的验证点——而「可证伪」正是这个板块存在的意义。
+    latest_year = data.get("latest_year", "")
+    _lp = str(data.get("latest_period") or "").strip()
+    # sanitize 会把空值变成字符串 'N/A'，这个值不能当成有效报告期用
+    disclosed = _lp if _lp and _lp != "N/A" else f"{latest_year} 年报"
+
     # 汇总各视角结论
     pers_text = "\n".join(
         f"  - {p.get('name', '')}：{p.get('verdict', '')}"
@@ -574,9 +583,11 @@ def _build_verification_prompt(data: dict, perspectives: list[dict]) -> str:
 
 === 时间锚点（务必以此为准，不要用你自己的训练知识猜日期）===
 今天日期：{today}
-已披露的最新报告期：{data.get('latest_year', '')} 年（年报）
-注意：验证时间点必须是【今天之后】尚未披露的报告期（如下一年中报/下一年年报/下一季度），
+已披露的最新报告期：{disclosed}（最新年报为 {latest_year} 年）
+注意：验证时间点必须是【今天之后】尚未披露的报告期（下一季度/下一年中报/下一年年报），
 严禁把已披露的过去报告期当作「待验证」的时间点。
+尤其注意：**{disclosed} 及其之前的任何报告期都已经披露完了，绝不能列为验证点**
+（例如已披露 2026Q2 时，「2026 中报」「2026 一季报」都是过去式，只能提 2026Q3 及以后）。
 
 === 公司 ===
 公司名：{data.get('name', '')}

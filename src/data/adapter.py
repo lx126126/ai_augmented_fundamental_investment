@@ -442,6 +442,12 @@ def build_template_data(code: str) -> dict:
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
     if business_map:
         narrative_data["main_business"] = business_map["main_business"]
+    # 最新「已披露」报告期（含季报/中报，如 2026Q2）。⚠️ 与 latest_year（最新年报年份）
+    # 不是一回事：latest_year 通常比已披露的最新报告期早一年半载。
+    # journal「下次验证触发点」的 prompt 拿它做时间锚点——只给 latest_year 时，
+    # 模型会把「2026 中报」当成未来时点去验证（其实早已披露），
+    # 生成一个永远无法验证的验证点（2026-09 茅台日记实测踩到）。改 prompt 必须同步改这里。
+    narrative_data["latest_period"] = report_period
 
     return {
         "years": years,
