@@ -119,7 +119,7 @@ def _render_rows(rows: list[dict]) -> str:
         "<th>PE(分位)</th>"
         "<th>PB(分位)</th>"
         "<th>股息率</th>"
-        "<th>营收/净利(亿)</th>"
+        "<th>营业总收入/净利(亿)</th>"
         "<th>ROE</th>"
         "<th>负债率</th>"
         "<th>净现金(亿)</th>"

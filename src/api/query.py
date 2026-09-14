@@ -41,14 +41,18 @@ def _rows(con: duckdb.DuckDBPyConnection, sql: str, params: list | None = None) 
 # --------------------------------------------------------------------------- #
 
 def list_stocks() -> list[dict]:
-    """列出数仓里所有已入库的股票（symbol + 最新年度核心指标）。"""
+    """列出数仓里所有已入库的股票（symbol + 最新年度核心指标）。
+
+    revenue_yi 取**营业总收入**（`revenue`），与报告正文的「营收」口径一致；
+    不是 `operating_revenue`（利润表「其中：营业收入」明细项）。
+    """
     con = _connect()
     try:
         sql = """
         SELECT
             a.symbol,
             max_by(a.report_date, a.report_date) AS latest_report_date,
-            max_by(a.operating_revenue, a.report_date) AS revenue_yi,
+            max_by(a.revenue, a.report_date) AS revenue_yi,
             max_by(a.net_profit_parent, a.report_date) AS net_profit_yi,
             max_by(a.net_margin_pct, a.report_date) AS net_margin_pct,
             max_by(a.roe_pct, a.report_date) AS roe_pct

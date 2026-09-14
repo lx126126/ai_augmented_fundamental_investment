@@ -223,7 +223,7 @@ def slide_cover(data, narrative) -> str:
 
     stats = [
         ("总市值", _n((val.get("market_cap") or 0) / 10000, 2, " 万亿") if val.get("market_cap") else "—"),
-        ("2025 营收", _n(latest.get("revenue"), 1, " 亿")),
+        ("2025 营业总收入", _n(latest.get("revenue"), 1, " 亿")),
         ("2025 净利", _n(latest.get("net_profit"), 1, " 亿")),
         ("ROE", _n(latest.get("roe"), 2, "%")),
     ]
@@ -541,7 +541,7 @@ def slide_growth(data) -> str:
     cagr_html = (
         '<div class="mini-grid">'
         f'<div class="mini"><div class="mini-n">{_n(sales5*100 if sales5 else None, 1, "%")}</div>'
-        '<div class="mini-l">营收 5 年</div></div>'
+        '<div class="mini-l">营业总收入 5 年</div></div>'
         f'<div class="mini"><div class="mini-n">{_n(earn5*100 if earn5 else None, 1, "%")}</div>'
         '<div class="mini-l">净利 5 年</div></div>'
         f'<div class="mini"><div class="mini-n">{_n(div5*100 if div5 else None, 1, "%")}</div>'
@@ -552,19 +552,19 @@ def slide_growth(data) -> str:
     q_html = (
         '<div class="sec-t">最近一期怎么样 <span class="sec-s">' + _esc(qr.get("报告期") or "—") + "</span></div>"
         '<div class="qgrid">'
-        f'<div class="qcard"><div class="q-l">单季营业收入</div><div class="q-n">{_n(q.get("单季营业收入_亿元"), 1, " 亿")}</div>'
-        f'<div class="q-y">同比 {_yoy(q.get("单季营收同比_pct"))}</div></div>'
+        f'<div class="qcard"><div class="q-l">单季营业总收入</div><div class="q-n">{_n(q.get("单季营业总收入_亿元"), 1, " 亿")}</div>'
+        f'<div class="q-y">同比 {_yoy(q.get("单季营业总收入同比_pct"))}</div></div>'
         f'<div class="qcard"><div class="q-l">单季归母净利</div><div class="q-n">{_n(q.get("单季归母净利润_亿元"), 1, " 亿")}</div>'
         f'<div class="q-y">同比 {_yoy(q.get("单季归母净利同比_pct"))}</div></div>'
-        f'<div class="qcard"><div class="q-l">上半年累计营收</div><div class="q-n">{_n(ytd.get("累计营业总收入_亿元"), 1, " 亿")}</div>'
-        f'<div class="q-y">同比 {_yoy(ytd.get("累计营收同比_pct"))}</div></div>'
+        f'<div class="qcard"><div class="q-l">上半年累计营业总收入</div><div class="q-n">{_n(ytd.get("累计营业总收入_亿元"), 1, " 亿")}</div>'
+        f'<div class="q-y">同比 {_yoy(ytd.get("累计营业总收入同比_pct"))}</div></div>'
         f'<div class="qcard"><div class="q-l">上半年累计净利</div><div class="q-n">{_n(ytd.get("累计归母净利润_亿元"), 1, " 亿")}</div>'
         f'<div class="q-y">同比 {_yoy(ytd.get("累计归母净利同比_pct"))}</div></div>'
         "</div>"
     )
 
     body = (
-        '<div class="sec-t">近 5 年营收 / 净利 <span class="sec-s">亿元</span></div>'
+        '<div class="sec-t">近 5 年营业总收入 / 净利 <span class="sec-s">亿元</span></div>'
         '<div class="chart"><div class="legend">'
         f'<span class="lg" style="background:{C["accent2"]}"></span>营业总收入'
         f'<span class="lg" style="background:{C["up"]};margin-left:14px;"></span>归母净利润'
@@ -572,8 +572,8 @@ def slide_growth(data) -> str:
         f'<div class="sec-t">年化增速 <span class="sec-s">近 5 年复合</span></div>'
         f'{cagr_html}'
         f'{q_html}'
-        + _note("看这家公司要分清两件事：过去五年营收年化 +11.9% 是一条漂亮的长期曲线；"
-                "但最近一期单季营收同比 −5.2%、上半年累计仅 +1.3%，"
+        + _note("看这家公司要分清两件事：过去五年营业总收入年化 +11.9% 是一条漂亮的长期曲线；"
+                "但最近一期单季营业总收入同比 −5.2%、上半年累计仅 +1.3%，"
                 "长期成长与短期停滞同时存在。")
     )
     foot = "年报口径（归母）· 单季为 2026Q2，累计为 2026 上半年"
@@ -895,7 +895,7 @@ def slide_risk(data, narrative) -> str:
         )
     if latest.get("revenue") is not None:
         facts.append(
-            f'{nd.get("latest_year")} 年报：营收 {_n(latest.get("revenue"), 1, " 亿")}，'
+            f'{nd.get("latest_year")} 年报：营业总收入 {_n(latest.get("revenue"), 1, " 亿")}，'
             f'归母净利 {_n(latest.get("net_profit"), 1, " 亿")}'
         )
     thesis_html = ""
@@ -912,7 +912,7 @@ def slide_risk(data, narrative) -> str:
         + f'<div class="risks">{risk_html}</div>'
         + (f'<div class="comp-note">行业位置：{_esc(comp.get("industry"))} '
            f'{comp.get("rank")}/{comp.get("peers_count")}，'
-           f'2025 年营收 {_n(comp.get("revenue_yi"), 1, " 亿")}，'
+           f'2025 年营业总收入 {_n(comp.get("revenue_yi"), 1, " 亿")}，'
            f'行业总额 {_n(ind_rev, 1, " 亿")}，份额 {_n(share, 1, "%")}</div>'
            if share and ind_rev else "")
         + '<div class="disclaimer">本图仅呈现客观数据与事实描述，不含任何价格点位、'

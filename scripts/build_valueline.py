@@ -1052,7 +1052,7 @@ def build_competition() -> str:
             f'<div class="comp-title">竞争地位 · {industry}'
             '<span class="comp-note">港股行业分类（恒生）</span></div>'
             + intro_html
-            + '<div class="comp-note" style="margin-top:6px;">港股暂无全市场营收排名接口，'
+            + '<div class="comp-note" style="margin-top:6px;">港股暂无全市场营业总收入排名接口，'
               '仅展示行业定位与公司介绍，未做估算或替代口径。</div>'
             "</div>"
         )
@@ -1088,11 +1088,11 @@ def build_competition() -> str:
 
     return (
         '<div class="competition">'
-        f'<div class="comp-title">{title}<span class="comp-note">营收口径：东财业绩报表</span></div>'
+        f'<div class="comp-title">{title}<span class="comp-note">营业总收入口径：东财业绩报表</span></div>'
         '<div class="comp-grid">'
-        f'<div class="comp-item"><div class="lbl">营收排名</div><div class="v">{rank_txt}</div></div>'
-        f'<div class="comp-item"><div class="lbl">营收份额</div><div class="v" style="color:var(--accent-2)">{share_txt}</div></div>'
-        f'<div class="comp-item"><div class="lbl">营收</div><div class="v">{rev_txt}</div></div>'
+        f'<div class="comp-item"><div class="lbl">营业总收入排名</div><div class="v">{rank_txt}</div></div>'
+        f'<div class="comp-item"><div class="lbl">营业总收入份额</div><div class="v" style="color:var(--accent-2)">{share_txt}</div></div>'
+        f'<div class="comp-item"><div class="lbl">营业总收入</div><div class="v">{rev_txt}</div></div>'
         "</div>"
         f'<div class="peer-list">{"".join(bars)}</div>'
         "</div>"
@@ -1310,7 +1310,7 @@ def build_operating_structure_block() -> str:
         if quant:
             quant_txt = f"量化目标：{quant}"
         else:
-            quant_txt = "量化目标：公司未披露量化营收增长目标，仅给出上述方向性部署"
+            quant_txt = "量化目标：公司未披露量化营业总收入增长目标，仅给出上述方向性部署"
         plan_html = (
             '<div class="op-plan">'
             f'<div class="op-plan-h">{plan.get("年度") or ""} 年度经营计划'
@@ -1379,7 +1379,7 @@ def build_fraud() -> str:
     if rc:
         cls = "bad" if rc["warning"] else "ok"
         txt = "背离" if rc["warning"] else "正常"
-        rows.append(f'<div class="f-row"><span>应收增速 vs 营收增速</span><b class="{cls}">应收 {rc["ar_yoy"]:.1f}% vs 营收 {rc["rev_yoy"]:.1f}% · {txt}</b></div>')
+        rows.append(f'<div class="f-row"><span>应收增速 vs 营业总收入增速</span><b class="{cls}">应收 {rc["ar_yoy"]:.1f}% vs 营业总收入 {rc["rev_yoy"]:.1f}% · {txt}</b></div>')
 
     # 审计意见：A 股取东财资产负债表 OPINION_TYPE；港股该列不存在（数据源未覆盖），
     # 按「整行无数据则隐藏」处理——不显示「数据待接入」这种占位噪声，改在末尾统一说明覆盖范围。

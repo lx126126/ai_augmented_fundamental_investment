@@ -37,8 +37,26 @@ def _net_profit(row, annual):
     return _g(row, "net_profit", annual) or _g(row, "net_profit_parent", annual)
 
 
+def _revenue(row, annual):
+    """营业总收入（报告统一「营收」口径），缺失回退营业收入。
+
+    报告正文/图表里的「营收」一律指**营业总收入**（利润表第一行）。红筹或有财务
+    公司的标的这两者不等（茅台 2025：营业总收入 1720.5 亿 vs 营业收入 1688.4 亿，
+    差 32.1 亿 = 财务公司利息收入），标签写「营业总收入」就必须取这一列。
+    少数数据源无 revenue 列时才退回 operating_revenue（港股 cleaner 已补齐 revenue）。
+    """
+    v = _g(row, "revenue", annual)
+    return v if v is not None else _g(row, "operating_revenue", annual)
+
+
 def compute_mscore(annual: pd.DataFrame) -> dict | None:
-    """Beneish M-Score（8 因子），基于最近两年年报。"""
+    """Beneish M-Score（8 因子），基于最近两年年报。
+
+    口径说明（有意与报告正文不同，勿「顺手统一」）：模型里的收入类输入一律取
+    **营业收入**（operating_revenue），不取营业总收入。Beneish(1999) 的 DSRI/SGI/SGAI
+    定义在 net sales 上，而营业总收入含利息/手续费等非销售收入（有财务公司的标的尤甚），
+    混入会污染因子。报告正文的「营收」= 营业总收入，是**展示口径**，两者不是一回事。
+    """
     if annual is None or len(annual) < 2:
         return None
     t = annual.iloc[-1]
@@ -127,12 +145,12 @@ def _cashflow_divergence(annual: pd.DataFrame) -> dict | None:
 
 
 def _receivable_divergence(annual: pd.DataFrame) -> dict | None:
-    """应收增速 vs 营收增速（背离提示激进确认收入）。"""
+    """应收增速 vs 营业总收入增速（背离提示激进确认收入）。"""
     if annual is None or len(annual) < 2:
         return None
     t, p = annual.iloc[-1], annual.iloc[-2]
     ar_t, ar_p = _g(t, "accounts_receivable", annual), _g(p, "accounts_receivable", annual)
-    rev_t, rev_p = _g(t, "operating_revenue", annual), _g(p, "operating_revenue", annual)
+    rev_t, rev_p = _revenue(t, annual), _revenue(p, annual)
     if None in (ar_t, ar_p, rev_t, rev_p) or ar_p == 0 or rev_p == 0:
         return None
     ar_yoy = (ar_t / ar_p - 1) * 100

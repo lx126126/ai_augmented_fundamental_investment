@@ -75,7 +75,7 @@ def main():
               f"股息率 {_f(val.get('dividend_yield'), 1)}% | 总市值 {mcap_txt}")
 
         # ---- 年度关键财务 ----
-        print(f"  [年度] 营收 {_f(g('operating_revenue'), 0)}亿 | "
+        print(f"  [年度] 营业总收入 {_f(g('revenue'), 0)}亿 | "
               f"归母净利 {_f(g('net_profit_parent'), 0)}亿 | "
               f"毛利率 {_f(g('gross_margin_pct'), 1)}% | 净利率 {_f(g('net_margin_pct'), 1)}% | "
               f"ROE {_f(g('roe_pct'), 1)}%")

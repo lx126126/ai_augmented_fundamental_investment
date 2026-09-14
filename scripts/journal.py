@@ -85,7 +85,7 @@ def _snapshot(real: dict) -> str:
     roe = latest.get("roe")
     debt = latest.get("debt_ratio")
     lines.append(
-        f"- 最新年报（{year}）：营收 {_fmt(rev, 1)} 亿 | 归母净利 {_fmt(np_, 1)} 亿 "
+        f"- 最新年报（{year}）：营业总收入 {_fmt(rev, 1)} 亿 | 归母净利 {_fmt(np_, 1)} 亿 "
         f"| ROE {_fmt(roe, 1, '%')} | 负债率 {_fmt(debt, 1, '%')}"
     )
     pe_p = val.get("pe_pctile")

@@ -75,7 +75,7 @@ def build_perspective_prompt(data: dict, p: dict) -> str:
     ) or "  （无分业务数据）"
 
     recent = ", ".join(
-        f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
+        f"{item.get('year', '')}年营业总收入{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
         for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
@@ -83,8 +83,8 @@ def build_perspective_prompt(data: dict, p: dict) -> str:
     if comp:
         comp_text = (
             f"所属行业：{comp.get('industry', 'N/A')}，"
-            f"营收行业第 {comp.get('rank', 'N/A')}/{comp.get('peers_count', 'N/A')} 家，"
-            f"营收份额 {comp.get('share_pct', 'N/A')}%"
+            f"营业总收入行业第 {comp.get('rank', 'N/A')}/{comp.get('peers_count', 'N/A')} 家，"
+            f"营业总收入份额 {comp.get('share_pct', 'N/A')}%"
         )
     else:
         comp_text = "（无行业竞争地位数据）"
@@ -104,7 +104,7 @@ def build_perspective_prompt(data: dict, p: dict) -> str:
 主营业务：{data.get('main_business', 'N/A')}
 
 === 最新年报（{data.get('latest_year', '')} 年）关键指标 ===
-营业收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
+营业总收入：{data.get('latest', {}).get('revenue', 'N/A')} 亿元
 归母净利润：{data.get('latest', {}).get('net_profit', 'N/A')} 亿元
 毛利率：{data.get('latest', {}).get('gross_margin', 'N/A')}%
 净利率：{data.get('latest', {}).get('net_margin', 'N/A')}%
@@ -114,7 +114,7 @@ ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 股息率：{data.get('dividend_yield', 'N/A')}%
 分红比例：{data.get('dividend_payout', 'N/A')}%
 
-=== 近5年营收/净利趋势 ===
+=== 近5年营业总收入/净利趋势 ===
 {recent}
 
 === 分业务收入构成（最新报告期）===

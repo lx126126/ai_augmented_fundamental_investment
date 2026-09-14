@@ -51,9 +51,16 @@ def _norm_code(code: str) -> str:
 # 字段映射：(分组, 模板指标名, 宽表字段名, 小数位)
 # ---------------------------------------------------------------------------
 ANNUAL_SPEC = [
+    # 口径约定（2026-09 统一）：报告正文/图表里的「营收」一律指**营业总收入**
+    # （宽表列 `revenue`，即利润表第一行）。下面「其中：营业收入」是它的明细项
+    # （宽表列 `operating_revenue`），**不是并列的第二口径**——「其中：」前缀就是为了
+    # 不让读者把两行当成两个互斥的营收数。红筹/有财务公司的标的这两者不等
+    # （茅台 2025：1720.5 亿 vs 1688.4 亿，差 32.1 亿 = 财务公司利息收入）。
+    # ⚠️ 比率口径另有约定：毛利率/净利率分母用 operating_revenue（会计准则如此，
+    # 营业成本与营业收入配对），Beneish M-Score 同；别把这两处也"顺手统一"了。
     ("利润表", None, None, None),
     (None, "营业总收入（亿元）", "revenue", 0),
-    (None, "营业收入（亿元）", "operating_revenue", 0),
+    (None, "其中：营业收入（亿元）", "operating_revenue", 0),
     (None, "营业总成本（亿元）", "total_operating_cost", 0),
     (None, "营业利润（亿元）", "operating_profit", 0),
     (None, "营业外收入（亿元）", "non_operating_income", 2),
@@ -104,7 +111,7 @@ QUARTER_SPEC = [
     # 同一张表里既混了流量（单季值）又混了时点（季末余额），分类标题既没把这两类分开，
     # 还占掉一整行版面。改为科目名自带口径，表下用一行注释统一说明。
     (None, "营业总收入（亿元）", "revenue", 0),
-    (None, "营业收入（亿元）", "operating_revenue", 0),
+    (None, "其中：营业收入（亿元）", "operating_revenue", 0),
     (None, "归母净利润（亿元）", "net_profit_parent", 0),
     (None, "货币资金（季末，亿元）", "monetary_funds", 0),
     (None, "存货（季末，亿元）", "inventory", 0),
@@ -1041,14 +1048,14 @@ def _build_quarter_review_facts(quarter: pd.DataFrame, annual: pd.DataFrame,
         "单季毛利率_pct": _r(last.get("gross_margin_pct")),
         "单季净利率_pct": _r(last.get("net_margin_pct")),
         "单季经营现金流净额_亿元": _r(last.get("ocf")),
-        "单季营收同比_pct": _r(last.get("revenue_yoy_pct")),
+        "单季营业总收入同比_pct": _r(last.get("revenue_yoy_pct")),
         "单季归母净利同比_pct": _r(last.get("net_profit_parent_yoy_pct")),
         "单季经营现金流同比_pct": _r(last.get("ocf_yoy_pct")),
     }
     # 环比：与上一季比。Q1 环比对 Q4 含明显季节性，prompt 里会提示不要把它当趋势。
     if len(q) >= 2:
         prev = q.iloc[-2]
-        for col, key in (("revenue", "单季营收环比_pct"),
+        for col, key in (("revenue", "单季营业总收入环比_pct"),
                          ("net_profit_parent", "单季归母净利环比_pct")):
             a, b = last.get(col), prev.get(col)
             if a is not None and b is not None and not pd.isna(a) and not pd.isna(b) and b:
@@ -1064,7 +1071,7 @@ def _build_quarter_review_facts(quarter: pd.DataFrame, annual: pd.DataFrame,
         "累计经营现金流净额_亿元": _sum(cur_y["ocf"]) if "ocf" in cur_y.columns else None,
     }
     if len(prev_y) == len(cur_y) and len(cur_y) > 0:
-        for col, key in (("revenue", "累计营收同比_pct"),
+        for col, key in (("revenue", "累计营业总收入同比_pct"),
                          ("net_profit_parent", "累计归母净利同比_pct"),
                          ("ocf", "累计经营现金流同比_pct")):
             if col not in cur_y.columns:
@@ -1092,10 +1099,10 @@ def _build_quarter_review_facts(quarter: pd.DataFrame, annual: pd.DataFrame,
     for _, r in q.iterrows():
         trend.append({
             "期": _q_label(pd.Timestamp(r["report_date"])),
-            "营收_亿元": _r(r.get("revenue")),
+            "营业总收入_亿元": _r(r.get("revenue")),
             "归母净利_亿元": _r(r.get("net_profit_parent")),
             "毛利率_pct": _r(r.get("gross_margin_pct")),
-            "营收同比_pct": _r(r.get("revenue_yoy_pct")),
+            "营业总收入同比_pct": _r(r.get("revenue_yoy_pct")),
         })
 
     latest_year = int(annual["report_date"].max().year) if not annual.empty else None

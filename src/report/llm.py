@@ -107,7 +107,7 @@ def _build_prompt(data: dict) -> str:
     seg_text = "\n".join(_seg_line(s) for s in _as_list(data.get("segments"))) or "  （无分业务数据）"
 
     recent = ", ".join(
-        f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
+        f"{item.get('year', '')}年营业总收入{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
         for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
@@ -119,9 +119,9 @@ def _build_prompt(data: dict) -> str:
         )
         comp_text = (
             f"所属申万行业：{comp.get('industry', 'N/A')}（{comp.get('report_year', '')} 年报）\n"
-            f"营收排名：行业第 {comp.get('rank', 'N/A')} / {comp.get('peers_count', 'N/A')} 家\n"
-            f"营收份额：{comp.get('share_pct', 'N/A')}%（行业营收总额 {comp.get('industry_revenue', 'N/A')} 亿元）\n"
-            f"行业营收前5：{top5}"
+            f"营业总收入排名：行业第 {comp.get('rank', 'N/A')} / {comp.get('peers_count', 'N/A')} 家\n"
+            f"营业总收入份额：{comp.get('share_pct', 'N/A')}%（行业营业总收入总额 {comp.get('industry_revenue', 'N/A')} 亿元）\n"
+            f"行业营业总收入前5：{top5}"
         )
     else:
         comp_text = "（无行业竞争地位数据）"
@@ -131,6 +131,7 @@ def _build_prompt(data: dict) -> str:
 以下是【真实财务数据】，你的任务是基于这些数据生成投研报告的文字部分。
 **铁律：所有结论必须严格基于以下数据，严禁虚构任何财务数字、行业排名、市场份额。**
 **口径提示：分业务中的「利润率」是数据源口径（金融业为利差率/利润率、制造业为毛利率），请勿擅自改写成「毛利率」或臆断具体口径。**
+**口径提示：本报告「营收」一律指【营业总收入】（上方「最新年报关键指标」那一行就是它）。严禁改写成「营业收入」——后者是利润表里「其中：营业收入」的明细项，在有财务公司的标的（如茅台）两者相差数十亿。**
 
 === 公司基本信息 ===
 公司名：{data.get('name', '')}
@@ -148,7 +149,7 @@ ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 分红比例：{data.get('dividend_payout', 'N/A')}%
 股息率：{data.get('dividend_yield', 'N/A')}%
 
-=== 近5年营收/净利趋势 ===
+=== 近5年营业总收入/净利趋势 ===
 {recent}
 
 === 分业务收入构成（最新报告期）===
@@ -263,7 +264,7 @@ def _build_market_view_prompt(data: dict) -> str:
     ) or "  （无分业务数据）"
 
     recent = ", ".join(
-        f"{item.get('year', '')}年营收{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
+        f"{item.get('year', '')}年营业总收入{item.get('revenue', 'N/A')}亿/净利{item.get('profit', 'N/A')}亿"
         for item in _as_list(data.get("recent"))
     ) or "（无历史数据）"
 
@@ -272,7 +273,7 @@ def _build_market_view_prompt(data: dict) -> str:
     if comp:
         comp_text = (
             f"行业第 {comp.get('rank', 'N/A')}/{comp.get('peers_count', 'N/A')} 家，"
-            f"营收份额 {comp.get('share_pct', 'N/A')}%"
+            f"营业总收入份额 {comp.get('share_pct', 'N/A')}%"
         )
     else:
         comp_text = "（无行业竞争地位数据）"
@@ -298,7 +299,7 @@ def _build_market_view_prompt(data: dict) -> str:
 ROE：{data.get('latest', {}).get('roe', 'N/A')}%
 资产负债率：{data.get('latest', {}).get('debt_ratio', 'N/A')}%
 
-=== 近5年营收/净利趋势 ===
+=== 近5年营业总收入/净利趋势 ===
 {recent}
 
 === 分业务收入构成 ===
@@ -448,8 +449,8 @@ def _build_action_prompt(data: dict) -> str:
     comp_text = ""
     if comp:
         comp_text = (
-            f"所属行业：{comp.get('industry', 'N/A')}，营收行业第 {comp.get('rank', 'N/A')}"
-            f"/{comp.get('peers_count', 'N/A')} 家，营收份额 {comp.get('share_pct', 'N/A')}%"
+            f"所属行业：{comp.get('industry', 'N/A')}，营业总收入行业第 {comp.get('rank', 'N/A')}"
+            f"/{comp.get('peers_count', 'N/A')} 家，营业总收入份额 {comp.get('share_pct', 'N/A')}%"
         )
     else:
         comp_text = "（无行业竞争地位数据）"

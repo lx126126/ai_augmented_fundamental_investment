@@ -159,8 +159,9 @@ def check_financial_tables(raw: dict[str, pd.DataFrame]) -> list[CheckResult]:
             r.add("balance_identity", worst < 0.01, f"最大偏差 {worst:.2%}（用 {equity_col}）")
         results.append(r)
 
-    # 利润表：营业收入 > 0，净利润列存在
-    # 注意：银行等金融机构利润表可能无 revenue 列，用 operating_revenue（营业收入）兜底。
+    # 利润表：营业总收入 > 0，净利润列存在
+    # 口径：报告统一「营收 = 营业总收入」（revenue）。银行等金融机构利润表可能无 revenue 列，
+    # 此时退回 operating_revenue（营业收入）兜底，只做「>0」的边界检查，不影响口径。
     if "profit_sheet" in raw:
         pdf = raw["profit_sheet"]
         rev_col = "revenue" if "revenue" in pdf.columns else "operating_revenue"
@@ -229,8 +230,8 @@ def check_annual_sanity(annual: pd.DataFrame, code: str = "") -> CheckResult:
     1. 会计恒等式：资产合计 = 负债合计 + 股东权益合计（**必须用含少数股东的
        total_equity_all**，用归母 total_equity 会虚增偏差约 13%）
     2. 利润勾稽：净利润 ≈ 归母净利润 + 少数股东损益
-    3. 常识边界：分红比例/资产负债率/净利率 ∈ [0,100]、总资产与营收为正
-    4. 同比异常：|营收同比|、|净利润同比| 超过 200%（多为单位或口径错误）
+    3. 常识边界：分红比例/资产负债率/净利率 ∈ [0,100]、总资产与营业总收入为正
+    4. 同比异常：|营业总收入同比|、|净利润同比| 超过 200%（多为单位或口径错误）
     """
     res = CheckResult(table=f"sanity:{code or 'annual'}")
     if annual is None or annual.empty:
@@ -289,7 +290,7 @@ def check_annual_sanity(annual: pd.DataFrame, code: str = "") -> CheckResult:
         res.add(f"{col} 为正", not bad, "；".join(bad[:5]) or "全部为正")
 
     # 4. 同比异常（带**低基数豁免**）
-    for yoy_col, val_col, label in (("revenue_yoy_pct", "revenue", "营收同比"),
+    for yoy_col, val_col, label in (("revenue_yoy_pct", "revenue", "营业总收入同比"),
                                     ("net_profit_yoy_pct", "net_profit", "净利润同比")):
         s, v = _col(yoy_col), _col(val_col)
         if s is None:
