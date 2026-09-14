@@ -364,7 +364,12 @@ def build_val_grid() -> str:
     # 不标年度会让人误读成「2026 年股息率」。
     _dy_year = v.get("dividend_year")
     dy_lbl = f"股息率（{_dy_year} 年度）" if _dy_year else "股息率"
-    dy_note = f"近10年分位 {dy_pct}" if dy_pct != "—" else "分位 —"
+
+    # 分位口径前缀按估值序列实际跨度取（次新股不足 10 年时不能写「近10年分位」），
+    # 见 _scope_label 的说明。
+    pctile_label = _scope_label("pctile", v)
+
+    dy_note = f"{pctile_label} {dy_pct}" if dy_pct != "—" else "分位 —"
 
     # 每股股息卡片：把「每股股息 / 分红总额 / 分红比例」三个口径放在一起，
     # 单看股息率无法判断是「分红多」还是「股价跌下来的」。
@@ -381,12 +386,32 @@ def build_val_grid() -> str:
     return (
         '<div class="val-grid">'
         f'<div class="val-item"><div class="lbl">总市值</div><div class="v">{mcap_txt}</div><div class="pct">{price_note}</div></div>'
-        f'<div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">{pe}</div><div class="pct {pe_cls}">近10年分位 {pe_pct}</div></div>'
-        f'<div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">{pb}</div><div class="pct {pb_cls}">近10年分位 {pb_pct}</div></div>'
+        f'<div class="val-item"><div class="lbl">市盈率 PE（TTM）</div><div class="v">{pe}</div><div class="pct {pe_cls}">{pctile_label} {pe_pct}</div></div>'
+        f'<div class="val-item"><div class="lbl">市净率 PB（MRQ）</div><div class="v">{pb}</div><div class="pct {pb_cls}">{pctile_label} {pb_pct}</div></div>'
         f'<div class="val-item"><div class="lbl">{dy_lbl}</div><div class="v" style="color:var(--up)">{dy}</div><div class="pct {dy_cls}">{dy_note}</div></div>'
         f'<div class="val-item"><div class="lbl">每股股息</div><div class="v">{dps_txt}</div><div class="pct">{dps_note}</div></div>'
         "</div>"
     )
+
+
+def _scope_label(kind: str = "pctile", v: dict | None = None) -> str:
+    """估值/分红序列的「区间」措辞，按**实际跨度**生成，避免对次新股写「近10年」。
+
+    中国海油 A 股 600938 于 2022-04 上市，估值序列只有 4.4 年。此时若面板印
+    「近10年分位 91%」，读者会读成「十年 91% 分位」，而真实含义是「上市以来
+    91% 分位」——该股上市初期正值油气高景气、PE 仅 5~7 倍，分母换成真十年，
+    分位会大幅下移，两个结论指向完全不同的动作。图上「十年中位数」同理。
+    跨度 < 9.5 年时按实情改口径，不足部分如实标出年数。
+    """
+    d = v if v is not None else (VALUATION or {})
+    vs, ve = d.get("val_series_start"), d.get("val_series_end")
+    if hasattr(vs, "year") and hasattr(ve, "year"):
+        span = (ve - vs).days / 365.25
+        if span < 9.5:
+            return {"pctile": f"上市以来分位（{span:.1f}年）",
+                    "median": "区间中位数",
+                    "range": "上市以来"}.get(kind, "")
+    return {"pctile": "近10年分位", "median": "十年中位数", "range": "近十年"}.get(kind, "")
 
 
 def build_pe_chart() -> str:
@@ -450,7 +475,7 @@ def build_pe_chart() -> str:
         # 白描边（paint-order: stroke）给文字垫底：中位线横穿折线区，不垫底会读不清
         med_lab = (f'<text x="{PL + 6}" y="{_y(med) - 5:.1f}" font-size="11" '
                    f'fill="var(--muted)" stroke="#ffffff" stroke-width="3" paint-order="stroke">'
-                   f'近十年中位数 {med:.1f}x</text>')
+                   f'{_scope_label("median")} {med:.1f}x</text>')
 
     # 现值：点 + 标签（标签右对齐并夹在绘图区内，避免贴边被裁）
     nx, ny = pts[-1]
@@ -472,10 +497,10 @@ def build_pe_chart() -> str:
 
     return (
         '<div class="pe-chart">'
-        '<div class="pe-title">PE（TTM）近十年走势'
-        '<span class="pe-note">与「近10年分位」同一条序列 · 历史市值 ÷ 同期已披露年报归母净利</span></div>'
+        f'<div class="pe-title">PE（TTM）{_scope_label("range")}走势'
+        f'<span class="pe-note">与「{_scope_label("pctile")}」同一条序列 · 历史市值 ÷ 同期已披露年报归母净利</span></div>'
         f'<svg viewBox="0 0 {W} {H}" width="100%" role="img" '
-        f'aria-label="PE 十年走势，现值 {now_pe:.1f} 倍，中位数 {med:.1f} 倍">'
+        f'aria-label="PE {_scope_label("range")}走势，现值 {now_pe:.1f} 倍，中位数 {med:.1f} 倍">'
         f'<polygon points="{area}" fill="var(--accent-2)" fill-opacity="0.07"/>'
         + "".join(ticks)
         + med_lab
@@ -596,7 +621,7 @@ def build_div_history() -> str:
         f'<text x="{PL}" y="{PT1 - 6}" font-size="10" font-weight="600" '
         f'fill="var(--muted)">分红比例（%）</text>'
         + (f'<text x="{PL + pw}" y="{PT1 - 6}" text-anchor="end" font-size="9.5" '
-           f'fill="var(--faint)">虚线 = 十年中位数 {med:.1f}%</text>' if med is not None else "")
+           f'fill="var(--faint)">虚线 = {_scope_label("median")} {med:.1f}%</text>' if med is not None else "")
         + f'<text x="{PL}" y="{PT2 - 6}" font-size="10" font-weight="600" '
           f'fill="var(--muted)">每股股息（元）</text>'
     )
@@ -675,7 +700,7 @@ def build_div_history() -> str:
         + '<div class="dh-legend">'
         '<span class="lg"><span class="sw line" style="background:var(--warn)"></span>分红比例（占归母净利，%）</span>'
         '<span class="lg"><span class="sw" style="background:var(--accent-2)"></span>每股股息（元）</span>'
-        '<span class="lg"><span class="sw" style="background:var(--warn);height:2px;opacity:.55"></span>十年中位数参考线</span>'
+        f'<span class="lg"><span class="sw" style="background:var(--warn);height:2px;opacity:.55"></span>{_scope_label("median")}参考线</span>'
         "</div></div>"
     )
 
