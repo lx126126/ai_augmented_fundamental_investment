@@ -64,3 +64,7 @@ docs/code-review-guide.md
 
 # 面试话术文档（含短板清单与雷点清单；简历附了 GitHub 链接，公开不利，不入库）
 docs/interview-narrative.md
+
+# 简历（含真实姓名与联系方式，仓库为 public，严禁入库）
+# 注：*.pdf 已由上面的规则覆盖，但 .md / .html 版本需单独挡
+docs/李潇简历-*
