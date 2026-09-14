@@ -285,17 +285,33 @@ def build_annual_financials(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
         avg_eq = (eq + eq.shift(1)) / 2
         merged["roe_pct"] = merged["roe_pct"].fillna(np_ / avg_eq.where(avg_eq != 0) * 100)
 
-    # 分红数据：每股股息（统一口径 dividend_per_share，元/股）、股息率
+    # 分红数据：每股股息（统一口径 dividend_per_share，元/股）、股息率、总股数
     if "dividend" in data:
         dv = _annual_dividend(data["dividend"])
         if not dv.empty:
-            dv_cols = key + [c for c in ["dividend_per_share", "dividend_yield_pct"] if c in dv.columns]
+            dv_cols = key + [c for c in ["dividend_per_share", "dividend_yield_pct", "total_shares"]
+                             if c in dv.columns]
             merged = merged.merge(dv[dv_cols], on=key, how="left")
 
+    # 真实总股数（亿股）—— 分红总额与 52 周股价换算都要用它。
+    # ⚠️ 不能拿资产负债表的 share_capital（「股本」科目）当股数：它只在
+    # 「内资普通股、面值 1 元」时才与股数相等。红筹结构不成立 —— 中国海油（600938）
+    # 总股本 475.3 亿股，「股本」科目却是 751.8 亿，直接相乘会把分红总额与分红比例
+    # 放大约 1.58 倍（2025 年：显示股息率 5.34% / 分红比例 70.5%，真实 3.38% / 44.6%，
+    # 而年报自己披露的分红比例是 45.0%），52 周股价则被压到真实值的六成多。
+    # 故优先用分红表自带的 total_shares（东财「总股本」，真实股数，单位「股」）。
+    # 港股没有该列，但其 share_capital 是由「归母净利 ÷ 每股基本盈利」反推的，
+    # 本就等于股数（见 fetcher 的港股股本反推），可安全回退。
+    if "total_shares" in merged.columns:
+        merged["shares_yi"] = pd.to_numeric(merged["total_shares"], errors="coerce") / 1e8
+        if "share_capital" in merged.columns:
+            merged["shares_yi"] = merged["shares_yi"].fillna(merged["share_capital"])
+    elif "share_capital" in merged.columns:
+        merged["shares_yi"] = merged["share_capital"]
+
     # 分红比例（股利支付率）= 分红总额 / 归母净利润 × 100
-    # share_capital 已换算为「亿股」（面值 1 元），故分红总额 = 每股股息 × 总股数
-    if "dividend_per_share" in merged.columns and "share_capital" in merged.columns:
-        merged["dividend_total"] = merged["dividend_per_share"] * merged["share_capital"]  # 分红总额(亿元)
+    if "dividend_per_share" in merged.columns and "shares_yi" in merged.columns:
+        merged["dividend_total"] = merged["dividend_per_share"] * merged["shares_yi"]  # 分红总额(亿元)
     if "dividend_total" in merged.columns and "net_profit_parent" in merged.columns:
         merged["dividend_payout_pct"] = merged["dividend_total"] / merged["net_profit_parent"] * 100
 
@@ -617,7 +633,13 @@ def build_valuation(valuation: pd.DataFrame, annual: pd.DataFrame) -> dict:
                     "payout_pct": float(r["dividend_payout_pct"]) if pd.notna(r.get("dividend_payout_pct")) else None,
                 })
 
-    total_shares_yi = annual["share_capital"].iloc[-1] if "share_capital" in annual.columns else None  # 已是亿股
+    # 52 周股价换算用的总股数（亿股）：优先 shares_yi（真实股数，见 build_annual_financials
+    # 处的说明 —— 红筹股的「股本」科目 ≠ 股数），缺失时才回退 share_capital。
+    total_shares_yi = None
+    for _shares_col in ("shares_yi", "share_capital"):
+        if _shares_col in annual.columns and pd.notna(annual[_shares_col].iloc[-1]):
+            total_shares_yi = annual[_shares_col].iloc[-1]
+            break
 
     # 52周股价区间（近一年市值 ÷ 总股本）
     one_year = mcap[mcap["report_date"] >= (mcap["report_date"].max() - pd.DateOffset(years=1))]

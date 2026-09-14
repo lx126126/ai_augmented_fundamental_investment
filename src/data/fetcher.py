@@ -506,11 +506,16 @@ def fetch_hk_dividend(code: str) -> pd.DataFrame | None:
         df["fiscal_year"].astype(str) + "-12-31", errors="coerce"
     ).astype("datetime64[us]")
     df["symbol"] = hk
-    # 仅保留年度分配 + 有股息值的行；剔除冗余列（announce_date 为字符串对象类型，且无业务价值）
+    # 只保留有股息值的行；剔除冗余列（announce_date/fiscal_year/dividend_type 无业务价值）
     df = df[df["dividend_per_share"].notna()].copy()
     df = df.drop(columns=["dividend_text", "announce_date", "fiscal_year", "dividend_type"], errors="ignore")
-    df = df[["symbol", "report_date", "dividend_per_share"]].drop_duplicates(
-        subset=["symbol", "report_date"], keep="last"
+    # 同一财政年度常有「中期分配 + 年度（末期）分配」两笔，必须**加总**而不是去重 ——
+    # drop_duplicates 会把末期股息整笔丢掉：中国海油 2025 年度中期 0.73 + 末期 0.55
+    # = 1.28 港元，去重后只剩 0.73，股息率被腰斩（3.0% vs 实际 5.2%），分红比例同步偏低。
+    # 这与 A 股口径一致（cleaner._annual_dividend 对年内多次派息同样求和）。
+    df = (
+        df.groupby(["symbol", "report_date"], as_index=False)["dividend_per_share"]
+        .sum()
     )
     return df
 

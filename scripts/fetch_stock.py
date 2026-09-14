@@ -13,10 +13,28 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.fetcher import fetch_all, fetch_all_hk, _hk_code
 from src.data.storage import save_all, missing_tables
+
+
+def _period_summary(df: pd.DataFrame) -> str:
+    """摘要用的报告期区间。
+
+    ⚠️ 两个坑：①quote / rating 这类表虽然有 report_date 列，但整列是 NaN，
+    `.min()` 会返回 float('nan') 而不是 Timestamp，直接 .date() 抛
+    AttributeError（港股抓 00883 时就是这样崩在最后一步，数据其实已落盘）；
+    ②该列可能混着 str / Timestamp / NaT，必须先统一 coerce 再 dropna 判空。
+    """
+    if "report_date" not in df.columns:
+        return "（无报告期）"
+    rd = pd.to_datetime(df["report_date"], errors="coerce").dropna()
+    if rd.empty:
+        return "（无报告期）"
+    return f"报告期 {rd.min().date()} ~ {rd.max().date()}"
 
 
 def _is_hk(code: str) -> bool:
@@ -65,11 +83,7 @@ def main() -> None:
 
     print("\n各表摘要:")
     for table, df in data.items():
-        if "report_date" in df.columns:
-            period = f"报告期 {df['report_date'].min().date()} ~ {df['report_date'].max().date()}"
-        else:
-            period = "（无报告期）"
-        print(f"  {table}: {df.shape[0]} 行 × {df.shape[1]} 列, {period}")
+        print(f"  {table}: {df.shape[0]} 行 × {df.shape[1]} 列, {_period_summary(df)}")
 
 
 if __name__ == "__main__":
