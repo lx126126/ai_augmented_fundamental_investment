@@ -266,6 +266,28 @@ def slide_cover(a, h, pm, rate_date) -> str:
     def stat(k, v):
         return f'<div class="stat"><div class="stat-n">{v}</div><div class="stat-l">{k}</div></div>'
 
+    def wide(k, v):
+        return (f'<div class="stat stat-wide"><div class="stat-l">{k}</div>'
+                f'<div class="stat-n">{v}</div></div>')
+
+    def quote_col(tag, num, date_txt):
+        """单地报价：大号数字 + 日期标签，**无卡片**（对齐茅台发布包的 .price 版式）。
+
+        A/H 并排放两次。此前是两张带边框的卡片，价格被框在格子里，和下面的
+        四个指标卡混成一片，读者一眼分不出「哪个是价格、哪个是规模」。
+        """
+        return (f'<div class="ahp-col"><div class="ahp-tag">{bx._esc(tag)}</div>'
+                f'<div class="ahp-num">{num}</div>'
+                f'<div class="ahp-lbl">{bx._esc(date_txt)}</div></div>')
+
+    def _qdate(d: dict) -> str:
+        """报价日：取行情快照日期；取不到时如实写「最新快照」，不编日期。"""
+        qd = (d.get("valuation") or {}).get("quote_date")
+        try:
+            return qd.strftime("%Y-%m-%d 收盘") if qd else "最新快照"
+        except AttributeError:
+            return "最新快照"
+
     body = f"""
     <div class="co">
       <div class="co-name">中国海油</div>
@@ -273,16 +295,15 @@ def slide_cover(a, h, pm, rate_date) -> str:
         <span class="code">00883</span> 港股</div>
     </div>
     <div class="ahp">
-      <div class="ahp-c"><div class="ahp-m">A 股 · 人民币</div>
-        <div class="ahp-v">¥ {bx._n(av.get("price_now"), 2)}</div></div>
-      <div class="ahp-c"><div class="ahp-m">港股 · 港元</div>
-        <div class="ahp-v">HK$ {bx._n(hv.get("price_now"), 2)}</div></div>
+      {quote_col("A 股 · 人民币", f'¥ {bx._n(av.get("price_now"), 2)}', _qdate(a))}
+      {quote_col("港股 · 港元", f'HK$ {bx._n(hv.get("price_now"), 2)}', _qdate(h))}
     </div>
     <div class="stat-grid">
       {stat("2025 营业总收入", bx._n((an.get("revenue") or 0) / 1, 1, " 亿"))}
       {stat("2025 归母净利", bx._n((an.get("net_profit_parent") or 0) / 1, 1, " 亿"))}
-      {stat("ROE（2025 年报）", bx._n(an.get("roe_pct"), 2, "%"))}
-      {stat("股东应占净现金", bx._n((a["graham"] or {}).get("net_cash"), 0, " 亿"))}
+      {stat("A 股总市值", f'{bx._n((av.get("market_cap") or 0) / 10000, 2, " 万亿元")}')}
+      {stat("港股总市值", f'{bx._n((hv.get("market_cap") or 0) / 10000, 2, " 万亿港元")}')}
+      {wide("ROE（2025 年报）", bx._n(an.get("roe_pct"), 2, "%"))}
     </div>
     <div class="badges">
       <div class="badge"><span class="bd-k">林奇分类</span><span class="bd-v">{bx._esc(lynch_type)}</span></div>
@@ -290,8 +311,10 @@ def slide_cover(a, h, pm, rate_date) -> str:
     </div>
     <div class="cover-tip">A 股与港股是同一家公司 · 往下 8 张一起看</div>
     """
-    foot = (f'2025 年报数据 · 港股报价按 1 港元 = {pm["rate"]:.4f} 元人民币折算（{rate_date}）'
-            ' · 仅数据呈现，不含任何买卖建议')
+    # 市值也是当日报价算出来的，币种各随其地 —— 两处市值不能相加，故分别标注。
+    foot = (f'报价与市值：A 股 {_qdate(a)} · 港股 {_qdate(h)}。'
+            f'港股报价按 1 港元 = {pm["rate"]:.4f} 元人民币折算（{rate_date}）· '
+            '两地市值为各自币种口径，不可相加 · 仅数据呈现，不含任何买卖建议')
     return bx._slide(1, "", "", body, foot)
 
 
@@ -301,6 +324,36 @@ def slide_business(a, h) -> str:
     seg_pct = ((a.get("business_map") or {}).get("segments")) or []
     newest = labels[-1] if labels else "最新期"
     pcts = {s.get("name"): s.get("pct") for s in seg_pct}
+
+    # 护城河三条，全部只用能点名出处的材料：
+    #   资源壁垒 —— 公司简介原文（港股 competition.company_intro）
+    #   规模地位 —— 东财业绩报表的行业分类与排名（competition）
+    #   抗周期   —— 2025 年报的净现金与资产负债率
+    # 不写「成本领先」「储量优势」这类没有数据支撑的话：本项目里没有桶油成本
+    # 与净证实储量字段，写出来就是编。
+    comp = a.get("competition") or {}
+    rank, peers = comp.get("rank"), comp.get("peers_count")
+    industry = comp.get("industry") or "行业"
+    an_latest = a["__annual_latest__"]
+    g = a.get("graham") or {}
+    rank_txt = (f'{industry} 分类第 {rank} / {peers} 家' if (rank and peers) else "—")
+    size_txt = f'营业总收入 {bx._n(an_latest.get("revenue"), 1)} 亿元 · {rank_txt}'
+    cash_txt = (f'股东应占净现金 {bx._n(g.get("net_cash"), 0)} 亿元 · '
+                f'资产负债率 {bx._n(an_latest.get("debt_ratio_pct"), 1, "%")}')
+
+    moat = (
+        '<div class="sec-t">护城河 <span class="sec-s">公开可核对的客观事实</span></div>'
+        '<div class="moat">'
+        '<div class="moat-row"><span class="moat-k">资源壁垒</span>'
+        '<span class="moat-v">海上油气勘探开发需国家核准，海域探矿权稀缺；'
+        '公司自述为「中国最大的海上原油及天然气生产商，'
+        '全球最大的独立油气勘探及生产企业之一」（公司简介）</span></div>'
+        f'<div class="moat-row"><span class="moat-k">规模地位</span>'
+        f'<span class="moat-v">{size_txt}</span></div>'
+        f'<div class="moat-row"><span class="moat-k">抗周期</span>'
+        f'<span class="moat-v">{cash_txt}</span></div>'
+        "</div>"
+    )
 
     rows = ""
     for name, _color, revs, _margins in sorted(segs, key=lambda s: -(s[2][-1] or 0)):
@@ -319,11 +372,14 @@ def slide_business(a, h) -> str:
         f'<div class="lead">{bx._esc((a.get("business_map") or {}).get("main_business") or "—")}</div>'
         f'<div class="sec-t">收入结构 <span class="sec-s">{newest} · 人民币</span></div>'
         f'<div class="segs">{rows}</div>'
+        + moat
         + bx._note("86.8% 的收入来自油气勘探及生产，贸易业务是配套流转、利润贡献很低。"
                    "所以这门生意的定价权不在自己手里，在油价手里。")
     )
     foot = (f'收入占比 = {newest} 分业务口径，分母为营业总收入（含「其他」业务，'
-            f'故各项之和 100.1%）· 单位：人民币亿元')
+            f'故各项之和 100.1%）· 单位：人民币亿元。'
+            '护城河一栏只列公开可核对的事实：行业分类与排名来自东财业绩报表，'
+            '公司定位引自公司简介，净现金与资产负债率来自 2025 年报 —— 不含优劣判断')
     return bx._slide(2, "它是做什么的", "业务与收入结构", body, foot)
 
 
@@ -358,8 +414,10 @@ def slide_ah(a, h, pm, rate_date) -> str:
         f'<div class="prem">同一家公司 · A 股比港股贵 <b>{bx._n(prem*100, 1, "%")}</b>'
         f'<span class="prem-s">港股 HK$ {bx._n(hv.get("price_now"), 2)}'
         f' 折人民币约 ¥ {bx._n(h_cny, 2)}，即折价 {bx._n((1-1/(1+prem))*100, 1, "%")}</span></div>'
-        + bx._note("不是公司变了，是「你在哪个市场买」变了。同一笔分红，"
-                   "港股股价低，股息率就高出近 2 个百分点。")
+        + bx._note("同一份报表、同一笔分红，价差来自两地市场结构：港股面向全球资金，"
+                   "可比的油气资产选项多；A 股以境内资金为主，纯上游油气标的稀缺"
+                   "（东财「油气开采Ⅱ」分类仅 5 家）。同一份盈利在 A 股更贵，"
+                   "买的价格不同，港股的股息率就高出近 2 个百分点。")
     )
     foot = (f'折算汇率 1 港元 = {rate:.4f} 元人民币（{rate_date} 中行折算价）。'
             'PE 用「市值 ÷ 2025 年报归母净利」同口径自算 —— 行情接口的 A/H 两市 PE '
@@ -456,13 +514,34 @@ def slide_growth(a, h) -> str:
 
     ar, hr = a.get("annual_rates") or {}, h.get("annual_rates") or {}
 
-    def cagr(d, k):
-        v = ((d.get(k) or {}).get("cagr5"))
-        return bx._n(v * 100, 1, "%") if v else "—"
+    def cagr(d, k, span="cagr5"):
+        """复合增速 → 带正负号的展示串。0% 也是有效值，不能当缺失（原写法 `if v`
+        会把 0 判成缺），只有 None 才写「—」。"""
+        v = (d.get(k) or {}).get(span)
+        v = _num(v)
+        if v is None:
+            return "—"
+        return f'<span class="{"upv" if v > 0 else ("dnv" if v < 0 else "flat")}">' \
+               f'{v * 100:+.1f}%</span>'
 
-    def cagr10(d, k):
-        v = ((d.get(k) or {}).get("cagr10"))
-        return bx._n(v * 100, 1, "%") if v else "—"
+    def rate_table(rows: list[tuple[str, str, str]]) -> str:
+        """年化增速表：5 年 / 10 年各占一列，一行一个指标。
+
+        第一版是三张 vcard，把 10 年值塞进 `vcard-d` 的「5 年复合 · 10 年 8.8%」里：
+        卡内可用宽度约 90px，9.5px 的小字折成两行，「8.8%」被甩到单独一行 ——
+        读者反馈「十年复合增速和 5 年复合增速有数值没有体现出来」，就是这处折行。
+        三张卡并排的情况下无论怎么调字号都放不下两组「标签+数值」，
+        所以换成整宽表：指标 1 列 + 5 年 1 列 + 10 年 1 列，两组数值都独立成格。
+        """
+        out = ('<div class="rt"><div class="rt-row rt-head">'
+               '<span class="rt-k">指标</span>'
+               '<span class="rt-v">5 年复合</span>'
+               '<span class="rt-v">10 年复合</span></div>')
+        for label, v5, v10 in rows:
+            out += (f'<div class="rt-row"><span class="rt-k">{label}</span>'
+                    f'<span class="rt-v">{v5}</span>'
+                    f'<span class="rt-v">{v10}</span></div>')
+        return out + "</div>"
 
     qr = a.get("quarter_review_facts") or {}
     single = qr.get("单季") or {}
@@ -485,18 +564,12 @@ def slide_growth(a, h) -> str:
         '<span class="lg" style="background:#c0392b;margin-left:12px"></span>归母净利 亿元</div>'
         f'<div class="bars">{cols}</div>'
         '<div class="sec-t">年化增速 <span class="sec-s">近 5 年 / 近 10 年</span></div>'
-        '<div class="vgrid">'
-        f'<div class="vcard"><div class="vcard-l">营业总收入</div>'
-        f'<div class="vcard-n">{cagr(ar,"sales")}</div>'
-        f'<div class="vcard-d">5 年复合 · 10 年 {cagr10(hr,"sales")}</div></div>'
-        f'<div class="vcard"><div class="vcard-l">归母净利</div>'
-        f'<div class="vcard-n">{cagr(ar,"earnings")}</div>'
-        f'<div class="vcard-d">5 年复合 · 10 年 {cagr10(hr,"earnings")}</div></div>'
-        f'<div class="vcard"><div class="vcard-l">分红</div>'
-        f'<div class="vcard-n">{cagr(hr,"dividends")}</div>'
-        f'<div class="vcard-d">5 年复合 · 10 年 {cagr10(hr,"dividends")}</div></div>'
-        "</div>"
-        f'<div class="sec-t">最近一期 <span class="sec-s">2026 中报 · 单季同比</span></div>'
+        + rate_table([
+            ("营业总收入", cagr(ar, "sales"), cagr(hr, "sales", "cagr10")),
+            ("归母净利", cagr(ar, "earnings"), cagr(hr, "earnings", "cagr10")),
+            ("分红", cagr(hr, "dividends"), cagr(hr, "dividends", "cagr10")),
+        ])
+        + f'<div class="sec-t">最近一期 <span class="sec-s">2026 中报 · 单季同比</span></div>'
         '<div class="vgrid">'
         f'<div class="vcard"><div class="vcard-l">单季营业总收入</div>'
         f'<div class="vcard-n">{bx._n(s_rev, 1)}</div>'
@@ -548,8 +621,10 @@ def slide_valuation(a, h) -> str:
     body = (
         f'<div class="vgrid">{cards(av, "A 股")}{cards(hv, "港股")}</div>'
         + rng_a
-        + bx._note("同一个 PE 数字，两边回答的问题不一样：港股 7.3 落在近十年 52% 分位，"
-                   "A 股 11.7 落在上市以来 90% 分位 —— 分位只说明它在自己历史里的位置，"
+        + bx._note(f"同一个 PE 数字，两边回答的问题不一样：港股 {bx._n(hv.get('pe'), 1)} "
+                   f"落在近十年 {bx._n(hv.get('pe_pctile'), 0)}% 分位，"
+                   f"A 股 {bx._n(av.get('pe'), 1)} 落在上市以来 "
+                   f"{bx._n(av.get('pe_pctile'), 0)}% 分位 —— 分位只说明它在自己历史里的位置，"
                    "不构成贵或便宜的判断。")
     )
     foot = ("分位口径：A 股自 2022-04 上市起算（约 4.4 年），港股自 2016-09 起（近 10 年）—— "
@@ -729,23 +804,52 @@ def slide_risk(a, h, pm) -> str:
 # 附加样式（A/H 对照表、双价格块、溢价条）
 # --------------------------------------------------------------------------- #
 _EXTRA_CSS = f"""
-  /* 封面双价格 */
-  .ahp {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:18px; }}
-  .ahp-c {{ background:{C['card']}; border:1px solid {C['line']}; border-radius:10px;
-            padding:12px 13px; }}
-  .ahp-m {{ font-size:10.5px; color:{C['faint']}; }}
-  .ahp-v {{ font-size:24px; font-weight:800; color:{C['accent']}; margin-top:6px;
-            letter-spacing:-.3px; }}
+  /* 封面双报价：**无卡片**，只有大号数字 + 日期标签，对齐茅台发布包的 .price 版式。
+     第一版是两张带边框的卡片，价格被框住后与下方四个指标卡视觉同权，
+     读者一眼分不清「哪个是价格、哪个是规模」。 */
+  .ahp {{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:20px; }}
+  .ahp-tag {{ font-size:10.5px; color:{C['faint']}; }}
+  .ahp-num {{ font-size:31px; font-weight:800; color:{C['accent']}; margin-top:5px;
+              line-height:1.05; letter-spacing:-.5px; white-space:nowrap; }}
+  .ahp-lbl {{ font-size:10.5px; color:{C['faint']}; margin-top:6px; }}
+  /* 封面最后一张卡横跨两列：2×2 四格后剩一格单挂左列会明显不平衡 */
+  .stat-wide {{ grid-column:1 / -1; display:flex; align-items:baseline;
+                justify-content:space-between; }}
+  .stat-wide .stat-l {{ margin-top:0; }}
+  /* 年化增速表：指标 1 列 + 5 年 / 10 年各 1 列。
+     整宽表是为了让两组数值都独立成格 —— 三张 110px 宽的卡无论如何调字号
+     都放不下两组「标签 + 数值」，小字必然折行（见 rate_table 注释）。 */
+  .rt {{ background:{C['card']}; border:1px solid {C['line']}; border-radius:10px;
+         padding:4px 13px; }}
+  .rt-row {{ display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:6px;
+             align-items:baseline; padding:9px 0; }}
+  .rt-row + .rt-row {{ border-top:1px dashed {C['line']}; }}
+  .rt-head {{ padding:9px 0 6px; }}
+  .rt-k {{ font-size:11.5px; color:{C['muted']}; }}
+  .rt-v {{ font-size:15px; font-weight:800; color:{C['ink']}; text-align:right;
+           white-space:nowrap; }}
+  .rt-head .rt-k, .rt-head .rt-v {{ font-size:10px; font-weight:600;
+                                    color:{C['faint']}; }}
+  /* 护城河：左侧标签 + 右侧一句可核对的依据（每条都能点出来源） */
+  .moat {{ background:{C['card']}; border:1px solid {C['line']}; border-radius:10px;
+           padding:4px 13px; }}
+  .moat-row {{ display:flex; gap:9px; padding:9px 0; align-items:flex-start; }}
+  .moat-row + .moat-row {{ border-top:1px dashed {C['line']}; }}
+  .moat-k {{ flex:0 0 50px; font-size:11px; font-weight:700; color:{C['accent2']}; }}
+  .moat-v {{ flex:1; font-size:11.5px; line-height:1.6; color:{C['ink']}; }}
   /* A/H 对照表 */
   .aht {{ background:{C['card']}; border:1px solid {C['line']}; border-radius:10px;
           padding:4px 12px; }}
   .ahr {{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; align-items:baseline;
           padding:8px 0; font-size:11.5px; }}
   .ahr + .ahr {{ border-top:1px dashed {C['line']}; }}
-  .ahh {{ font-size:10.5px; font-weight:800; color:{C['accent']};
-          text-align:center; }}
-  .ahh .ahk {{ display:none; }}
-  .ahh .ahv {{ text-align:center; }}
+  /* 🔴 表头占位必须留在栅格里。原先写的是 `.ahh .ahk {{ display:none }}`，
+     把占位格从布局里摘掉后，表头只剩 2 个 grid item，自动落到第 1、2 列
+     —— 整行表头左移一格，与下面的数据列错位（第一版截图里「A 股 600938」
+     悬在指标名上方、「港股 00883」悬在 A 股数值上方）。改 visibility 保留占位。 */
+  .ahh {{ font-size:10.5px; font-weight:800; color:{C['accent']}; }}
+  .ahh .ahk {{ visibility:hidden; }}
+  .ahh .ahv {{ text-align:right; }}
   .ahk {{ color:{C['muted']}; font-size:11px; }}
   .ahv {{ color:{C['ink']}; font-weight:700; text-align:right; }}
   .prem {{ margin-top:12px; background:{C['soft']}; border:1px solid #c9d8ec;
