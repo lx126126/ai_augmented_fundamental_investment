@@ -511,6 +511,38 @@ def build_pe_chart() -> str:
     )
 
 
+def _axis_range(vals: list[float], pad: float, step: float,
+                min_span: float = 20.0, floor: float = 0.0) -> tuple[float, float, set]:
+    """按 1.5×IQR 剔除离群值后给出纵轴量程 → (下限, 上限, 离群值集合)。
+
+    为什么不让离群值决定量程：一个极值会把其余数据点压进 1px 之内，图形从
+    「趋势」退化成「一条平线 + 一个孤点」。实测中国海油港股分红比例 —— 2016 年
+    3500%（净利基数崩塌）把上面板纵轴拉到 0–3510%，其余 9 个年份只落在 0.98px
+    高度内，读者看到的就是「一条贴底的线」，还会以为某些年份没数据。
+
+    剔除只影响**轴的范围**：离群点本身照画（贴边三角 + 真值标签 + 图注点名），
+    事实不被隐藏，只是不再由它决定其余年份的分辨率。
+    """
+    if not vals:
+        return floor, floor + min_span, set()
+    s = sorted(vals)
+    out: set = set()
+    core = s
+    if len(s) >= 4:
+        q1, q3 = s[len(s) // 4], s[(3 * len(s)) // 4]
+        iqr = q3 - q1
+        lo_b, hi_b = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+        out = {v for v in s if v < lo_b or v > hi_b}
+        kept = [v for v in s if lo_b <= v <= hi_b]
+        if kept:
+            core = kept
+    lo = max(floor, (int((core[0] - pad) // step)) * step)
+    hi = step * (int((core[-1] + pad) / step) + 1)
+    if hi - lo < min_span:
+        hi = lo + min_span
+    return lo, hi, out
+
+
 def build_div_history() -> str:
     """分红历史：上下两块面板，共用同一条年份轴。
 
@@ -553,15 +585,16 @@ def build_div_history() -> str:
         return step * (int(v / step) + (1 if v % step else 0))
 
     # ---- 上面板：分红比例（%）----
+    # 量程按 1.5×IQR 剔除离群值后再定（见 _axis_range）。离群点不隐藏，贴边画三角。
     pcts = [h["payout_pct"] for h in hist if h.get("payout_pct")]
-    p_min, p_max = (min(pcts), max(pcts)) if pcts else (0.0, 100.0)
-    p_lo = max(0.0, (int((p_min - 6) // 5)) * 5)
-    p_hi = _nice(p_max + 6, 5.0)
-    if p_hi - p_lo < 20:
-        p_hi = p_lo + 20
+    p_lo, p_hi, p_out = _axis_range(pcts, pad=6.0, step=5.0, min_span=20.0)
 
     def _yp(v: float) -> float:
         return base1 - (v - p_lo) / (p_hi - p_lo) * PH
+
+    def _yp_at(v: float) -> float:
+        """绘图用 y：离群点贴到绘图区内缘，避免溢出到面板小标题那一行。"""
+        return min(max(_yp(v), PT1 + 5.0), base1 - 3.0)
 
     # ---- 下面板：每股股息（元）----
     dps_max = max(h["dps"] for h in hist)
@@ -625,15 +658,28 @@ def build_div_history() -> str:
         + f'<text x="{PL}" y="{PT2 - 6}" font-size="10" font-weight="600" '
           f'fill="var(--muted)">每股股息（元）</text>'
     )
-    poly = " ".join(f"{_x(c):.1f},{_yp(v):.1f}" for c, v in pts)
+    poly = " ".join(f"{_x(c):.1f},{_yp_at(v):.1f}" for c, v in pts)
     line = (
         f'<polyline points="{poly}" fill="none" stroke="var(--warn)" '
         f'stroke-width="1.6" stroke-linejoin="round"/>' if poly else ""
     )
-    dots = "".join(
-        f'<circle cx="{_x(c):.1f}" cy="{_yp(v):.1f}" r="2.5" fill="var(--warn)"/>'
-        for c, v in pts
-    )
+
+    # 数据点：普通年份用圆点；超出纵轴的年份改用三角（尖指向溢出方向），
+    # 与「这就是个普通高值」区分开 —— 圆点贴顶会被读成「值就在轴顶」。
+    _marks = []
+    for c, v in pts:
+        x, y = _x(c), _yp_at(v)
+        if v in p_out:
+            up = v > p_hi
+            tri = (
+                f"{x:.1f},{y - 3.2:.1f} {x - 3.8:.1f},{y + 2.6:.1f} {x + 3.8:.1f},{y + 2.6:.1f}"
+                if up else
+                f"{x:.1f},{y + 3.2:.1f} {x - 3.8:.1f},{y - 2.6:.1f} {x + 3.8:.1f},{y - 2.6:.1f}"
+            )
+            _marks.append(f'<polygon points="{tri}" fill="var(--warn)"/>')
+        else:
+            _marks.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--warn)"/>')
+    dots = "".join(_marks)
 
     # 十年平坦段的中位参考线（不写死 51.9%，换标的自适应）
     ref = ""
@@ -645,15 +691,28 @@ def build_div_history() -> str:
             f'stroke-opacity="0.55"/>'
         )
 
-    # 上面板：只在「比例发生变化」的年份标数（2016–2023 全等于 51.9%，标十个数字纯属噪音）
+    # 上面板：只在「显示出来的数字与前一个标注相同」时省略标签。
+    #
+    # 判据必须是**四舍五入后的显示文本**，不能是「与前一年差值 ≥0.5pp」：
+    # 后者会让平缓年份变成「有点无数字」，读者分不清是「这一年没数据」还是
+    # 「与前一年持平」。实测踩坑：港股 2023（48.08）、2024（48.28）与前一年
+    # 只差 0.18/0.20pp 被跳过，A 股 2024（44.16）差 0.32pp 被跳过 —— 三处都
+    # 被误读成缺数据。改成比较显示文本后，这些年份照标（44.2 / 48.1 / 48.3），
+    # 而茅台那十年真·恒定的 51.9% 仍只标一次，噪音与信息各归各位。
     plabels = []
-    prev_v = None
+    prev_txt = None
     for c, v in pts:
-        changed = prev_v is None or abs(v - prev_v) >= 0.5
-        prev_v = v
-        if not changed and c != len(hist) - 1:
+        txt = f"{v:.1f}"
+        is_last = c == pts[-1][0]
+        if txt == prev_txt and not is_last:
+            prev_txt = txt
             continue
-        ly = _yp(v) + (14 if c == pts[-1][0] else -6)
+        prev_txt = txt
+        y = _yp_at(v)
+        if v in p_out:
+            ly = y + 13          # 贴边的点往上没空间了，标签改放点下方
+        else:
+            ly = y + (14 if is_last else -6)
         anchor = "end" if c >= n - 2 else "middle"
         dx = -4 if c >= n - 2 else 0
         plabels.append(
@@ -684,6 +743,13 @@ def build_div_history() -> str:
         f'{yrs} · 最新 {last["year"]} 分红总额 {last["total"]:.0f} 亿 · 比例 {last["payout_pct"]:.1f}%'
         if last.get("total") and last.get("payout_pct") else yrs
     )
+    # 超出纵轴的年份必须在图注里点名：否则读者只看到一个贴顶的三角，
+    # 既不知道它是哪年、也不知道真值多少，反而比不画更糊涂。
+    if p_out:
+        note += " · ▲ " + "、".join(
+            f'{h["year"]} 年 {h["payout_pct"]:.0f}%' for h in hist
+            if h.get("payout_pct") in p_out
+        ) + " 超出纵轴（已标真值）"
 
     return (
         '<div class="div-hist">'
@@ -701,7 +767,10 @@ def build_div_history() -> str:
         '<span class="lg"><span class="sw line" style="background:var(--warn)"></span>分红比例（占归母净利，%）</span>'
         '<span class="lg"><span class="sw" style="background:var(--accent-2)"></span>每股股息（元）</span>'
         f'<span class="lg"><span class="sw" style="background:var(--warn);height:2px;opacity:.55"></span>{_scope_label("median")}参考线</span>'
-        "</div></div>"
+        + ('<span class="lg"><span class="sw" style="background:var(--warn);'
+           'clip-path:polygon(50% 0,100% 100%,0 100%)"></span>超出纵轴（三角，标真值）</span>'
+           if p_out else "")
+        + "</div></div>"
     )
 
 
