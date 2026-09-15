@@ -19,6 +19,7 @@ from .cleaner import (
     forward_adjust_kline,
 )
 from ..analysis.fraud import fraud_check
+from .listing_group import sibling_code
 
 
 # 业务条线调色板（按收入降序循环分配，适配任意条线数）
@@ -256,6 +257,36 @@ def load_raw(code: str) -> dict[str, pd.DataFrame]:
     return _apply_corrections(out, code)
 
 
+def _load_sibling(code: str) -> tuple[str, dict[str, pd.DataFrame]] | None:
+    """读同法人另一上市地的 raw；未登记配对或本地无数据时返回 None。
+
+    用途仅限「公司级字段回填」（见 src/data/listing_group.py 的边界说明）。
+    读不到不报错 —— 回填是增强，不该让主流程挂掉，只是产物上少几项。
+    """
+    sib = sibling_code(code)
+    if not sib or sib == code:
+        return None
+    try:
+        raw = load_raw(sib)
+    except Exception:
+        return None
+    return (sib, raw) if raw else None
+
+
+def _segments_from_df(seg_df: pd.DataFrame) -> tuple[list[str] | None, list | None]:
+    """东财主营构成表 → (segment_labels, segments)。
+
+    原生路径（A 股）与跨上市地回填路径共用同一实现，避免两处调色/清洗算法漂移。
+    """
+    labels, seg_result = build_segments(seg_df)
+    segments = [
+        (name, SEGMENT_PALETTE[i % len(SEGMENT_PALETTE)],
+         [_clean(v) for v in revs], [_clean(v) for v in margins])
+        for i, (name, revs, margins) in enumerate(seg_result)
+    ]
+    return labels, segments
+
+
 def build_template_data(code: str) -> dict:
     """读 parquet → 输出模板所需的全部数据结构。
 
@@ -270,6 +301,13 @@ def build_template_data(code: str) -> dict:
         raise FileNotFoundError(f"{code} 缺 parquet 表: {missing}，请先运行 scripts/fetch_stock.py {code}")
 
     annual = build_annual_financials(raw)
+    # 同法人另一上市地（A+H 时存在）：用于公司级字段回填，见 listing_group 模块头部。
+    # 只读、只填空白，不参与价格/估值等上市地派生字段。
+    sibling = _load_sibling(code)
+    sib_code, sib_raw = sibling if sibling else (None, None)
+    sib_annual = build_annual_financials(sib_raw) if sib_raw else None
+    # 字段 → 来源代码（报告据此加脚注，不允许把回填值伪装成本上市地原生数据）
+    backfill_src: dict[str, str] = {}
     # 近三年：季度披露取 12 期；半年度披露（港股，只有 6/12 月）取 6 期，否则跨度会变成 6 年
     quarter_all = build_quarter_financials(raw, n_quarters=12)
     half_yearly = not (quarter_all["report_date"].dt.month.isin([3, 9]).any())
@@ -287,15 +325,15 @@ def build_template_data(code: str) -> dict:
     report_period = f"{latest_q.year}Q{(latest_q.month - 1) // 3 + 1}"
 
     # 分业务收入构成（半年度，可选）
+    # 港股接口无此表（东财主营构成是 A 股专用）→ 从同法人 A 股代码回填。
     segment_labels = None
     segments = None
     if "segments" in raw:
-        segment_labels, seg_result = build_segments(raw["segments"])
-        segments = [
-            (name, SEGMENT_PALETTE[i % len(SEGMENT_PALETTE)],
-             [_clean(v) for v in revs], [_clean(v) for v in margins])
-            for i, (name, revs, margins) in enumerate(seg_result)
-        ]
+        segment_labels, segments = _segments_from_df(raw["segments"])
+    elif sib_raw and "segments" in sib_raw:
+        segment_labels, segments = _segments_from_df(sib_raw["segments"])
+        if segments:
+            backfill_src["segments"] = sib_code
 
     # 业务版图（客观）：巨潮主营业务一句话 + 各业务条线最新期收入占比
     business_map = None
@@ -311,6 +349,13 @@ def build_template_data(code: str) -> dict:
             if "profile" in raw and not raw["profile"].empty:
                 mb = raw["profile"].iloc[0].get("main_business")
                 main_business = str(mb).strip() if mb else None
+            # 港股无 profile 表（公司简介只在 competition 里）→ 从同法人 A 股回填
+            if not main_business and sib_raw and "profile" in sib_raw:
+                mb = sib_raw["profile"].iloc[0].get("main_business") \
+                    if not sib_raw["profile"].empty else None
+                main_business = str(mb).strip() if mb else None
+                if main_business:
+                    backfill_src["main_business"] = sib_code
             business_map = {"main_business": main_business, "segments": seg_pcts}
 
     # 估值面板（百度估值算分位 + 腾讯行情精确当前值，可选）
@@ -417,6 +462,12 @@ def build_template_data(code: str) -> dict:
     # 财务造假检测（Beneish M-Score + 现金流背离 + 应收异常）
     fraud = fraud_check(annual)
 
+    # ---- 公司级字段跨上市地回填（见 listing_group 模块头部的 5 条边界）----
+    if sib_annual is not None:
+        backfill_src.update(
+            backfill_company_fields(annual, sib_annual, graham, fraud, sib_code)
+        )
+
     # ValueLine 统计：流动状况（Current Position）+ 年增长率（Annual Rates）
     current_position = _build_current_position(annual)
     annual_rates = _build_annual_rates(annual)
@@ -477,8 +528,58 @@ def build_template_data(code: str) -> dict:
         "quarter_review_facts": quarter_review_facts,
         "operating_structure": operating,
         "sanity": _sanity_summary(annual, code),
+        "backfill_src": backfill_src,
         "narrative_data": narrative_data,
     }
+
+
+def backfill_company_fields(
+    annual: pd.DataFrame,
+    sib_annual: pd.DataFrame | None,
+    graham: dict,
+    fraud: dict,
+    sib_code: str,
+) -> dict[str, str]:
+    """把同法人另一上市地的**公司级**字段补进 graham / fraud 的空位。
+
+    原地修改 graham / fraud，返回 {字段名: 来源代码}（不一致时返回 {"_skipped": 原因}）。
+    规则（详见 src/data/listing_group.py 模块头部）：
+
+    - **只填空白**：本上市地已有值就不动 —— 两套接口同名指标定义不同
+      （`operating_revenue` 实测差 2.3%、ROE 差 1.06pp），覆盖会让同页自相矛盾
+    - **期间必须对齐**：只在两边「最新年报期」同年时回填，否则宁缺勿错
+    - **可追溯**：返回的来源映射由调用方透出到产物脚注
+
+    抽成独立函数是为了可单测：`data/` 目录不入库，测试只能用合成 DataFrame。
+    """
+    src: dict[str, str] = {}
+    if sib_annual is None or not len(sib_annual) or not len(annual):
+        return src
+    own_year = annual["report_date"].max().year
+    sib_year = sib_annual["report_date"].max().year
+    if own_year != sib_year:
+        src["_skipped"] = (
+            f"最新年报期不一致（本上市地 {own_year} / 配对代码 {sib_year}），已跳过回填"
+        )
+        return src
+
+    # 净现金 = 货币资金 − 有息负债。港股资产负债表无借款科目
+    # （long_term_loan / short_term_loan 整列缺失）→ 有息负债算不出，一直为空。
+    if graham.get("net_cash") is None:
+        v = _build_graham(sib_annual).get("net_cash")
+        if v is not None:
+            graham["net_cash"] = v
+            src["net_cash"] = sib_code
+
+    # 审计意见：港股资产负债表无 OPINION_TYPE 列。同一法人、同一份年报、同一个
+    # 审计师 —— A 股侧取到的意见即该法人的审计结论。
+    if not fraud.get("audit_opinion"):
+        sf = fraud_check(sib_annual)
+        if sf.get("audit_opinion"):
+            fraud["audit_opinion"] = sf["audit_opinion"]
+            fraud["audit_level"] = sf.get("audit_level")
+            src["audit_opinion"] = sib_code
+    return src
 
 
 def _sanity_summary(annual: pd.DataFrame, code: str) -> list[dict] | None:

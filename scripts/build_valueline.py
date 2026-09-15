@@ -101,6 +101,7 @@ RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF �
 SANITY = None              # 业务勾稽体检结果（会计恒等式/利润勾稽/比率边界/同比异常）
 CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
 VAL_CURRENCY_HINT = ""     # 估值面板 PE/PB 币种提示（港股：港元市值÷人民币财务）
+BACKFILL_SRC = {}          # 跨上市地回填的字段 → 来源代码（见 src/data/listing_group.py）
 
 
 # 构成饼图调色板（20 色，覆盖最多的「流动负债」子科目数）
@@ -1477,6 +1478,25 @@ def build_fraud() -> str:
     return '<div class="fraud">' + "".join(rows) + "</div>"
 
 
+def _backfill_row() -> str:
+    """跨上市地回填的溯源脚注。
+
+    A+H 同一法人的公司级字段（审计意见/分业务构成/公司简介/有息负债）从配对的
+    A 股代码回填 —— 见 src/data/listing_group.py。**必须在产物上标出来**：
+    读者有权知道哪些数字不是本上市地接口原生给的，否则回填就变成了伪装。
+    """
+    src = BACKFILL_SRC or {}
+    labels = [("audit_opinion", "审计意见"), ("segments", "分业务构成"),
+              ("main_business", "公司简介"), ("net_cash", "有息负债/净现金")]
+    hits = [(lab, src[k]) for k, lab in labels if src.get(k)]
+    if not hits:
+        return ""
+    code = hits[0][1]
+    fields = "、".join(lab for lab, _ in hits)
+    return (f'<div><b>跨上市地回填：</b>{fields} 取自同一法人 A 股代码 {code} 的披露'
+            f'（沪港两地上市，同一份合并报表）；港股接口未提供该字段</div>')
+
+
 def build_verify() -> str:
     """数据校验记录：运行 validate()，与巨潮官方年报 PDF 逐项对比。"""
     from datetime import date
@@ -1525,6 +1545,7 @@ def build_verify() -> str:
             + "".join(rows)
             + _sanity_rows()
             + reconcile_rows
+            + _backfill_row()
             + f'<div><b>校验日期：</b>{today}</div>'
             + _verifier_row()
             + "</div>"
@@ -1539,6 +1560,7 @@ def build_verify() -> str:
                 '<div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）</div>'
                 f'<div><b>校验状态：</b>{status}</div>'
                 + _sanity_rows()
+                + _backfill_row()
                 + f'<div><b>校验日期：</b>{today}</div>'
                 "</div>")
 
@@ -2077,7 +2099,7 @@ def _save_narrative(code: str, facts, narrative) -> None:
 
 
 def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING, BACKFILL_SRC
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
         "港股标的 · 财务数据为人民币，股价/市值为港元"
@@ -2116,6 +2138,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         PIE_DATA = real.get("pie_data")
         SANITY = real.get("sanity")
         OPERATING = real.get("operating_structure")
+        BACKFILL_SRC = real.get("backfill_src") or {}
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
