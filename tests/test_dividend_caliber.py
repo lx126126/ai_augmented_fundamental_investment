@@ -173,3 +173,30 @@ def test_hk_dividend_different_years_stay_separate():
     got = dict(zip(df["report_date"].dt.year, df["dividend_per_share"]))
     assert got[2024] == pytest.approx(0.74)
     assert got[2025] == pytest.approx(0.73)
+
+
+def test_dividend_yield_realigns_to_latest_market_cap():
+    """股息率的分子与分母必须来自同一时点。
+
+    事故现场（2026-09-15 行情刷新）：市值被腾讯快照覆盖成 15,898.77 亿，
+    而股息率仍按百度估值序列最后一行的 16,117 亿算，得到 3.38% ——
+    与同一次刷新后的股价 33.45 元对不上（应为 3.42%）。这类不一致肉眼
+    看不出来（3.38% 与 3.42% 都落在正常区间），只能靠测试钉住。
+    """
+    from src.data.adapter import align_dividend_yield
+
+    v = {"dividend_total": 544.1847, "market_cap": 15898.77,
+         "dividend_yield": 3.3764}      # 旧值：分母是前一日的 16,117 亿
+    align_dividend_yield(v)
+    assert v["dividend_yield"] == pytest.approx(3.4228, abs=1e-3)
+
+
+def test_dividend_yield_untouched_without_components():
+    """缺分子或分母时不动原值（港股无分红接口时 dividend_total 缺失）。"""
+    from src.data.adapter import align_dividend_yield
+
+    for v in ({"market_cap": 100.0, "dividend_yield": 5.0},
+              {"dividend_total": 10.0, "dividend_yield": 5.0},
+              {"dividend_yield": 5.0}):
+        align_dividend_yield(v)
+        assert v["dividend_yield"] == 5.0

@@ -125,6 +125,25 @@ QUARTER_SPEC = [
 ]
 
 
+def align_dividend_yield(valuation: dict) -> None:
+    """把股息率的分母对齐到当前市值（原地修改）。
+
+    背景：股息率 = 分红总额 ÷ 市值，而市值有两套来源 —— `build_valuation`
+    取的是百度估值序列最后一行（通常是上一交易日），随后这里又用腾讯行情
+    快照的市值把它覆盖掉。只换市值、不重算股息率，就会出现「市值是今日、
+    股息率的分母是昨日」的内部不一致：实测 600938 市值 15,898.77 亿对应
+    股息率应为 3.42%，却仍显示 3.38% —— 因为 3.38% 的分母是前一日的
+    16,117 亿。
+
+    分子分母各自自洽：A 股人民币 ÷ 人民币、港股港元 ÷ 港元。
+    港股无分红接口时 dividend_total 缺失，保留原值不重算。
+    """
+    if valuation.get("dividend_total") and valuation.get("market_cap"):
+        valuation["dividend_yield"] = (
+            valuation["dividend_total"] / valuation["market_cap"] * 100
+        )
+
+
 def _clean(v):
     """NaN / inf → None。"""
     if v is None:
@@ -377,6 +396,12 @@ def build_template_data(code: str) -> dict:
             # 总市值（腾讯行情，亿元口径；港股为港元市值）
             if q.get("market_cap"):
                 valuation["market_cap"] = q["market_cap"]
+            # 🔴 股息率必须跟着市值一起换：build_valuation 算的是「分红总额 ÷ 百度估值
+            # 最后一行的市值」，而上面几行已经把市值覆盖成腾讯行情的最新快照。
+            # 不重算就会出现「市值是今日、股息率的分母是上一交易日」的内部不一致
+            # （实测 600938：市值 15,898.77 亿对应股息率应 3.42%，却仍显示 3.38%
+            #  —— 那 3.38% 的分母是 16,117 亿，即前一个交易日的市值）。
+            align_dividend_yield(valuation)
             # 港股：分红接口无 dividend_total，市值口径算不出股息率，才回退腾讯行情 f[47]。
             # 不能无条件覆盖——A 股由「分红总额 ÷ 市值」算出的股息率与 PE/PB 同分母、可算分位，
             # 被行情值盖掉就退回了两套口径并存的老问题。

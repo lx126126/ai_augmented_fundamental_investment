@@ -184,21 +184,32 @@ def fetch_valuation(code: str, period: str = "近十年") -> pd.DataFrame | None
     return df
 
 
-_QUOTE_TS_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})$")
+#: A 股：紧凑 14 位（20260915151050）；港股：带分隔符（2026/09/15 15:00:15）。
+#: 港股这一支是补上的 —— 只用紧凑格式时港股快照时间全程解析为 None，
+#: 后果是 `quote_date` 恒空：发布说明只能写「港股接口未返回日期」，
+#: 报告「发布日期」退化成生成日，且无法判断价格是不是盘中价。
+_QUOTE_TS_RE = re.compile(
+    r"^(?:(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})"
+    r"|(\d{4})[/-](\d{1,2})[/-](\d{1,2})[ T](\d{1,2}):(\d{1,2}):(\d{1,2}))$"
+)
 
 
 def _parse_quote_time(raw) -> pd.Timestamp | None:
-    """解析腾讯行情快照时间戳（f[30]，形如 20260911115521）。
+    """解析腾讯行情快照时间戳（f[30]）。
 
-    容错：非 14 位纯数字、或年份明显不合理（<2000）时返回 None。
-    港股等其它字段布局下，同一位置可能是无关字段，此处不猜、直接放弃。
+    支持两种形态：A 股 `20260915151050`、港股 `2026/09/15 15:00:15`。
+    容错：不匹配、或年份明显不合理（<2000）时返回 None。
     """
     if raw is None:
         return None
     m = _QUOTE_TS_RE.match(str(raw).strip())
     if not m:
         return None
-    y, mo, d, h, mi, s = (int(g) for g in m.groups())
+    # 两套分组只有一套会命中，取非空的那 6 个
+    groups = [g for g in m.groups() if g is not None]
+    if len(groups) != 6:
+        return None
+    y, mo, d, h, mi, s = (int(g) for g in groups)
     if y < 2000:
         return None
     try:

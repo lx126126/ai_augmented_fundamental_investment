@@ -171,3 +171,24 @@ def test_a_quote_no_dividend_yield_field():
         q = fetch_quote("601088")
 
     assert "dividend_yield" not in q.columns
+
+
+def test_parse_quote_time_accepts_hk_format():
+    """港股快照时间戳是 `2026/09/15 15:00:15` 形态，与 A 股的紧凑 14 位不同。
+
+    只用紧凑格式时港股这一支恒解析为 None，后果是 quote_date 全程为空：
+    报告「发布日期」退化成生成日、发布说明只能写「港股接口未返回日期」、
+    也无法判断快照是不是盘中价。
+    """
+    from src.data.fetcher import _parse_quote_time
+
+    assert _parse_quote_time("20260915151050") == pd.Timestamp(2026, 9, 15, 15, 10, 50)
+    assert _parse_quote_time("2026/09/15 15:00:15") == pd.Timestamp(2026, 9, 15, 15, 0, 15)
+
+
+def test_parse_quote_time_rejects_garbage():
+    """不匹配、或年份明显不合理的输入一律返回 None（不猜）。"""
+    from src.data.fetcher import _parse_quote_time
+
+    for bad in (None, "", "   ", "abc", "2026/09/15", "19990101000000", "1500"):
+        assert _parse_quote_time(bad) is None, bad
