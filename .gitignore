@@ -27,6 +27,9 @@ data/*_daily_kline.csv
 # 年报 PDF（巨潮原始文件，可重新下载）；但保留数据校验覆盖记录 json
 data/validation/*.pdf
 
+# 每日刷新日志（launchd 输出 + .last_success 闸门文件，本地留痕即可）
+data/logs/
+
 # 报告输出（可选：如需归档历史报告可放开 reports/）
 # reports/
 

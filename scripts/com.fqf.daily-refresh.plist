@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  fqf 每日行情刷新 · macOS launchd 配置
+
+  安装：
+    cp scripts/com.fqf.daily-refresh.plist ~/Library/LaunchAgents/
+    launchctl load  ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+
+  查看状态 / 立即跑一次：
+    launchctl list | grep fqf
+    launchctl start com.fqf.daily-refresh
+
+  卸载：
+    launchctl unload ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+    rm ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+
+  时间选择：A 股 15:00 收盘、港股 16:00 收盘 → 取 16:30 兼顾两地。
+  Weekday：1=周一 … 5=周五（launchd 里 0 与 7 都表示周日）。
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fqf.daily-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/lixiao/WorkBuddy/fqf/scripts/daily_refresh.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/lixiao/WorkBuddy/fqf</string>
+
+    <!-- 交易日（周一至周五）16:30 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>1</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>2</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>3</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>4</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+        <dict>
+            <key>Weekday</key><integer>5</integer>
+            <key>Hour</key><integer>16</integer>
+            <key>Minute</key><integer>30</integer>
+        </dict>
+    </array>
+
+    <!--
+      家用 Mac 会睡眠/关机，launchd 的定时触发会整次跳过。RunAtLoad 让它在登录时
+      也拉起来一次；脚本里用 data/logs/.last_success 做闸门，当天已成功过就跳过。
+    -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/lixiao/WorkBuddy/fqf/data/logs/launchd.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lixiao/WorkBuddy/fqf/data/logs/launchd.err.log</string>
+
+    <!-- 失败不要无限重启（这是个批处理任务，不是常驻服务） -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
