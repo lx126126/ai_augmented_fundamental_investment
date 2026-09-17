@@ -10,25 +10,43 @@ import os
 import re
 import threading
 
-# 环境变量可能有 Veee 代理残留（15236），AKShare 拉国内站点（东财/新浪/百度/腾讯）
-# 必须禁用代理直连，否则接口可能超时或返回空数据。
-for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY"):
-    os.environ.pop(_k, None)
+# ---------------------------------------------------------------------------
+# 网络出口策略：由 FQF_HTTP_PROXY 决定「显式走代理」还是「强制直连」
+# ---------------------------------------------------------------------------
+# 默认（不设 FQF_HTTP_PROXY）：强制直连。
+#   背景：本机（家用宽带）能直连东财/新浪/百度/腾讯，而环境里常残留 Veee 代理
+#   设置（15236），走代理反而超时或返回空数据。
+#   🔴 只 pop 环境变量不够：macOS 上 `urllib.request.getproxies()` 在环境变量为空时
+#   会继续读**系统网络配置**（`getproxies_macosx_sysconf` → `_scproxy`），所以
+#   requests 仍然会走系统代理。实测后果：`stock_zh_a_hist`（push2his.eastmoney.com）
+#   稳定抛 `ProxyError: ... RemoteDisconnected`，而其它东财接口恰好被代理放行，
+#   表现为「只有日 K 拉不到」这种极难定位的局部故障。
+#   这里把两个上游取值函数置空。注意 `requests.utils` 里 `getproxies` 是按值导入的，
+#   不能直接 patch 它；但 `getproxies` 内部是按模块全局查找这两个函数的，
+#   所以 patch 它们能穿透到 requests。
+#
+# 设了 FQF_HTTP_PROXY（如 http://127.0.0.1:15236）：显式走该代理。
+#   用于**直连不通、必须经代理出网**的环境（沙箱 / CI / 容器 / 云端）。这类环境里
+#   直连会被链路重置，报 `ConnectionError: RemoteDisconnected` 或 ProxyError，
+#   症状与「数据源挂了」几乎无法区分 —— 实测 2026-09-17：同一份代码在沙箱里
+#   `stock_zh_a_spot_em` 死活拉不到，设上代理立刻 200。
+#   注意：走代理时必须**同时**保留环境变量（不能顺手 pop 掉），否则 requests
+#   会退回读 macOS 系统代理，指向一个完全不相关的端口。
+_PROXY_URL = os.environ.get("FQF_HTTP_PROXY", "").strip()
+
+_PROXY_KEYS = ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "ALL_PROXY")
 
 
-def _force_direct_connection() -> None:
-    """禁止 requests/urllib 走代理，强制直连。
+def _configure_network_exit() -> None:
+    """按 FQF_HTTP_PROXY 配置网络出口：有则显式走代理，无则强制直连。"""
+    if _PROXY_URL:
+        for _k in _PROXY_KEYS:
+            os.environ[_k] = _PROXY_URL
+        return
 
-    🔴 只 pop 环境变量不够：macOS 上 `urllib.request.getproxies()` 在环境变量为空时
-    会继续读**系统网络配置**（`getproxies_macosx_sysconf` → `_scproxy`），所以
-    requests 仍然会走系统代理。实测后果：`stock_zh_a_hist`（push2his.eastmoney.com）
-    稳定抛 `ProxyError: ... RemoteDisconnected`，而其它东财接口恰好被代理放行，
-    表现为「只有日 K 拉不到」这种极难定位的局部故障。
+    for _k in _PROXY_KEYS:
+        os.environ.pop(_k, None)
 
-    这里把两个上游取值函数置空。注意 `requests.utils` 里 `getproxies` 是按值导入的，
-    不能直接 patch 它；但 `getproxies` 内部是按模块全局查找这两个函数的，
-    所以 patch 它们能穿透到 requests。
-    """
     try:
         import urllib.request as _ur
         _ur.getproxies_environment = lambda: {}
@@ -37,7 +55,7 @@ def _force_direct_connection() -> None:
         pass
 
 
-_force_direct_connection()
+_configure_network_exit()
 
 import akshare as ak
 import pandas as pd
@@ -62,8 +80,12 @@ def _em_symbol(code: str) -> str:
     """纯数字代码 → 东财接口带交易所前缀的代码（自动剥市场后缀）。"""
     code = _bare_code(code)
     code = code.zfill(6)
+    # ⚠️ 92xxxx 是北交所新代码段，必须先判，不能按 '9' 开头归到沪市。
+    # 实测 2026-09-17：sh920000/sz920000 都取不到行情（静默空），bj920000 正常。
+    if code.startswith("92"):
+        return f"BJ{code}"
     if code.startswith(("6", "9")):
-        return f"SH{code}"
+        return f"SH{code}"      # 9 开头里只有 900xxx 是沪市 B 股
     if code.startswith(("0", "3")):
         return f"SZ{code}"
     if code.startswith(("4", "8")):
@@ -233,6 +255,85 @@ def _is_intraday(ts) -> bool | None:
     return (9 * 60 + 30) <= minutes < 15 * 60
 
 
+def _quote_symbol(code: str, market: str | None, payload_head: str | None = None) -> str:
+    """规范化行情的 symbol 列值：A 股 6 位纯数字、港股 5 位纯数字。
+
+    🔴 这里曾是全项目**唯一漏判港股**的地方（原写法 `code.zfill(6)`）：港股 00700
+    被补成 `000700`，而 `000700`／`000883` 是真实存在的 A 股代码（模塑科技／湖北能源），
+    按 symbol 关联 raw.quote 会静默串到完全不同的公司。实测污染仅限 raw.quote
+    （rating/valuation/dividend/competition 都是对的）—— 因为只有行情这条路径
+    自己拼了 symbol。2026-09-17 修复。
+
+    判定优先级：market 参数 → 腾讯载荷首字段（港股为 "100"、A 股为 "1"）→ 5 位 0 开头。
+    """
+    bare = str(code).strip().split(".")[0]
+    is_hk = (
+        (market or "").lower() == "hk"
+        or (payload_head or "").strip() == "100"
+        or (bare.startswith("0") and len(bare) == 5)
+    )
+    return bare.zfill(5) if is_hk else bare.zfill(6)
+
+
+def _tx_query(code: str, market: str | None = None) -> str:
+    """转腾讯行情的代码写法：sh600519 / sz000651 / hk00700。"""
+    bare = str(code).strip().split(".")[0]
+    if (market or "").lower() == "hk":
+        return f"hk{bare.zfill(5)}"
+    if market:
+        return f"{market.lower()}{bare.zfill(6)}"
+    return _em_symbol(code).lower()
+
+
+def _parse_quote_fields(code: str, payload: str, market: str | None = None) -> dict | None:
+    """把腾讯的 `~` 分隔载荷解析成一行字段字典；载荷无效返回 None。
+
+    字段布局（A 股与港股不同，别混）：
+        A 股: f[30]=快照时间, f[39]=PE(TTM), f[45]=总市值, f[46]=PB, f[47]=52周高, f[48]=52周低
+        港股: f[30]=快照时间, f[45]=总市值, f[47]=股息率(%), f[48]=52周高, f[49]=52周低,
+              f[57]=PE(TTM), f[58]=PB —— 港股 f[46] 是英文名而非 PB
+    """
+    f = payload.split("~")
+    if len(f) < 49 or not f[1]:
+        return None
+
+    def _num(s, default=None):
+        try:
+            return float(s)
+        except (ValueError, TypeError):
+            return default
+
+    head = f[0].strip() if f else ""
+    is_hk = (market or "").lower() == "hk" or head == "100"
+    if is_hk:
+        pe_idx, pb_idx, high_idx, low_idx = 57, 58, 48, 49
+        div_yield_idx = 47  # 港股 f[47]=股息率(%)，与 A 股 f[47]=52周高不同
+    else:
+        pe_idx, pb_idx, high_idx, low_idx = 39, 46, 47, 48
+        div_yield_idx = None  # A 股股息率由分红接口 dividend_yield_pct 提供
+
+    ts = _parse_quote_time(f[30] if len(f) > 30 else None)
+    row = {
+        "name": f[1],
+        "price": _num(f[3]),
+        "pe": _num(f[pe_idx]) if len(f) > pe_idx else None,
+        "pb": _num(f[pb_idx]) if len(f) > pb_idx else None,
+        "market_cap": _num(f[45]) if len(f) > 45 else None,
+        "price_52w_high": _num(f[high_idx]) if len(f) > high_idx else None,
+        "price_52w_low": _num(f[low_idx]) if len(f) > low_idx else None,
+        "symbol": _quote_symbol(code, market, head),
+        # 快照时间戳：此前被整段丢弃，导致 quote_date 恒为 None、
+        # 报告「发布日期」退化成生成日、估值面板把盘中价误标成「最新收盘」。
+        "report_date": ts,
+        "change": _num(f[31]) if len(f) > 31 else None,
+        "change_pct": _num(f[32]) if len(f) > 32 else None,
+        "is_intraday": _is_intraday(ts),
+    }
+    if div_yield_idx is not None and len(f) > div_yield_idx:
+        row["dividend_yield"] = _num(f[div_yield_idx])
+    return row
+
+
 def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     """腾讯行情：公司名、现价、PE(TTM)、PB、总市值、快照时间戳。
 
@@ -245,10 +346,7 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     market：可选交易所前缀（如港股传 "hk"），默认按 A 股规则推断。
     """
     import requests
-    if market:
-        em = f"{market}{code.zfill(5) if market == 'hk' else code.zfill(6)}".lower()
-    else:
-        em = _em_symbol(code).lower()  # sh601088 / sz600519
+    em = _tx_query(code, market)
     try:
         r = requests.get(f"https://qt.gtimg.cn/q={em}", timeout=8)
         r.raise_for_status()
@@ -257,43 +355,59 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     m = re.search(r'="([^"]*)"', r.text)
     if not m:
         return None
-    f = m.group(1).split("~")
-    if len(f) < 49 or not f[1]:
-        return None
-    def _num(s, default=None):
-        try:
-            return float(s)
-        except (ValueError, TypeError):
-            return default
-    # 腾讯行情字段布局：A 股与港股不同（港股 f[46] 是英文名而非 PB）。
-    # A 股: f[30]=快照时间戳, f[39]=PE(TTM), f[46]=PB, f[45]=总市值, f[47]=52周高, f[48]=52周低
-    # 港股: f[57]=PE(TTM), f[58]=PB, f[45]=总市值, f[48]=52周高, f[49]=52周低
-    if market == "hk":
-        pe_idx, pb_idx, high_idx, low_idx = 57, 58, 48, 49
-        div_yield_idx = 47  # 港股 f[47]=股息率(%)，与 A 股 f[47]=52周高不同
-    else:
-        pe_idx, pb_idx, high_idx, low_idx = 39, 46, 47, 48
-        div_yield_idx = None  # A 股股息率由分红接口 dividend_yield_pct 提供
-    ts = _parse_quote_time(f[30] if len(f) > 30 else None)
-    row = {
-        "name": f[1],
-        "price": _num(f[3]),
-        "pe": _num(f[pe_idx]),
-        "pb": _num(f[pb_idx]),
-        "market_cap": _num(f[45]),
-        "price_52w_high": _num(f[high_idx]),
-        "price_52w_low": _num(f[low_idx]),
-        "symbol": code.zfill(6),
-        # 快照时间戳：此前被整段丢弃，导致 quote_date 恒为 None、
-        # 报告「发布日期」退化成生成日、估值面板把盘中价误标成「最新收盘」。
-        "report_date": ts,
-        "change": _num(f[31]) if len(f) > 31 else None,
-        "change_pct": _num(f[32]) if len(f) > 32 else None,
-        "is_intraday": _is_intraday(ts),
-    }
-    if div_yield_idx is not None:
-        row["dividend_yield"] = _num(f[div_yield_idx])
-    return pd.DataFrame([row])
+    row = _parse_quote_fields(code, m.group(1), market)
+    return pd.DataFrame([row]) if row else None
+
+
+#: 腾讯批量行情的单次上限（GET 拼串）。实测 7 只 0.26s；单次过多会被截断丢行。
+_TX_BATCH_SIZE = 50
+#: 腾讯批量接口的响应行：v_sh600519="..." 
+_TX_LINE_RE = re.compile(r'v_([a-zA-Z0-9_]+)="([^"]*)"')
+
+
+def fetch_quotes_batch(items: list[tuple[str, str]]) -> tuple[pd.DataFrame, list[str]]:
+    """批量拉腾讯行情 —— 全市场快照用。
+
+    items: [(symbol, market)]，market ∈ {SH, SZ, BJ, HK}
+    返回 (成功的 DataFrame, 失败/无返回的 symbol 列表)
+
+    为什么 A 股与港股**分开请求**：实测混在一批里（`q=sh600519,...,hk00700`）时
+    港股行会被网关丢掉，返回条数看着对、内容却缺 —— 属于静默丢数，比报错更危险。
+    分批 50 只是为控制 URL 长度与单次失败的影响面。
+    """
+    import requests
+
+    rows: list[dict] = []
+    failed: list[str] = []
+
+    for is_hk_group in (False, True):
+        group = [(s, m) for s, m in items if (str(m).upper() == "HK") == is_hk_group]
+        for i in range(0, len(group), _TX_BATCH_SIZE):
+            chunk = group[i:i + _TX_BATCH_SIZE]
+            # ⚠️ 必须按**每一只自己的** market 生成代码：早先这里统一传 None，
+            # 结果北交所 920xxx 被 _em_symbol 判成沪市 → 全市场行情静默少 344 只。
+            queries = [_tx_query(s, "hk" if str(m).upper() == "HK" else str(m)) for s, m in chunk]
+            try:
+                r = requests.get(f"https://qt.gtimg.cn/q={','.join(queries)}", timeout=15)
+                r.raise_for_status()
+                # 腾讯返回 GBK 编码（含中文简称），不 decode 会变乱码
+                text = r.content.decode("gbk", errors="replace")
+            except Exception:
+                failed.extend(s for s, _ in chunk)
+                continue
+
+            got = {q.lower(): pl for q, pl in _TX_LINE_RE.findall(text)}
+            for (sym, mkt), q in zip(chunk, queries):
+                payload = got.get(q.lower())
+                row = _parse_quote_fields(sym, payload, "hk" if is_hk_group else mkt) if payload else None
+                if row:
+                    row["market"] = str(mkt).upper()
+                    rows.append(row)
+                else:
+                    failed.append(sym)
+
+    df = pd.DataFrame(rows)
+    return df, failed
 
 
 _KLINE_COL_MAP = {
