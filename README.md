@@ -78,18 +78,20 @@ flowchart TB
 | **管道编排** | Airflow 双 DAG：①财报季 DAG（拉取→交叉校验+造假检测→渲染→数仓→导出，季度）+ ②每日行情 DAG（拉行情/估值/评级→历史快照→轻量重刷估值板块，每交易日），Docker Compose 容器化 | ✅ |
 | **LLM 应用层** | DeepSeek 结构化输出（JSON schema 约束），生成商业模式 / 投资逻辑 / 风险 / 林奇分类；铁律「只翻译数据，不编数」 | ✅ |
 | **后端服务** | FastAPI 查询 API（7 端点），只读 DuckDB mart 层，参数化查询 + 指标白名单防注入 | ✅ |
+| **全市场覆盖** | 全市场标的索引（A 股 5565 + 港股 2803 = **8368 只**，秒级可查）+ 全市场行情快照（**8368 只 / 25.8 秒 / 0 失败**）；财报按需拉取，覆盖范围不受"预拉过什么"限制 | ✅ |
 | **报告交付** | ValueLine 一页 HTML → PNG @2x 长图 / PDF（Playwright） | ✅ |
+| **报告产品服务** | FastAPI 产品层：输入代码或名称 → 一页报告（按需取数 + 进度轮询 + 缓存命中 0.5s），手机同 WiFi 可访问 | ✅ |
 
 ## 目录结构
 
 ```
 .
 ├── src/
-│   ├── data/          # 数据层：fetcher（拉取）/ cleaner（清洗）/ fields（字段映射）/ adapter（宽表→模板）/ storage（入库）/ warehouse（DuckDB 数仓落库）
+│   ├── data/          # 数据层：fetcher（拉取）/ cleaner（清洗）/ fields（字段映射）/ adapter（宽表→模板）/ storage（入库）/ warehouse（DuckDB 数仓落库）/ market_index（全市场标的索引）
 │   ├── analysis/      # 分析层：fraud（Beneish M-Score + 现金流/应收背离 + 审计意见）
 │   ├── report/        # 报告层：llm（DeepSeek 叙事，结构化输出）+ perspectives（多投资人视角定义）
 │   ├── validation/    # 数据验证：cninfo（巨潮下载）/ pdf_parser（pymupdf）/ validator（金标准交叉校验）/ whitelist
-│   ├── api/           # 后端：query（DuckDB 只读查询）/ main（FastAPI 7 端点）
+│   ├── api/           # 后端数据 API：query（DuckDB 只读查询）/ main（FastAPI 7 端点）
 │   └── review/        # 投研决策辅助：lynch（林奇六类 → 该看什么指标映射）
 ├── airflow/
 │   ├── dags/valueline_pipeline.py  # 五阶段 ETL 编排（拉取→校验→渲染→数仓→导出）
@@ -97,6 +99,9 @@ flowchart TB
 │   └── requirements.txt
 ├── scripts/
 │   ├── fetch_stock.py     # 拉取单票数据
+│   ├── build_market_index.py  # 构建全市场标的索引（A 股 + 港股 8368 只）
+│   ├── update_spot_all.py     # 全市场行情日更（8368 只 / 25.8s，日度）
+│   ├── update_financials.py   # 财报更新（按需 / 观察池 / 全市场，季度）
 │   ├── build_valueline.py # 渲染 ValueLine 一页报告
 │   ├── build_web_index.py # 生成手机网页版首页（数据驱动）
 │   ├── build_watchlist.py # 生成跟踪池横向对比表（同口径决策指标一览）
@@ -117,16 +122,45 @@ flowchart TB
 │   ├── airflow-run-evidence.md # Airflow 双 DAG 运行证据
 │   ├── cloud-deployment.md    # 云部署方案（GCP/AWS 迁移映射 + PG 数仓落地实证 v1.1）
 │   ├── mobile-web.md          # 手机网页版部署（伪小程序）
+│   ├── full-market.md         # 全市场覆盖：三层架构（索引/行情/财报）+ 日度季度更新 + 产品服务
 │   ├── perspective-distillation.md  # 视角蒸馏 SOP（读书→视角 JSON→投研日记流水线）
 │   └── decision-drill.md       # 决策演练 SOP（数据→三问定调→逼问矛盾→落纪律）
 ├── sql/
-│   └── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
-├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb）
+│   ├── schema_postgres.sql    # PostgreSQL 数仓 schema（mart 层，与 DuckDB/BigQuery 列结构一致）
+│   └── schema_raw.sql         # raw 层完整 DDL（11 表 226 列，脚本自动生成）
+├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb 与 market/ 全市场索引·行情）
 ├── reports/                   # 报告归档（按季度）
-├── web/                       # 手机网页版入口（index.html，上下滑动浏览）
+├── web/                       # 产品层：server.py（FastAPI 报告服务）+ query.html（手机查询页）+ index.html（网页版入口）
 ├── watchlist/                 # 跟踪池（客观研究范围）
 └── README.md
 ```
+
+## 全市场覆盖与数据更新（2026-09-17）
+
+从「跟踪池 8 只」扩展到「全市场 A 股 + 港股 8368 只」，架构分三层（**磁盘便宜、行情便宜、财报昂贵**）：
+
+```
+L0 索引层   8368 只标的（代码/名称/交易所）        秒级可查   每周构建
+L1 行情层   8368 只行情快照（价/PE/PB/市值）       25.8s      每交易日
+L2 财报层   单标的财报 + 一页报告                   约 4 分钟   按需触发 / 每季度全量
+```
+
+```bash
+# 每周：重建标的索引（约 50s）
+python scripts/build_market_index.py
+
+# 每交易日：全市场行情快照（25.8s / 8368 只 / 0 失败）
+python scripts/update_spot_all.py
+
+# 每季度：补全市场财报（按需只补缺的；全量用 --scope all 跑一夜）
+python scripts/update_financials.py --scope missing
+
+# 随时：起服务，手机同 WiFi 打开 http://<内网IP>:8000 输入代码或名称出报告
+python -m uvicorn web.server:app --host 0.0.0.0 --port 8000
+```
+
+关键设计取舍与踩坑记录见 **[docs/full-market.md](docs/full-market.md)**（含实测耗时、网络出口、
+北交所 `920xxx` 代码段陷阱、全量数据与 DuckDB 数仓的边界）。
 
 ## 快速上手
 

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d6e">
+<title>投研排雷 · 一页报告</title>
+<style>
+:root {
+  --ink: #1a2330; --muted: #5c6b7a; --faint: #8a97a6;
+  --line: #dde3ea; --accent: #0f3d6e; --accent-2: #14508c; --bg-soft: #f5f7fa;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: var(--ink); background: #e9edf1; -webkit-font-smoothing: antialiased; min-height: 100vh;
+}
+.wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 48px; }
+.top { padding: 4px 0 18px; }
+.top h1 { font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+.top p { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
+.top .pill { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--muted); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; }
+
+.searchbox { display: flex; gap: 8px; }
+.searchbox input {
+  flex: 1; min-width: 0; font-size: 16px; padding: 13px 14px; color: var(--ink);
+  background: #fff; border: 1px solid var(--line); border-radius: 10px; outline: none;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.05);
+}
+.searchbox input:focus { border-color: var(--accent-2); }
+.searchbox button {
+  flex: 0 0 auto; padding: 0 18px; font-size: 15px; font-weight: 600; color: #fff;
+  background: var(--accent); border: 0; border-radius: 10px; cursor: pointer;
+}
+.searchbox button:active { background: var(--accent-2); }
+.searchbox button:disabled { opacity: .5; }
+
+.hint { font-size: 12px; color: var(--faint); margin-top: 10px; min-height: 16px; }
+
+.cands { margin-top: 10px; background: #fff; border-radius: 10px; overflow: hidden;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.06); }
+.cands:empty { display: none; }
+.cand { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 13px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.cand:last-child { border-bottom: 0; }
+.cand:active { background: var(--bg-soft); }
+.c-main { min-width: 0; }
+.c-name { font-size: 15px; font-weight: 600; }
+.c-code { font-size: 12px; color: var(--faint); margin-left: 8px; font-variant-numeric: tabular-nums; }
+.c-tag { flex: 0 0 auto; font-size: 11px; color: var(--muted); background: var(--bg-soft);
+  border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; white-space: nowrap; }
+.c-tag.ready { color: #0f6e56; border-color: #9FE1CB; background: #E1F5EE; }
+.empty { padding: 16px; font-size: 13px; color: var(--faint); text-align: center; }
+
+.progress { margin-top: 16px; background: #fff; border-radius: 10px; padding: 16px 14px;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.06); }
+.progress[hidden] { display: none; }
+.bar { height: 6px; background: var(--bg-soft); border-radius: 3px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent-2);
+  border-radius: 3px; transition: width .4s ease; }
+.step { font-size: 13px; color: var(--muted); margin-top: 10px; line-height: 1.6; }
+.step.err { color: #a32d2d; }
+.step .retry { color: var(--accent-2); text-decoration: underline; cursor: pointer; }
+
+.section-title { font-size: 13px; color: var(--muted); margin: 26px 0 10px; }
+.recent { display: flex; flex-direction: column; gap: 8px; }
+.r-card { display: flex; align-items: center; justify-content: space-between;
+  background: #fff; border-radius: 10px; padding: 13px 14px; text-decoration: none; color: inherit;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.05); }
+.r-card:active { background: var(--bg-soft); }
+.r-name { font-size: 15px; font-weight: 600; }
+.r-code { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.r-date { font-size: 11px; color: var(--faint); }
+.arrow { color: var(--faint); font-size: 18px; }
+
+.foot { text-align: center; font-size: 11px; color: var(--faint); margin-top: 32px; line-height: 1.8; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>投研排雷</h1>
+    <p>输入代码或名称，生成一页 ValueLine 风格报告<br>数据加工 + 指标 + 风险检测，做决策前先排雷。</p>
+    <span class="pill">全市场 A 股 + 港股 · 纯客观数据 · 不含操作建议</span>
+  </div>
+
+  <div class="searchbox">
+    <input id="q" type="search" inputmode="search" enterkeyhint="search"
+           placeholder="600519 / 茅台 / 00700 / 腾讯" autocomplete="off" autofocus>
+    <button id="go">生成</button>
+  </div>
+
+  <div id="hint" class="hint"></div>
+  <div id="cands" class="cands"></div>
+
+  <div id="progress" class="progress" hidden>
+    <div class="bar"><i id="barfill"></i></div>
+    <div id="steptext" class="step">准备中…</div>
+  </div>
+
+  <div id="recent-wrap" hidden>
+    <div class="section-title">最近生成的报告</div>
+    <div id="recent" class="recent"></div>
+  </div>
+
+  <div class="foot">
+    数据来源：AKShare / 东方财富 / 腾讯行情 / 巨潮年报官方 PDF 交叉校验<br>
+    本页仅供个人研究，不含任何操作建议。
+  </div>
+</div>
+
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var searchTimer = null;
+  var pollTimer = null;
+  var busy = false;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function setHint(t) { $('hint').textContent = t || ''; }
+
+  function showProgress(pct, text, isErr) {
+    $('progress').hidden = false;
+    $('barfill').style.width = (pct || 0) + '%';
+    var el = $('steptext');
+    el.className = 'step' + (isErr ? ' err' : '');
+    el.innerHTML = text;
+  }
+
+  function hideProgress() { $('progress').hidden = true; }
+
+  // ---------- 搜索 ----------
+  function renderCands(list) {
+    if (!list || !list.length) {
+      $('cands').innerHTML = '<div class="empty">全市场索引里没有匹配的标的</div>';
+      return;
+    }
+    $('cands').innerHTML = list.map(function (x) {
+      var tag = x.has_report ? '已有报告，秒开'
+              : (x.has_data ? '可生成（约 3-4 分钟）' : '首次生成（约 3-5 分钟）');
+      var cls = x.has_report || x.has_data ? 'c-tag ready' : 'c-tag';
+      return '<div class="cand" data-code="' + esc(x.symbol) + '">'
+           +   '<div class="c-main"><span class="c-name">' + esc(x.name) + '</span>'
+           +   '<span class="c-code">' + esc(x.symbol) + ' · ' + esc(x.market) + '</span></div>'
+           +   '<div class="' + cls + '">' + tag + '</div>'
+           + '</div>';
+    }).join('');
+    Array.prototype.forEach.call(document.querySelectorAll('.cand'), function (el) {
+      el.addEventListener('click', function () { generate(el.dataset.code); });
+    });
+  }
+
+  function doSearch(q) {
+    if (!q.trim()) { $('cands').innerHTML = ''; setHint(''); return; }
+    setHint('搜索中…');
+    fetch('/api/search?limit=12&q=' + encodeURIComponent(q))
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) {
+        setHint(d.count ? ('匹配 ' + d.count + ' 个标的') : '');
+        renderCands(d.results);
+      })
+      .catch(function (e) { setHint('搜索失败：' + e.message); });
+  }
+
+  // ---------- 生成 ----------
+  function generate(query) {
+    if (busy) return;
+    busy = true;
+    $('go').disabled = true;
+    $('cands').innerHTML = '';
+    showProgress(3, '正在提交任务…');
+
+    fetch('/api/report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: query })
+    })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        var d = res.d;
+        if (!res.ok) throw new Error(d.detail || '提交失败');
+        if (d.state === 'cached') {
+          showProgress(100, '已有报告，正在打开…');
+          setTimeout(function () { location.href = d.url; }, 200);
+          return;
+        }
+        // 多命中（如「招商银行」= A股 600036 + 港股 03968）：不猜，让用户选
+        if (d.state === 'ambiguous') {
+          busy = false; $('go').disabled = false;
+          hideProgress();
+          setHint(d.message || '匹配到多个标的，请选择');
+          renderCands(d.candidates || []);
+          return;
+        }
+        setHint('正在生成：' + esc(d.name || '') + ' ' + esc(d.code || ''));
+        poll(d.job_id);
+      })
+      .catch(function (e) {
+        busy = false; $('go').disabled = false;
+        showProgress(0, '失败：' + esc(e.message)
+          + ' <span class="retry" onclick="location.reload()">重试</span>', true);
+      });
+  }
+
+  function poll(jobId) {
+    var start = Date.now();
+    var tick = function () {
+      fetch('/api/report/status/' + encodeURIComponent(jobId))
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (j.state === 'done') {
+            showProgress(100, '报告已生成，正在打开…');
+            setTimeout(function () { location.href = j.url || ('/report/' + j.code); }, 250);
+            return;
+          }
+          if (j.state === 'error') {
+            busy = false; $('go').disabled = false;
+            showProgress(0, '生成失败：' + esc(j.step)
+              + (j.error_detail ? '<br><span style="font-size:11px;color:#8a97a6">'
+                  + esc(String(j.error_detail).slice(-300)) + '</span>' : ''), true);
+            return;
+          }
+          var sec = Math.round((Date.now() - start) / 1000);
+          showProgress(j.pct || 5, esc(j.step || '处理中…') + '　<span style="color:#8a97a6">'
+            + sec + 's</span>');
+          pollTimer = setTimeout(tick, 1500);
+        })
+        .catch(function () { pollTimer = setTimeout(tick, 2500); });
+    };
+    tick();
+  }
+
+  // ---------- 最近生成的报告 ----------
+  function loadRecent() {
+    fetch('/api/reports')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.results || !d.results.length) return;
+        $('recent-wrap').hidden = false;
+        $('recent').innerHTML = d.results.slice(0, 8).map(function (x) {
+          return '<a class="r-card" href="' + esc(x.url) + '">'
+               +   '<div><div class="r-name">' + esc(x.code) + '</div>'
+               +   '<div class="r-date">' + esc(x.period) + ' · ' + esc(x.generated_at) + '</div></div>'
+               +   '<span class="arrow">›</span></a>';
+        }).join('');
+      })
+      .catch(function () {});
+  }
+
+  // ---------- 事件 ----------
+  $('q').addEventListener('input', function (e) {
+    clearTimeout(searchTimer);
+    var v = e.target.value;
+    searchTimer = setTimeout(function () { doSearch(v); }, 280);
+  });
+  $('q').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); generate($('q').value); }
+  });
+  $('go').addEventListener('click', function () { generate($('q').value); });
+
+  loadRecent();
+})();
+</script>
+</body>
+</html>
