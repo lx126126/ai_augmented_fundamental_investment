@@ -1,0 +1,30 @@
+{
+  "code": "600036",
+  "year": 2025,
+  "items": [
+    {
+      "table": "profit_sheet",
+      "field": "operating_profit",
+      "label": "营业利润",
+      "api_yi": 1792.52,
+      "pdf_yi": 1611.04,
+      "diff_pct": 11.264773065845665
+    },
+    {
+      "table": "profit_sheet",
+      "field": "total_profit",
+      "label": "利润总额",
+      "api_yi": 1789.93,
+      "pdf_yi": 1608.73,
+      "diff_pct": 11.263543291913496
+    },
+    {
+      "table": "profit_sheet",
+      "field": "net_profit",
+      "label": "净利润",
+      "api_yi": 1511.26,
+      "pdf_yi": 1361.84,
+      "diff_pct": 10.971920343065264
+    }
+  ]
+}
