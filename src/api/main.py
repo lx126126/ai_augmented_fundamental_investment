@@ -13,8 +13,13 @@
   GET /compare?metric=roe_pct[&year=2025]  跨股对比
 
 启动：
-  python -m src.api.main
-  # 或 uvicorn src.api.main:app --reload
+  python -m src.api.main          # http://127.0.0.1:8001/docs
+  # 或 uvicorn src.api.main:app --port 8001 --reload
+
+端口约定（重要，别混）：
+  8000 = `web/server.py` —— 一页研报 HTML 服务，给人看的
+  8001 = 本模块       —— JSON 数据接口，给程序读的
+  两者都是 FastAPI，职责不同，**不能共用端口**（共用会抢端口起不来）。
 """
 
 from __future__ import annotations
@@ -128,4 +133,4 @@ def compare(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("src.api.main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run("src.api.main:app", host="127.0.0.1", port=8001, reload=True)

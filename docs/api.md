@@ -16,13 +16,24 @@ API 只读 `mart` 层（报告指标宽表），不触碰 raw 层、不重算宽
 
 ```bash
 # 方式一：直接跑
-python -m src.api.main          # 等价于 uvicorn --host 127.0.0.1 --port 8000
+python -m src.api.main          # 等价于 uvicorn --host 127.0.0.1 --port 8001
 
 # 方式二：uvicorn 显式
-uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
+uvicorn src.api.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
 > 前置：需先构建数仓 `python -m src.data.warehouse`（否则报 503，提示数仓文件不存在）。
+
+## 与 `web/server.py` 的分工（别混）
+
+仓库里有两个 FastAPI 服务，职责不同、**端口已错开**：
+
+| 服务 | 端口 | 面向 | 返回 |
+|---|---|---|---|
+| `web/server.py` | **8000** | 人（手机/浏览器） | 一页研报 HTML，可用代码或名称查询 |
+| `src/api/main.py`（本文档） | **8001** | 程序 | JSON 数据，mart 层只读查询 |
+
+早期两者都占 8000，会抢端口起不来；现固定分离。
 
 ## 端点
 
@@ -39,13 +50,13 @@ uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --reload
 ## 示例
 
 ```bash
-curl "http://127.0.0.1:8000/stocks"
-curl "http://127.0.0.1:8000/stocks/601088?limit=5"
-curl "http://127.0.0.1:8000/stocks/601088/quarters"
-curl "http://127.0.0.1:8000/stocks/601088/segments"
-curl "http://127.0.0.1:8000/stocks/601088/metrics/roe_pct"
-curl "http://127.0.0.1:8000/compare?metric=roe_pct"
-curl "http://127.0.0.1:8000/compare?metric=operating_revenue&year=2025"
+curl "http://127.0.0.1:8001/stocks"
+curl "http://127.0.0.1:8001/stocks/601088?limit=5"
+curl "http://127.0.0.1:8001/stocks/601088/quarters"
+curl "http://127.0.0.1:8001/stocks/601088/segments"
+curl "http://127.0.0.1:8001/stocks/601088/metrics/roe_pct"
+curl "http://127.0.0.1:8001/compare?metric=roe_pct"
+curl "http://127.0.0.1:8001/compare?metric=operating_revenue&year=2025"
 ```
 
 ## 安全设计
