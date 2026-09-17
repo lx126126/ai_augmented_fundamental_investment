@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -31,6 +32,10 @@ RAW_DIR = DATA_ROOT / "raw"
 # 与深市 A 股冲突，因此「是否港股」必须以 market 后缀为准（见 is_hk），
 # _is_a_share 仅作 snapshot_valuation/rating 内部的粗粒度防呆（由 snapshot_all 的 is_hk 前置拦截港股）。
 _A_SHARE_PREFIXES = ("6", "0", "3", "4", "8")
+
+#: 行情首拉为空后的重试间隔（秒）。腾讯行情接口偶发抖动（超时/限流），
+#: 实测重跑即成功 —— 而一次失败会挡掉 .last_success 闸门、导致当天整批重跑。
+_QUOTE_RETRY_DELAY = 3
 
 
 def is_hk(market: str | None) -> bool:
@@ -79,6 +84,11 @@ def snapshot_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     """
     q = fetch_quote(code, market=market)
     if q is None or q.empty:
+        print(f"[market] {code} 行情首拉为空，{_QUOTE_RETRY_DELAY}s 后重试一次")
+        time.sleep(_QUOTE_RETRY_DELAY)
+        q = fetch_quote(code, market=market)
+    if q is None or q.empty:
+        print(f"[market] {code} 行情重试后仍为空，放弃（报告将沿用上一次快照）")
         return None
 
     # 快照日期（腾讯行情返回的是最近收盘价；此处记为抓取日，即「股价数据日期」）

@@ -10,6 +10,9 @@
 #   bash scripts/daily_refresh.sh              # 当天已成功过则跳过
 #   bash scripts/daily_refresh.sh --force      # 强制重跑
 #   bash scripts/daily_refresh.sh -- --dry-run # 透传参数给 daily_refresh.py
+# ⚠️ 变量引用一律用 ${VAR} 显式界定：本脚本 LANG=zh_CN.UTF-8，bash 会把紧跟在
+#    变量名后的全角标点（，）」等）的 UTF-8 字节当成变量名字符，得到 `rc，`
+#    这种不存在的变量名 —— 在 set -u 下直接 unbound variable 崩溃。
 set -uo pipefail
 
 ROOT="/Users/lixiao/WorkBuddy/fqf"
@@ -42,7 +45,7 @@ done
 # 登录/唤醒时也会拉起来一次 —— 用「当天是否已成功」做闸门避免重复拉取。
 if [ "$FORCE" = "0" ] && [ -f "$LAST_SUCCESS" ] && [ "$(cat "$LAST_SUCCESS")" = "$TODAY" ]; then
   {
-    echo "----- $(date '+%H:%M:%S') 跳过：今天（$TODAY）已成功刷新过 -----"
+    echo "----- $(date '+%H:%M:%S') 跳过：今天（${TODAY}）已成功刷新过 -----"
     echo "      强制重跑：bash scripts/daily_refresh.sh --force"
   } >> "$LOG"
   exit 0
@@ -66,7 +69,7 @@ rc=$?
 
 if [ "$rc" != "0" ]; then
   # 失败时把日志尾部打到 stderr，方便 launchd 的 StandardErrorPath 也留痕
-  echo "[fqf] daily_refresh 失败 rc=$rc，日志：$LOG" >&2
+  echo "[fqf] daily_refresh 失败 rc=${rc}，日志：$LOG" >&2
   tail -n 20 "$LOG" >&2
 elif [ "$DRY" = "0" ]; then
   echo "$TODAY" > "$LAST_SUCCESS"

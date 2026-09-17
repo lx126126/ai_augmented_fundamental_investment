@@ -350,10 +350,16 @@ def fetch_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     try:
         r = requests.get(f"https://qt.gtimg.cn/q={em}", timeout=8)
         r.raise_for_status()
-    except Exception:
+    except Exception as e:
+        # 不静默吞：否则每日刷新日志里只有 quote=False，分不清是超时、限流还是
+        # HTTP 错误（实测 launchd 首次冷启动时 601088 曾整只取不到行情）。
+        print(f"[fetch] {code} 腾讯行情请求失败：{type(e).__name__}: {e}")
         return None
     m = re.search(r'="([^"]*)"', r.text)
     if not m:
+        # 走到这里说明 HTTP 通了但返回体不是预期的 v_xxx="..." 格式（多为无效代码）。
+        # 与上面的请求异常区分开，免得排查时把「代码写错」误判成「网络抖动」。
+        print(f"[fetch] {code} 腾讯行情返回体无法解析（疑似无效代码）")
         return None
     row = _parse_quote_fields(code, m.group(1), market)
     return pd.DataFrame([row]) if row else None
