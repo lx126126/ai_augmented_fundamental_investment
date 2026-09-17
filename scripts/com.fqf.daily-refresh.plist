@@ -3,16 +3,20 @@
 <!--
   fqf 每日行情刷新 · macOS launchd 配置
 
-  安装：
-    cp scripts/com.fqf.daily-refresh.plist ~/Library/LaunchAgents/
-    launchctl load  ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+  安装（推荐；也支持双击）：
+    open scripts/install_launchd.command
+
+  ⚠️ 别手敲 launchctl 装载：自动化环境（agent/CI）无权向 launchd 注册作业，
+     bootstrap / load 一律报 `Bootstrap failed: 5: Input/output error` —— 这一步
+     必须由本人在图形会话里执行。launchctl 的读取类命令（print/list/enable）
+     在任何环境都正常。
 
   查看状态 / 立即跑一次：
-    launchctl list | grep fqf
-    launchctl start com.fqf.daily-refresh
+    launchctl print gui/501/com.fqf.daily-refresh
+    launchctl kickstart -k gui/501/com.fqf.daily-refresh
 
   卸载：
-    launchctl unload ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+    launchctl bootout gui/501/com.fqf.daily-refresh
     rm ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
 
   时间选择：A 股 15:00 收盘、港股 16:00 收盘 → 取 16:30 兼顾两地。

@@ -199,8 +199,9 @@ python -m src.api.main            # http://127.0.0.1:8001/docs 交互式文档
 curl "http://127.0.0.1:8001/compare?metric=roe_pct"   # 跨股对比
 
 # 每日行情刷新调度（macOS launchd，装一次后每交易日 16:30 自动跑）
-cp scripts/com.fqf.daily-refresh.plist ~/Library/LaunchAgents/ \
-  && launchctl load ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
+# 双击亦可；自动化环境无权注册 launchd 作业，这步必须在本机图形会话里做
+open scripts/install_launchd.command
+launchctl print gui/501/com.fqf.daily-refresh      # 确认已注册（看 state / runs）
 
 # 运行测试（单元 + 集成，178 项）
 pytest tests/ -v

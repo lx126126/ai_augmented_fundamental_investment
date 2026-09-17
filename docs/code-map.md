@@ -81,7 +81,7 @@ ls tests/test_*.py | wc -l                                                  # 21
 | `journal.py` | 382 | 投研日记（私有层，gitignore） |
 | `backtest_band.py` | 324 | 腾讯中线波段策略回测 |
 | `build_watchlist.py` | 290 | 跟踪池横向对比表 |
-| `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**；配套 `daily_refresh.sh` + `com.fqf.daily-refresh.plist` |
+| `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**；配套三件套：`install_launchd.command`（安装器）+ `daily_refresh.sh`（适配层）+ `com.fqf.daily-refresh.plist`（声明式配置） |
 | `inspect_raw.py` | 170 | 数据结构查看（Code Review 辅助） |
 | `build_web_index.py` | 147 | 手机网页版首页 |
 | `backup.py` | 141 | 日记 + 工作记忆备份 |
@@ -244,7 +244,7 @@ src/report/perspectives/       ← 4 个 JSON（graham/lynch/buffett/fisher）
 
 ---
 
-## 6. 待办池（截至 2026-09-16）
+## 6. 待办池（截至 2026-09-17）
 
 ### 数据正确性（静默错数，优先级最高）
 
@@ -262,9 +262,12 @@ src/report/perspectives/       ← 4 个 JSON（graham/lynch/buffett/fisher）
 |---|---|---|
 | 6 | 三处标的清单漂移（§4），海油未进跟踪池 | 🟡 |
 | 7 | 导图覆盖不全（7 只报告只有 4 只有 PNG） | 🟡 |
-| 8 | launchd 任务**未安装**（`launchctl list` 无 `com.fqf.daily-refresh`），日更/季更暂无自动调度 | 🟡 |
-| 9 | `perspectives` 同名共存（§5.2） | 🟢 潜在 |
-| 10 | 降级模式无产物标识（§5.3） | 🟢 潜在 |
+| 8 | `perspectives` 同名共存（§5.2） | 🟢 潜在 |
+| 9 | 降级模式无产物标识（§5.3） | 🟢 潜在 |
+
+> ✅ **已销账（2026-09-17）**：原条目 8「launchd 任务未安装」—— 已安装并跑通首次真实执行
+> （`launchctl print gui/501/com.fqf.daily-refresh` → `runs = 1`）。安装入口
+> `scripts/install_launchd.command`；调度设计见 `data-map.md` §3。
 
 ---
 

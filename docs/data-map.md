@@ -135,23 +135,37 @@ V=/Users/lixiao/.workbuddy/binaries/python/envs/fqf/bin/python
 launchd 配 `RunAtLoad` 能在开机后**补跑一次**（家用 Mac 常关机，这条是关键）。
 脚本里用 `data/logs/.last_success` 做闸门，保证当天只跑一次。
 
-### 🔴 当前状态：未安装
+### ✅ 当前状态：已安装（2026-09-17 14:02 首次真实执行）
 
-2026-09-17 核查：
-- `launchctl list | grep fqf` → **空**（`com.fqf.daily-refresh` 不在系统任务表）
-- `data/logs/.last_success` → **不存在**（该闸门文件只在定时任务成功跑完后写入）
+`RunAtLoad=true` 意味着 bootstrap 成功那一刻就真跑一次，「装」与「首次执行」是同一个动作：
 
-→ **日更与季更两条链路目前都没有自动调度，全靠手动执行。**
-这容易误判成「数据更新跑不通」，实际是**没有人按启动键**。
+| 核查项 | 结果 |
+|---|---|
+| `launchctl list` 含 `com.fqf.daily-refresh` | ✅ `-  1  com.fqf.daily-refresh` |
+| `launchctl print gui/501/com.fqf.daily-refresh` | `state = not running`、`runs = 1`、event triggers **5 条**（Weekday 1–5 / 16:30） |
+| 6 只标的报告 + `web/index.html` | ✅ 全部重刷（耗时约 12 分钟） |
+| `data/logs/.last_success` | ❌ 未写 —— 601088 行情首拉为空 → `rc=1` → **闸门按设计不写**（宁可重复跑，不可静默漏刷） |
 
-安装（涉及系统定时行为，执行前请确认）：
+→ **日更链路已自动调度**（每交易日 16:30 + 登录补跑）。
+→ **季更仍靠手动**：`scripts/update_financials.py` 只在财报季跑，未接入 launchd。
+
+安装 / 查看 / 卸载（**涉及系统定时行为，执行前请确认**）：
 
 ```bash
-cp scripts/com.fqf.daily-refresh.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
-launchctl list | grep fqf                    # 确认已加载
-launchctl start com.fqf.daily-refresh        # 立即手动跑一次验证
+open scripts/install_launchd.command                    # 装（双击亦可）
+
+launchctl print gui/501/com.fqf.daily-refresh           # 看状态：state / runs / last exit code
+launchctl kickstart -k gui/501/com.fqf.daily-refresh    # 立即手动跑一次
+
+launchctl bootout gui/501/com.fqf.daily-refresh         # 卸载
+rm ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
 ```
+
+> ⚠️ **不要手敲 `launchctl load`/`bootstrap` 装**：自动化环境（agent / CI）无权向 launchd
+> 注册作业，一律报 `Bootstrap failed: 5: Input/output error`。`launchctl load` 在你自己的
+> 图形会话里能用，但要放在 `~/Library/LaunchAgents/` 且已拷好 plist —— 安装器把这些前置
+> 检查与装后验证都做完了，用安装器更省事。读取类命令（`print` / `list` / `enable`）在
+> 任何环境都正常。
 
 `--daily` 参数是必须的：叙事层缓存键是 facts-hash，而 facts 含估值与市值 ——
 行情一变哈希即变、缓存失效、重新调 LLM 烧 token。`--daily` 跳过 PDF 校验与 LLM。
@@ -163,6 +177,6 @@ launchctl start com.fqf.daily-refresh        # 立即手动跑一次验证
 | 数据库在哪？ | `data/warehouse/fqf.duckdb` 一个文件。**没有服务器** |
 | 怎么连数据库？ | 不用连。`duckdb.connect("data/warehouse/fqf.duckdb")` 直接打开 |
 | 为什么 `python` 命令不存在？ | macOS 12.3+ 移除了它，且系统 3.9.6 没装依赖 → 用 venv 全路径 |
-| 为什么数据更新「没跑」？ | launchd 未安装，**没有任何自动调度**（§3） |
+| 为什么数据更新「没跑」？ | 两种可能：① launchd 没装（§3）；② 当天闸门 `.last_success` 已写 → **当天会被跳过**，`--force` 可强制重跑 |
 | DuckDB 里的数据是最新的吗？ | **不一定**，`raw.*` 是物化表，落后于 parquet，需重跑 warehouse |
 | 报告链路读 DuckDB 吗？ | **不读**。adapter 直接读 `data/raw/**` parquet（全量时才不会 OOM） |
