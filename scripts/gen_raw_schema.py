@@ -4,8 +4,8 @@
 
 为什么需要这个脚本
 ------------------
-`sql/schema_postgres.sql` 只覆盖 mart 层（3 张表，人工维护的显式 DDL），
-raw 层在项目里**没有 DDL**：`src/data/warehouse.py:load_raw_layer()` 用
+mart 层有显式 DDL（`src/data/warehouse.py` 内联声明），raw 层则**没有**：
+`src/data/warehouse.py:load_raw_layer()` 用
 `pd.concat(join="outer")` 做跨标的列并集 + DuckDB 类型推断，直接
 `CREATE OR REPLACE TABLE raw.{table}` 物化 —— 表结构是"跑出来的"，不是"声明出来的"。
 
@@ -35,10 +35,12 @@ raw 层保留东财/腾讯/百度的**原始口径**，量纲不统一：
 
 用法
 ----
-    python scripts/gen_raw_schema.py                 # 生成 sql/schema_raw.sql（PG 方言）
-    python scripts/gen_raw_schema.py --dialect duckdb  # 生成 DuckDB 方言
-    python scripts/gen_raw_schema.py --stdout        # 打印到终端，不写文件
-    python scripts/gen_raw_schema.py --check         # 只比对现有文件是否有结构漂移（CI 友好）
+    python scripts/gen_raw_schema.py           # 生成 / 刷新 sql/schema_raw.sql
+    python scripts/gen_raw_schema.py --stdout  # 打印到终端，不写文件
+    python scripts/gen_raw_schema.py --check   # 只比对现有文件是否有结构漂移（CI 友好）
+
+方言固定为 DuckDB（唯一实际使用的引擎）。事实源与产物同引擎，`--check` 才能
+拿产物直接对着 DuckDB 验证；跨方言映射属于迁移场景，本机不落地，故不再保留。
 
 退出码：0 = 成功（--check 时表示无漂移）；1 = 有漂移 / 失败。
 """
@@ -55,29 +57,20 @@ DB_PATH = ROOT / "data" / "warehouse" / "fqf.duckdb"
 OUT_PATH = ROOT / "sql" / "schema_raw.sql"
 
 # ---------------------------------------------------------------------------
-# 类型映射：DuckDB（pandas 推断结果）→ 目标方言
+# 类型映射：DuckDB（pandas 推断结果）→ DDL 中的类型名
+#
+# 事实源本身就是 DuckDB，故这里是「规范化」而非「跨方言翻译」：
+# pandas 写 parquet 时可能落成 TIMESTAMP_NS，DuckDB 建表则统一 TIMESTAMP。
 # ---------------------------------------------------------------------------
 TYPE_MAP = {
-    "pg": {
-        "TIMESTAMP_NS": "TIMESTAMP",
-        "TIMESTAMP": "TIMESTAMP",
-        "DATE": "DATE",
-        "DOUBLE": "DOUBLE PRECISION",
-        "BIGINT": "BIGINT",
-        "INTEGER": "INTEGER",
-        "BOOLEAN": "BOOLEAN",
-        "VARCHAR": "TEXT",
-    },
-    "duckdb": {
-        "TIMESTAMP_NS": "TIMESTAMP_NS",
-        "TIMESTAMP": "TIMESTAMP",
-        "DATE": "DATE",
-        "DOUBLE": "DOUBLE",
-        "BIGINT": "BIGINT",
-        "INTEGER": "INTEGER",
-        "BOOLEAN": "BOOLEAN",
-        "VARCHAR": "VARCHAR",
-    },
+    "TIMESTAMP_NS": "TIMESTAMP",
+    "TIMESTAMP": "TIMESTAMP",
+    "DATE": "DATE",
+    "DOUBLE": "DOUBLE",
+    "BIGINT": "BIGINT",
+    "INTEGER": "INTEGER",
+    "BOOLEAN": "BOOLEAN",
+    "VARCHAR": "VARCHAR",
 }
 
 # ---------------------------------------------------------------------------
@@ -433,11 +426,10 @@ TABLE_ORDER = [
 ]
 
 HEADER = """-- ============================================================================
--- fqf 基本面投研 · __DIALECT__ schema（raw 层）
+-- fqf 基本面投研 · DuckDB schema（raw 层）
 -- ============================================================================
 -- 生成方式：**本文件由脚本自动生成，请勿手工编辑**
---     python scripts/gen_raw_schema.py                 # PG 方言（默认）
---     python scripts/gen_raw_schema.py --dialect duckdb
+--     python scripts/gen_raw_schema.py
 -- 事实源：data/warehouse/fqf.duckdb 的 raw.* 表（DuckDB 类型推断的真实结果）
 -- 列注释：维护在 scripts/gen_raw_schema.py 的 COL_DOC 字典里（重跑不丢注释）
 --
@@ -499,11 +491,9 @@ def _render_table(
     table: str,
     columns: list[tuple[str, str]],
     row_count: int,
-    dialect: str,
 ) -> str:
     """渲染单表 DDL 段。"""
     meta = TABLE_META.get(table, {})
-    tmap = TYPE_MAP[dialect]
     width = max((len(c) for c, _ in columns), default=20)
     width = max(width, 16)
 
@@ -522,10 +512,10 @@ def _render_table(
     rendered = []
     last = len(columns) - 1
     for i, (col, dtype) in enumerate(columns):
-        target = tmap.get(dtype)
+        target = TYPE_MAP.get(dtype)
         if target is None:  # 未预期的类型：显式报错而非静默降级
             raise ValueError(f"{table}.{col} 出现未映射的 DuckDB 类型：{dtype}")
-        # 末列不加逗号（PG 不允许尾逗号），注释另行追加以免吃掉逗号
+        # 末列不加逗号，注释另行追加以免吃掉逗号
         line = f"    {col.ljust(width)} {target}" + ("" if i == last else ",")
         note = doc.get(col, "")
         if note:
@@ -538,16 +528,12 @@ def _render_table(
     return "\n".join(lines)
 
 
-def generate(dialect: str = "pg", db_path: Path = DB_PATH) -> str:
-    """生成完整 DDL 文本。"""
-    if dialect not in TYPE_MAP:
-        raise ValueError(f"不支持的方言：{dialect}（可选：{', '.join(TYPE_MAP)}）")
+def generate(db_path: Path = DB_PATH) -> str:
+    """生成完整 DDL 文本（DuckDB 方言）。"""
     if not Path(db_path).exists():
         raise FileNotFoundError(f"数仓文件不存在：{db_path}（请先跑 scripts/fetch_stock.py + warehouse）")
 
-    dialect_name = {"pg": "PostgreSQL", "duckdb": "DuckDB"}[dialect]
-    # 用 replace 而非 str.format：正文里含 {table} / {code} 等字面量，format 会误吞
-    parts = [HEADER.replace("__DIALECT__", dialect_name)]
+    parts = [HEADER]
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
@@ -557,7 +543,7 @@ def generate(dialect: str = "pg", db_path: Path = DB_PATH) -> str:
         for t in tables:
             cols = _fetch_columns(con, t)
             n = con.execute(f'SELECT COUNT(*) FROM raw."{t}"').fetchone()[0]
-            parts.append(_render_table(t, cols, n, dialect))
+            parts.append(_render_table(t, cols, n))
     finally:
         con.close()
 
@@ -566,15 +552,14 @@ def generate(dialect: str = "pg", db_path: Path = DB_PATH) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="从 DuckDB 反向生成 raw 层 DDL")
-    ap.add_argument("--dialect", default="pg", choices=sorted(TYPE_MAP), help="目标方言（默认 pg）")
+    ap = argparse.ArgumentParser(description="从 DuckDB 反向生成 raw 层 DDL（DuckDB 方言）")
     ap.add_argument("--out", default=str(OUT_PATH), help="输出路径")
     ap.add_argument("--stdout", action="store_true", help="打印到终端，不写文件")
     ap.add_argument("--check", action="store_true", help="只比对是否与已落盘文件一致（漂移检测）")
     args = ap.parse_args()
 
     try:
-        sql = generate(args.dialect)
+        sql = generate()
     except Exception as e:
         print(f"✗ 生成失败：{e}", file=sys.stderr)
         return 1
