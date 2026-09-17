@@ -203,7 +203,14 @@ curl "http://127.0.0.1:8001/compare?metric=roe_pct"   # 跨股对比
 open scripts/install_launchd.command
 launchctl print gui/501/com.fqf.daily-refresh      # 确认已注册（看 state / runs）
 
-# 运行测试（单元 + 集成，178 项）
+# 数据更新证据链自检（回答「怎么证明数据更新过」）
+python scripts/check_refresh.py
+
+# 跟踪池横向对比表 / 手机首页（日更会自动重刷这两个产物）
+python scripts/build_watchlist.py
+python scripts/build_web_index.py
+
+# 运行测试（单元 + 集成，219 项）
 pytest tests/ -v
 ```
 

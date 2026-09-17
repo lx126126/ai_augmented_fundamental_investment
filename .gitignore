@@ -38,13 +38,16 @@ data/logs/
 #       需要显式 `git rm --cached <file>`（文件保留在磁盘上，服务照常可读）。
 # 维护：新增/移除观察池标的时，同步增删下面一行 !reports/**/<code>.html
 reports/**/*.html
-# 观察池 6 只（watchlist/watchlist.json）
+# 跟踪池（watchlist/watchlist.json，2026-09-17 起「生成过报告即入池」，共 11 只）
 !reports/**/000651.html
 !reports/**/00700.html
 !reports/**/09992.html
 !reports/**/600519.html
 !reports/**/601088.html
 !reports/**/601328.html
+!reports/**/300061.html
+!reports/**/600036.html
+!reports/**/600887.html
 # 中国海油 A/H 两只（小红书发布包素材，长期保留）
 !reports/**/600938.html
 !reports/**/00883.html
@@ -54,9 +57,6 @@ reports/**/*.html
 #   scripts/export.py 也把它当输入用于导 PNG/PDF。它是「最近一次构建的样子」，
 #   由观察池标的的构建维护；按需查询把它覆盖成冷门标的后，提交前用
 #   `git checkout -- templates/valueline.html` 还原即可。
-
-# Airflow 运行日志
-airflow/logs/
 
 # 导出产物
 *.png

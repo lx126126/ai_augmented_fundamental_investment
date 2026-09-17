@@ -16,6 +16,16 @@
     L2 财报 + 报告（单标的、昂贵）  首次 ~1.5 分钟 scripts/update_financials.py    每季度/按需
 本服务处在 L2：**查谁拉谁、算完缓存**，因此数据范围不受"预拉过什么"限制。
 
+🔴 生成报告即入跟踪池（2026-09-17）
+------------------------------------
+报告生成成功后自动 `watchlist_store.add(code)`，并异步重建 `web/watchlist.html`。
+理由：跟踪池原先靠手维护 `watchlist.json`，结果是「报告生成了、对比表里却没有」——
+实测 11 份报告里只有 6 只在池中，用户明确要求「生成一个公司的报告就把它加进对比」。
+
+重建走独立的单线程池（`_derived_pool`）：对比表要逐只跑 `build_template_data`，
+首次约 14 秒/只，不能占住报告队列（那是 max_workers=1 的串行队列，会拖住后续查询）。
+重建失败**不影响报告**，只在 `/api/refresh-status` 里留下错误。
+
 🔴 本服务最重要的一个设计：绝不生成假报告
 ------------------------------------------
 `build_valueline._load_real_data()` 在取数失败时会**静默降级成示例数据**
@@ -53,7 +63,7 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))  # build_valueline 里有裸导入 `from _sample_data import ...`
 
-from src.data import market_index  # noqa: E402
+from src.data import market_index, watchlist_store  # noqa: E402
 from src.data.fetcher import fetch_all, fetch_all_hk  # noqa: E402
 from src.data.storage import save_all  # noqa: E402
 
@@ -70,6 +80,12 @@ _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="report")
 
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
+
+#: 派生产物（跟踪池对比表）重建 —— 独立线程池，避免拖住串行的报告队列
+_derived_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="derived")
+_derived_lock = threading.Lock()
+_derived_state: dict = {"running": False, "queued": False,
+                        "last_ok": None, "last_at": None, "last_err": None}
 
 app = FastAPI(
     title="fqf 一页报告服务",
@@ -136,6 +152,42 @@ def _build_report(code: str) -> Path:
     return p
 
 
+def _rebuild_watchlist() -> None:
+    """重建 web/watchlist.html。失败只记状态，绝不抛出（它不该影响报告）。"""
+    import subprocess  # noqa: PLC0415
+    with _derived_lock:
+        _derived_state.update(queued=False, running=True)
+    try:
+        r = subprocess.run([sys.executable, str(SCRIPTS / "build_watchlist.py")],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=1800)
+        ok = r.returncode == 0
+        with _derived_lock:
+            _derived_state.update(
+                last_ok=ok,
+                last_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                last_err=None if ok else (r.stderr or "").strip()[-400:],
+            )
+        print(f"[watchlist] 重建{'成功' if ok else '失败'}：{(r.stdout or '').strip()[-200:]}")
+    except Exception as e:
+        with _derived_lock:
+            _derived_state.update(last_ok=False, last_err=f"{type(e).__name__}: {e}",
+                                  last_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        print(f"[watchlist] 重建异常：{type(e).__name__}: {e}")
+    finally:
+        with _derived_lock:
+            _derived_state["running"] = False
+
+
+def _schedule_watchlist_rebuild() -> bool:
+    """提交一次重建（已有排队/在跑则合并，避免连点查询时反复重算）。"""
+    with _derived_lock:
+        if _derived_state["queued"] or _derived_state["running"]:
+            return False
+        _derived_state["queued"] = True
+    _derived_pool.submit(_rebuild_watchlist)
+    return True
+
+
 def _set(job_id: str, state: str, step: str, pct: int, **extra) -> None:
     with _jobs_lock:
         j = _jobs.get(job_id)
@@ -166,8 +218,20 @@ def _run_job(job_id: str, code: str, market: str) -> None:
              "正在生成一页报告（LLM 叙事 + 年报 PDF 交叉校验，约 2-4 分钟）…", 70)
         p = _build_report(code)
 
-        _set(job_id, "done", "报告已生成", 100,
+        # 生成成功即入跟踪池（幂等），并异步重建对比表 —— 见模块 docstring
+        with _jobs_lock:
+            name = (_jobs.get(job_id) or {}).get("name")
+        try:
+            added = watchlist_store.add(code, name=name)
+        except Exception as e:  # 入池失败不该让"报告已生成"变成失败
+            added = False
+            print(f"[watchlist] {code} 入池失败（不影响报告）：{type(e).__name__}: {e}")
+        queued = _schedule_watchlist_rebuild()
+
+        _set(job_id, "done",
+             "报告已生成，已加入跟踪池对比" + ("（对比表重建中…）" if queued else ""), 100,
              report=str(p.relative_to(ROOT)), code=code, market=market,
+             watchlist_added=added, watchlist_rebuild_queued=queued,
              finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     except Exception as e:
         _set(job_id, "error", f"生成失败：{type(e).__name__}: {e}", 0,
@@ -192,6 +256,26 @@ def index() -> HTMLResponse:
             "<li>GET /api/report/status/{job_id}</li>"
             "<li>GET /report/600519</li></ul>"
         )
+    return HTMLResponse(p.read_text(encoding="utf-8"))
+
+
+@app.get("/home", response_class=HTMLResponse)
+def home() -> HTMLResponse:
+    """跟踪池卡片首页（web/index.html，含现价与数据日期）。"""
+    p = WEB_DIR / "index.html"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="web/index.html 还不存在，"
+                                                   "先跑 python scripts/build_web_index.py")
+    return HTMLResponse(p.read_text(encoding="utf-8"))
+
+
+@app.get("/watchlist", response_class=HTMLResponse)
+def watchlist_page() -> HTMLResponse:
+    """跟踪池横向对比表（web/watchlist.html）。"""
+    p = WEB_DIR / "watchlist.html"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="web/watchlist.html 还不存在，"
+                                                   "先跑 python scripts/build_watchlist.py")
     return HTMLResponse(p.read_text(encoding="utf-8"))
 
 
@@ -225,6 +309,50 @@ def health() -> dict:
                   **market_index.stats()},
         "reports": n_reports,
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
+@app.get("/api/refresh-status")
+def refresh_status() -> dict:
+    """数据更新证据链：回答「怎么证明数据更新过」。
+
+    给网页用的轻量版（完整版见 `python scripts/check_refresh.py`）。
+    判据优先级：文件 mtime > 归档序列 > 日志 > 闸门 —— mtime 最硬。
+    """
+    import pandas as pd  # noqa: PLC0415
+
+    from src.data import watchlist_store as _wl  # noqa: PLC0415
+
+    gate = ROOT / "data" / "logs" / ".last_success"
+    gate_val = gate.read_text(encoding="utf-8").strip() if gate.exists() else None
+
+    items = []
+    for code in _wl.codes():
+        qf = RAW_DIR / code / "quote.parquet"
+        item = {"code": code, "name": (_wl.get(code) or {}).get("name", code)}
+        if qf.exists():
+            item["quote_mtime"] = datetime.fromtimestamp(qf.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                df = pd.read_parquet(qf)
+                if not df.empty:
+                    r = df.iloc[-1]
+                    item["price"] = float(r["price"]) if pd.notna(r.get("price")) else None
+                    item["change_pct"] = float(r["change_pct"]) if pd.notna(r.get("change_pct")) else None
+                    d = r.get("report_date")
+                    item["quote_date"] = pd.Timestamp(d).strftime("%Y-%m-%d") if pd.notna(d) else None
+            except Exception:
+                pass
+        items.append(item)
+
+    return {
+        "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "gate": gate_val,
+        "gate_is_today": gate_val == datetime.now().strftime("%Y-%m-%d"),
+        "count": len(items),
+        "stocks": items,
+        "watchlist_rebuild": dict(_derived_state),
+        "note": "quote_mtime 落在今天 = 今天的日更确实改写过行情文件；"
+                "闸门有今天日期 = 整批全部成功（任一项失败都不写闸门）",
     }
 
 

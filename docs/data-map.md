@@ -131,6 +131,10 @@ V=/Users/lixiao/.workbuddy/binaries/python/envs/fqf/bin/python
 | `StandardOutPath` / `StandardErrorPath` | `data/logs/launchd.*.log` | 日志落哪 |
 | `KeepAlive` | `false` | 批处理任务，失败不无限重启 |
 
+**第二个触发入口**：`web/server.py` 按需生成报告（查谁拉谁、算完缓存），
+生成成功后自动把该标的加入跟踪池并异步重建对比表 —— 见 `docs/code-map.md` §4。
+两个入口读同一份 `watchlist/watchlist.json`（经 `src/data/watchlist_store.py`）。
+
 **与 `cron` 的决定性差别**：cron 到点触发，机器睡了/关机就**整次跳过**；
 launchd 配 `RunAtLoad` 能在开机后**补跑一次**（家用 Mac 常关机，这条是关键）。
 脚本里用 `data/logs/.last_success` 做闸门，保证当天只跑一次。
@@ -145,6 +149,10 @@ launchd 配 `RunAtLoad` 能在开机后**补跑一次**（家用 Mac 常关机�
 | `launchctl print gui/501/com.fqf.daily-refresh` | `state = not running`、`runs = 1`、event triggers **5 条**（Weekday 1–5 / 16:30） |
 | 6 只标的报告 + `web/index.html` | ✅ 全部重刷（耗时约 12 分钟） |
 | `data/logs/.last_success` | ❌ 未写 —— 601088 行情首拉为空 → `rc=1` → **闸门按设计不写**（宁可重复跑，不可静默漏刷） |
+
+日更的四个步骤：`snapshot_all`（拉行情）→ `build_valueline --daily`（重刷报告估值板块）
+→ `build_web_index.py`（重刷首页）→ `build_watchlist.py`（重刷对比表）。
+第 3、4 步是派生产物，失败只告警、不计入失败（不挡闸门）。
 
 → **日更链路已自动调度**（每交易日 16:30 + 登录补跑）。
 → **季更仍靠手动**：`scripts/update_financials.py` 只在财报季跑，未接入 launchd。
@@ -180,3 +188,5 @@ rm ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
 | 为什么数据更新「没跑」？ | 两种可能：① launchd 没装（§3）；② 当天闸门 `.last_success` 已写 → **当天会被跳过**，`--force` 可强制重跑 |
 | DuckDB 里的数据是最新的吗？ | **不一定**，`raw.*` 是物化表，落后于 parquet，需重跑 warehouse |
 | 报告链路读 DuckDB 吗？ | **不读**。adapter 直接读 `data/raw/**` parquet（全量时才不会 OOM） |
+| **怎么证明数据真的更新过？** | `python scripts/check_refresh.py` —— 六层证据由软到硬。**最硬的是文件 mtime**：`data/raw/{code}/quote.parquet` 的 mtime 落在今天 = 今天确实改写过；**能证明「价格变过」的是 `data/market/{code}_quote.parquet`**（按日追加的长序列，而 `data/raw` 那份是单行覆盖，只看得到「现在」） |
+| 手机首页为什么「看不出更新」？ | 2026-09-17 之前卡片只有公司名+行业、**没有任何数字**，日更后整页逐字节一样，mtime 变了而已。已修：卡片加现价/涨跌幅/数据日期，顶部加「数据更新于 …」，对比表也纳入日更 |

@@ -8,11 +8,25 @@
 webserver」那一整套（需 3~4GB 常驻内存）。而本场景的负载是「每天跑一次、
 一个人看」—— 平台能力用不上，开销全额承担。
 
-故直接由 macOS 原生 launchd 在每交易日 16:30 拉起本脚本，三个步骤：
+故直接由 macOS 原生 launchd 在每交易日 16:30 拉起本脚本，四个步骤：
 
     market_snapshot.snapshot_all       → 拉行情/估值/评级快照
     build_valueline.build(daily=True)  → 轻量重刷估值板块
     build_web_index.py                 → 重生成网页首页（子进程调用）
+    build_watchlist.py                 → 重生成跟踪池横向对比表（子进程调用）
+
+🔴 为什么要重建对比表（2026-09-17 补）
+--------------------------------------
+原先只重建 `web/index.html`，**对比表根本不在日更链路里** —— 它的价格永远停在
+「上次手动运行 build_watchlist.py 的那一刻」。用户反馈「你说 4 点会更新数据，
+我感知不到」，一半原因就在这里：唯一带完整数字的页面从来不更新。
+
+🔴 派生产物失败不再计入失败（2026-09-17 改，与原行为不同）
+--------------------------------------------------------
+两个展示步骤（首页 / 对比表）失败一律**只告警、不计入 `failed`**，因此不会挡
+`.last_success` 闸门。理由：它们是派生产物，单独重跑成本很低（对比表约 2.5 分钟、
+首页约 2 秒），而计入失败会让**当天整批标的重新拉一遍**（20+ 分钟）——
+代价与收益完全不匹配。原实现把 web_index 失败也算作失败，本次一并改掉。
 
 口径差异（重要）
 ----------------
@@ -95,6 +109,24 @@ def _parse_args(argv: list[str]) -> dict:
     }
 
 
+def _run_derived(name: str, script: str, timeout: int) -> bool:
+    """跑派生产物脚本（首页 / 对比表）。**失败只告警，不计入 failed** —— 见模块 docstring。"""
+    try:
+        r = subprocess.run([sys.executable, str(SCRIPTS / script)],
+                           cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
+        out = (r.stdout or "").strip()
+        if r.returncode == 0:
+            print(out[-800:] if out else "  (无输出)")
+            return True
+        print(f"  ⚠️ {name} 退出码 {r.returncode}：{(r.stderr or '').strip()[-500:]}")
+        print(f"  ⚠️ 该产物未更新，但不影响当天成功判定；可单独重跑 "
+              f"`python scripts/{script}`")
+        return False
+    except Exception as e:
+        print(f"  ⚠️ {name} 刷新失败（不影响报告与闸门）：{type(e).__name__}: {e}")
+        return False
+
+
 def main() -> int:
     opt = _parse_args(sys.argv[1:])
     codes = opt["codes"] or load_codes()
@@ -115,6 +147,7 @@ def main() -> int:
             print("  2) build_valueline.build(daily=True)  → 重刷估值/市场板块（不调 LLM）")
         if opt["do_web"] and opt["do_build"]:
             print("  3) build_web_index.py  → 重刷 web/index.html")
+            print("  4) build_watchlist.py  → 重刷 web/watchlist.html")
         return 0
 
     snapshot_all = None
@@ -165,16 +198,12 @@ def main() -> int:
 
     if opt["do_web"] and opt["do_build"]:
         print(f"\n{'=' * 56}\n重刷手机网页版首页")
-        try:
-            r = subprocess.run([sys.executable, str(SCRIPTS / "build_web_index.py")],
-                               cwd=str(ROOT), capture_output=True, text=True, timeout=300)
-            print((r.stdout or "").strip()[-800:])
-            if r.returncode != 0:
-                print(f"  ⚠️ 退出码 {r.returncode}：{(r.stderr or '').strip()[-400:]}")
-                failed.append("web_index")
-        except Exception as e:
-            print(f"  ⚠️ 首页刷新失败（不影响报告）：{e}")
-            failed.append("web_index")
+        _run_derived("web_index", "build_web_index.py", timeout=300)
+
+        print(f"\n{'=' * 56}\n重刷跟踪池横向对比表")
+        # 带缓存：只有 data/raw 变动过的标的才重算。日更刚把全池行情刷了新，
+        # 所以这里是全量重算（11 只实测约 2.5 分钟）；单独生成一份报告后只重算 1 只。
+        _run_derived("watchlist", "build_watchlist.py", timeout=900)
 
     print(f"\n{'=' * 56}")
     if failed:

@@ -80,10 +80,11 @@ ls tests/test_*.py | wc -l                                                  # 21
 | `build_xhs_oil.py` | 986 | 海油版小红书 9 图（含口径自检） |
 | `journal.py` | 382 | 投研日记（私有层，gitignore） |
 | `backtest_band.py` | 324 | 腾讯中线波段策略回测 |
-| `build_watchlist.py` | 290 | 跟踪池横向对比表 |
+| `build_watchlist.py` | 417 | **跟踪池横向对比表**；读 `watchlist_store`、带行缓存（只重算数据变动过的标的）、移动端可横滑 |
 | `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**；配套三件套：`install_launchd.command`（安装器）+ `daily_refresh.sh`（适配层）+ `com.fqf.daily-refresh.plist`（声明式配置） |
+| `check_refresh.py` | 298 | **数据更新证据链自检**：launchd 状态 / 闸门 / 日志 / 文件 mtime / 按日归档价格序列 / 报告是否重刷 —— 六层由软到硬 |
 | `inspect_raw.py` | 170 | 数据结构查看（Code Review 辅助） |
-| `build_web_index.py` | 147 | 手机网页版首页 |
+| `build_web_index.py` | 300 | 手机网页版首页；卡片含**现价 / 涨跌幅（红涨绿跌）/ 数据日期**，顶部显示「数据更新于」 |
 | `backup.py` | 141 | 日记 + 工作记忆备份 |
 | `fetch_stock.py` | 90 | **数据拉取 CLI 入口** |
 | `export.py` | 68 | Playwright 导图（PNG @2x / PDF） |
@@ -153,13 +154,29 @@ ls tests/test_*.py | wc -l                                                  # 21
 
 ---
 
-## 4. 🔴 三处标的清单互不一致（配置漂移）
+## 4. ✅ 标的清单已收敛为单一真源（2026-09-17 修复）
+
+**修复前**（记录在此，因为它是一类必犯的错）：跟踪池被硬编码在**三处**，必然漂移。
 
 | 来源 | 标的 | 数量 | 差异 |
 |---|---|---|---|
-| `watchlist/watchlist.json` | 神华 601088 / 茅台 600519 / 格力 000651 / 交行 601328 / **腾讯 00700** / 泡泡玛特 09992 | **6** | 基准（更新于 2026-09-03） |
-| `scripts/build_web_index.py` 的 `STOCK_META` | 神华 / 茅台 / 格力 / 交行 / **招行 600036** / **兴业 601166** / **成都银行 601838** / 泡泡玛特 | **8** | ❌ 缺腾讯；多三家银行 |
-| `data/raw/`（实际落盘） | 000651 / 00700 / **00883** / 09992 / 600519 / **600938** / 601088 / 601328 | **8** | ❌ 缺泡泡玛特以外的…实为**多海油 A+H 两只，均不在 watchlist** |
+| `watchlist/watchlist.json` | 神华 / 茅台 / 格力 / 交行 / 腾讯 / 泡泡玛特 | **6** | 基准（更新于 2026-09-03） |
+| `scripts/build_web_index.py` 的 `STOCK_META` | 神华 / 茅台 / 格力 / 交行 / 招行 / 兴业 / 成都银行 / 泡泡玛特 | **8** | ❌ 缺腾讯；多三家银行 |
+| `scripts/build_watchlist.py` 的 `STOCK_META` | 与 json 同内容 | **6** | ❌ 代码重复一份，改一处必漏另一处 |
+| 实际已有报告 | 上列 + 海油 A+H（600938 / 00883）+ 伊利 600887 + 300061 | **11** | ❌ 5 只有报告却不在任何清单里 |
+
+**修复**：新增 `src/data/watchlist_store.py` 作为**唯一读写入口**
+（`codes()` / `stocks()` / `add()` / `prune()`），
+`build_web_index.py`、`build_watchlist.py`、`daily_refresh.py`、`web/server.py`
+全部改读它 —— 三处 `STOCK_META` 已全部删除。
+
+**入池规则**（2026-09-17 定）：**生成过报告即入池**，不设硬上限。
+`rules.max_size = 8` 降级为页面提示（「跟踪池 11 只 · 已超名义上限 8 只」），不阻断写入。
+落地点两处：`web/server.py`（网页按需生成后 `add()`）与 `daily_refresh.py`（读同一清单）。
+海油 A+H、伊利、300061 已按此规则补入，当前 **11 只**。
+
+⚠️ 新增/移除标的时**只需改 `watchlist/watchlist.json`**；但 `.gitignore` 里
+`reports/**/*.html` 的白名单需同步增删一行（报告默认不入库，只留跟踪池的）。
 
 **后果**：
 
@@ -260,10 +277,12 @@ src/report/perspectives/       ← 4 个 JSON（graham/lynch/buffett/fisher）
 
 | # | 问题 | 影响 |
 |---|---|---|
-| 6 | 三处标的清单漂移（§4），海油未进跟踪池 | 🟡 |
-| 7 | 导图覆盖不全（7 只报告只有 4 只有 PNG） | 🟡 |
-| 8 | `perspectives` 同名共存（§5.2） | 🟢 潜在 |
-| 9 | 降级模式无产物标识（§5.3） | 🟢 潜在 |
+| 6 | 导图覆盖不全（7 只报告只有 4 只有 PNG） | 🟡 |
+| 7 | `perspectives` 同名共存（§5.2） | 🟢 潜在 |
+| 8 | 降级模式无产物标识（§5.3） | 🟢 潜在 |
+
+> ✅ **已销账（2026-09-17）**：原条目 6「三处标的清单漂移（§4）」——
+> 已收敛到 `src/data/watchlist_store.py` 单一真源，见 §4。
 
 > ✅ **已销账（2026-09-17）**：原条目 8「launchd 任务未安装」—— 已安装并跑通首次真实执行
 > （`launchctl print gui/501/com.fqf.daily-refresh` → `runs = 1`）。安装入口
