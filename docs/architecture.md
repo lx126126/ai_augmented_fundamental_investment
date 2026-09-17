@@ -74,7 +74,7 @@
 ```
 后台定时任务（分层调度）
   财报数据 ── 季更 ──┐
-  行情/估值 ── 周更 ──┼→ 全 A 股预计算 → 入库（DuckDB/PostgreSQL + parquet）
+  行情/估值 ── 日更 ──┼→ 全市场预计算 → 入库（parquet 真源 + DuckDB 物化）
   机构数据 ── 月更 ──┘
 
 用户搜索股票代码 ──→ 从库读取 → 渲染 HTML 长图 ──→ 秒级出报告
@@ -91,16 +91,13 @@
 
 ### 4.4 数据库选型
 
-全 A 股 5000+ 只 × 多年财报 ≈ **数百万行**，SQLite 在分析查询与并发下捉襟见肘。
+全市场 8368 只 × 多年财报 ≈ **数百万行**，SQLite 在分析查询与并发下捉襟见肘。
 
 | 场景 | 选型 | 理由 |
 |------|------|------|
-| 本地开发 + 分析 | **DuckDB** | 嵌入式、列式存储、分析查询快、parquet 原生支持、零运维 |
-| API 查询层（FastAPI） | **PostgreSQL** | 多用户并发、服务化、生态成熟（规模化迁移目标） |
-| 文件层 | **parquet + COS** | 原始数据与中间结果归档，云存储 |
-| 云数仓（规模化迁移目标） | **Snowflake / BigQuery** | schema 化表格设计与维护、弹性算力，对齐岗位「现代云数据仓库」要求 |
-
-> 分阶段：当前 DuckDB + parquet 本地（已落地）；后续 PostgreSQL 承接 API 查询，parquet 走 COS 归档。Snowflake/BigQuery 作为规模化后的迁移目标，schema 设计保持与 Postgres 兼容。
+| 本地开发 + 分析 | **DuckDB** | 嵌入式（单文件、无端口无账号、零运维）、列式存储、分析查询快、parquet 原生支持 |
+| 文件层（真源） | **parquet** | 原始数据与中间结果按标的按表落盘；DuckDB 只是它的**物化副本**，丢了可重建 |
+| 查询服务 | **FastAPI（只读连接）** | 报告服务 `web/` 与数据查询 API `src/api/` 均直读，无需独立数据库进程 |
 
 ### 4.5 数据质量与监控
 
@@ -108,7 +105,7 @@
 - 机构数据标注截至日期与家数
 - **数据质量检验**：缺失值 / 异常值 / 口径一致性校验，未通过则告警
 - **血缘追踪**：字段级 lineage 标注（源 → 清洗 → 指标），可追溯
-- **调度告警**：任务失败 / 延迟告警（Airflow 通知）
+- **调度告警**：任务失败即拒绝下游（launchd 跑批日志落 `data/logs/`）；⚠️ 微信推送通道尚未接入
 
 > **数据校验方案**（金标准选择、错误分类、三层校验策略、字段白名单）详见 [data-validation.md](data-validation.md)。核心：官方年报 PDF 做金标准，首次全量建基线 + 日常增量守基线 + 定期抽样防漂移。
 
@@ -231,18 +228,20 @@ Playwright 导图（PNG @2x / PDF）
 ## 8. AI-Native 数据管道
 
 ```
-Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
+launchd 定时触发 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
         → DuckDB 数仓(raw/mart，含血缘追踪) → 指标计算 + 造假检测
         → LLM 生成报告文本(结构化输出) → 模板渲染 → 导图
         → FastAPI 查询 API
 ```
 
-- **调度**：Airflow 五阶段 DAG（拉取→交叉校验+造假检测→渲染→数仓→导出），Docker Compose 容器化，端到端跑通 ✅
+- **调度**：macOS 原生 **launchd**（`scripts/com.fqf.daily-refresh.plist`）每交易日 16:30 自动
+  跑 `daily_refresh.py --daily`；配 `RunAtLoad` 在开机/唤醒后补跑错过的任务，`.last_success`
+  闸门保证当天只跑一次。五阶段管道（拉取→交叉校验+造假检测→渲染→数仓→导出）由 `scripts/`
+  下的脚本承担，**每个脚本可独立重跑**，不依赖常驻调度服务
 - **文档解析**：巨潮年报 PDF + pymupdf 表格抽取，金标准交叉校验（容差 <0.1%）✅
-- **数仓**：DuckDB 列式数仓（raw/mart 双层 schema 化），PostgreSQL/Snowflake/BigQuery 为规模化迁移目标
+- **数仓**：DuckDB 列式数仓（raw/mart 双层 schema 化）；raw 层另有反向生成的 DDL 快照（`sql/schema_raw.sql`，11 表 226 列）可做结构漂移检测
 - **LLM 应用**：DeepSeek 结构化输出（商业模式/投资逻辑/风险/林奇分类），铁律「只翻译数据不编数」✅
 - **后端**：FastAPI 查询 API（7 端点，只读 mart 层，参数化查询 + 白名单防注入）✅
-- **云**：已输出《云部署方案设计》[cloud-deployment.md](cloud-deployment.md)——本地 → GCP（Composer/BigQuery/Cloud Run/Secret Manager）的完整映射 + 分阶段迁移路径 + BigQuery DDL（规模化迁移设计已就绪，待实际部署）
 
 ---
 
@@ -251,10 +250,11 @@ Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
 | 阶段 | 内容 | 状态 |
 |------|------|------|
 | P0 | ValueLine 一页模板 + 导图 | ✅ 已完成 |
-| P1 | 数据层：多源抓取 + 文档解析（PDF 金标准校验）+ 清洗入库 + parquet 存储 + Airflow 编排 | ✅ 已完成（剩：全市场批量拉取） |
+| P1 | 数据层：多源抓取 + 文档解析（PDF 金标准校验）+ 清洗入库 + parquet 存储 + launchd 定时调度 | ✅ 已完成 |
 | P2 | 分析层：指标计算 / 估值分位 / 林奇分类 / 格雷厄姆评分 / 造假检测（Beneish M-Score + 审计意见）/ 竞争地位 | ✅ 已完成 |
-| P3 | 报告层：模板数据绑定 + LLM 文本生成 + DuckDB 数仓（raw/mart）+ FastAPI 查询 API | ✅ 已完成（剩：季度更新引擎、跟踪池全量管理） |
-| P4 | 服务层完善：PG 数仓 schema 迁移 + 云部署方案（GCP/AWS managed）+ 全市场批量拉取 | 🔄 云方案设计已输出（[cloud-deployment.md](cloud-deployment.md)），剩实际部署 + PG DDL |
+| P3 | 报告层：模板数据绑定 + LLM 文本生成 + DuckDB 数仓（raw/mart）+ FastAPI 查询 API + 季度更新引擎 | ✅ 已完成 |
+| P4 | 数据层扩展：全市场覆盖（A 股 + 港股 8368 只）+ 财报按需/批量拉取 + raw 层 DDL 快照 | ✅ 已完成（索引 8368 只 / 行情 25.8s / 0 失败 / 0 漏） |
+| P5 | 产品层：查询服务（代码或名称 → 一页报告）+ 报告归档策略 | ✅ 服务已跑通（`web/server.py`，端到端约 4 分钟 / 缓存命中 0.5s） |
 
 ---
 
@@ -265,8 +265,8 @@ Airflow 调度 → 多源抓取 + 文档解析(PDF 金标准) → 清洗入库
 | 语言 | Python |
 | 数据源 | AKShare（主，A 股 + 港股）+ mootdx/腾讯（备用，A 股 + 港股）+ 经济通（港股评级） |
 | 文档解析 | PDF / HTML（pymupdf 表格抽取，金标准校验） |
-| 调度 | Airflow 五阶段 DAG + Docker Compose |
-| 存储 | DuckDB 数仓（raw/mart，已落地）+ PG schema（`sql/schema_postgres.sql`，已输出）+ parquet/COS + Snowflake/BigQuery（云迁移设计） |
+| 调度 | macOS **launchd**（每交易日 16:30 自动刷新）；脚本可独立重跑，无常驻服务 |
+| 存储 | parquet（真源，`data/raw/` + `data/market/`）+ DuckDB 数仓（raw/mart 物化副本） |
 | 数据质量 | 校验 + 告警 + 血缘追踪 |
 | LLM | DeepSeek（deepseek-chat）结构化输出，只翻译数据不编观点；投研日记内生成市场多空 + AI 操作建议（标注第三方/AI） |
 | 后端 | FastAPI 查询 API（只读 mart 层） |

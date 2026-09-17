@@ -2,15 +2,17 @@
 # -*- coding: utf-8 -*-
 """每日行情刷新：拉行情快照 → 轻量重刷报告（跳过 PDF 校验与 LLM 叙事）。
 
-为什么不用 Airflow
-------------------
-`airflow/dags/market_daily.py` 就是这件事，但本机（MacBookAir7,2 / 8GB 内存 /
-根卷可用 13GB）**没有 Docker**，scheduler + webserver + postgres 跑不动。
-本脚本把那个 DAG 的业务逻辑平移到 launchd 可调用的形态：
+为什么用 launchd 而不是容器化调度平台
+--------------------------------------
+本机（MacBookAir7,2 / 8GB 内存 / 双核）跑不了「元数据库 + 常驻 scheduler +
+webserver」那一整套（需 3~4GB 常驻内存）。而本场景的负载是「每天跑一次、
+一个人看」—— 平台能力用不上，开销全额承担。
 
-    DAG 的 snapshot  → 这里 market_snapshot.snapshot_all
-    DAG 的 refresh   → 这里 build_valueline.build(daily=True)
-    DAG 的 web_index → 这里 build_web_index.py（子进程调用）
+故直接由 macOS 原生 launchd 在每交易日 16:30 拉起本脚本，三个步骤：
+
+    market_snapshot.snapshot_all       → 拉行情/估值/评级快照
+    build_valueline.build(daily=True)  → 轻量重刷估值板块
+    build_web_index.py                 → 重生成网页首页（子进程调用）
 
 口径差异（重要）
 ----------------

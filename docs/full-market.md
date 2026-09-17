@@ -151,5 +151,4 @@ export FQF_HTTP_PROXY=http://127.0.0.1:15236     # 换成你的代理地址
 | 每季度（财报季后） | 补全市场财报 | `python scripts/update_financials.py --scope all --workers 4 --skip-done` |
 | 随时 | 查一只股票出报告 | 打开 `http://<内网IP>:8000` 或 `POST /api/report` |
 
-本机（8GB / 无 Docker）用 `launchd` 调度，见 `scripts/com.fqf.daily-refresh.plist`；
-Airflow DAG 保留在 `airflow/` 作为可迁移到服务器的版本。
+本机（8GB / 双核）用 `launchd` 调度，见 `scripts/com.fqf.daily-refresh.plist`。

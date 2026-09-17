@@ -1,4 +1,4 @@
-"""数据质量校验层：抓取结果的通用断言，供 Airflow 管道 gate 复用。
+"""数据质量校验层：抓取结果的通用断言，供数据管道 gate 复用。
 
 这是「生产级数据管道」与「能跑的脚本」的分水岭——在 fetcher 与 cleaner 之间
 插入一道质量 gate，对每一张表做结构/空值/数值/一致性断言，失败即阻断下游，
@@ -14,7 +14,7 @@
     from src.data.quality import check_frame, CheckResult
     res = check_frame(df, table="profit_sheet", min_rows=5)
     if not res.ok:
-        raise ValueError(res.summary())   # 在 Airflow 中触发 on_failure_callback 告警
+        raise ValueError(res.summary())   # 调用方捕获后告警（写日志 / 落 last_success 闸门）
 """
 from __future__ import annotations
 
@@ -314,7 +314,7 @@ def check_annual_sanity(annual: pd.DataFrame, code: str = "") -> CheckResult:
 
 
 # --------------------------------------------------------------------------- #
-# 行情快照校验（日更 DAG 用）：价格/估值合理性，轻量、不阻断（仅告警）
+# 行情快照校验（日更链路用）：价格/估值合理性，轻量、不阻断（仅告警）
 # --------------------------------------------------------------------------- #
 # 估值合理范围：PE/PB 恒为正；PE 上限 200（超过多为接口脏值或亏损股误报）、
 # PB 上限 30（金融/高杠杆行业也可能较高，留足余量）。这些是「明显异常」阈值，
@@ -324,7 +324,7 @@ _QUOTE_RANGE = {"pe": (0.0, 200.0), "pb": (0.0, 30.0)}
 
 
 def check_quote(q: pd.DataFrame, code: str | None = None) -> CheckResult:
-    """对行情快照单行做合理性校验（日更 DAG 的轻量 gate）。
+    """对行情快照单行做合理性校验（日更链路的轻量 gate）。
 
     与 check_financial_tables 的区别：行情是「高频、错了影响小」的数据，
     故本校验定位为「明显异常识别 + 告警」，不阻断整条流水线（调用方自行决定

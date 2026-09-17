@@ -50,7 +50,6 @@ ls tests/test_*.py | wc -l                                                  # 21
 | `adapter.py` | 1324 | **最大的数据模块**。宽表 → 模板渲染结构，串起校验/分析/报告 | `build_template_data` |
 | `quality.py` | 404 | 抓取结果通用断言（跨表勾稽、比率边界、同比异常） | `validate_all` |
 | `warehouse.py` | 249 | parquet → DuckDB，raw/mart 双层 schema | `build_warehouse` |
-| `elt_pg.py` | 196 | mart 层 → PostgreSQL 同步 | `sync_all` |
 
 ### 1.3 校验层 `src/validation/`
 
@@ -82,7 +81,7 @@ ls tests/test_*.py | wc -l                                                  # 21
 | `journal.py` | 382 | 投研日记（私有层，gitignore） |
 | `backtest_band.py` | 324 | 腾讯中线波段策略回测 |
 | `build_watchlist.py` | 290 | 跟踪池横向对比表 |
-| `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**，替代 Airflow 的 `market_daily` DAG；配套 `daily_refresh.sh` + `com.fqf.daily-refresh.plist` |
+| `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**；配套 `daily_refresh.sh` + `com.fqf.daily-refresh.plist` |
 | `inspect_raw.py` | 170 | 数据结构查看（Code Review 辅助） |
 | `build_web_index.py` | 147 | 手机网页版首页 |
 | `backup.py` | 141 | 日记 + 工作记忆备份 |
@@ -146,14 +145,11 @@ ls tests/test_*.py | wc -l                                                  # 21
 
 | # | architecture.md 说 | 实况 | 判定 |
 |---|---|---|---|
-| 1 | §8「Airflow 五阶段 DAG + Docker Compose，端到端跑通 ✅」 | 2026-09-03 在 **Windows + Docker Desktop** 真实跑通（`docs/airflow-run-evidence.md` 证据齐全：26 task 全 success、3 分 15 秒）。但**当前 Mac 无 Docker、8GB 内存、13GB 可用磁盘，不可复现** | ⚠️ **历史事实成立，当前环境不可复现** |
-| 2 | Roadmap P3「剩：季度更新引擎」 | `src/report/quarterly_review.py`（240 行）**已实现并接入**，在 `build_valueline.py:2159` 调用，带哈希缓存 | ❌ **已过期**，实际已完成 |
-| 3 | §4.5「调度告警（Airflow 通知）」 | Airflow 在现机不可用 → 告警链路随之失效 | ⚠️ 待替换（见 `launchd` 方案） |
-| 4 | §10 技术栈「调度：Airflow + Docker Compose」 | 同上 | ⚠️ 同上 |
-| 5 | §5「估值分位标注『近 10 年』」 | A 股次新股（如 600938 上市 4.4 年）实际序列不足 10 年，报告措辞与序列长度不符 | 🔴 已知待修 |
-| 6 | §4.4「DuckDB raw/mart 双层」 | 实测 raw 11 + mart 3 = 14 表 ✅ | ✅ 一致 |
-| 7 | §8「FastAPI 7 端点」 | 实测 7 个（`root`/`list_stocks`/`get_stock`/`get_quarters`/`get_segments`/`get_metric`/`compare`）✅ | ✅ 一致 |
-| 8 | §6.5「`src/report/perspectives/{id}.json`」 | JSON 确实在 `perspectives/` 目录（4 个）；但**同目录还有一个同名 `perspectives.py`** | ✅ 能用，但见 §5.2 |
+| 1 | Roadmap P3「剩：季度更新引擎」 | `src/report/quarterly_review.py`（240 行）**已实现并接入**，在 `build_valueline.py:2159` 调用，带哈希缓存 | ❌ **已过期**，实际已完成 |
+| 2 | §5「估值分位标注『近 10 年』」 | A 股次新股（如 600938 上市 4.4 年）实际序列不足 10 年，报告措辞与序列长度不符 | 🔴 已知待修 |
+| 3 | §4.4「DuckDB raw/mart 双层」 | 实测 raw 11 + mart 4 = **15 表**（2026-09-17 新增 `mart.market_index` 8368 行）✅ | ✅ 一致 |
+| 4 | §8「FastAPI 7 端点」 | 实测 7 个（`root`/`list_stocks`/`get_stock`/`get_quarters`/`get_segments`/`get_metric`/`compare`）✅ | ✅ 一致 |
+| 5 | §6.5「`src/report/perspectives/{id}.json`」 | JSON 确实在 `perspectives/` 目录（4 个）；但**同目录还有一个同名 `perspectives.py`** | ✅ 能用，但见 §5.2 |
 
 ---
 
@@ -266,7 +262,7 @@ src/report/perspectives/       ← 4 个 JSON（graham/lynch/buffett/fisher）
 |---|---|---|
 | 6 | 三处标的清单漂移（§4），海油未进跟踪池 | 🟡 |
 | 7 | 导图覆盖不全（7 只报告只有 4 只有 PNG） | 🟡 |
-| 8 | Airflow 在当前机器不可用，需换 launchd | 🟡 |
+| 8 | launchd 任务**未安装**（`launchctl list` 无 `com.fqf.daily-refresh`），日更/季更暂无自动调度 | 🟡 |
 | 9 | `perspectives` 同名共存（§5.2） | 🟢 潜在 |
 | 10 | 降级模式无产物标识（§5.3） | 🟢 潜在 |
 
