@@ -99,7 +99,7 @@ flowchart TB
 │   ├── update_spot_all.py     # 全市场行情日更（8368 只 / 25.8s，日度）
 │   ├── update_financials.py   # 财报更新（按需 / 观察池 / 全市场，季度）
 │   ├── build_valueline.py # 渲染 ValueLine 一页报告
-│   ├── build_web_index.py # 生成手机网页版首页（数据驱动）
+│   ├── build_web_index.py # 生成手机网页版首页：搜索框 + 报告列表 + 横向对比入口
 │   ├── build_watchlist.py # 生成跟踪池横向对比表（同口径决策指标一览）
 │   ├── export.py          # HTML → PNG / PDF
 │   └── journal.py         # 投研日记（内部操作层，含 AI 操作建议）
@@ -124,7 +124,7 @@ flowchart TB
 │   └── schema_raw.sql         # raw 层完整 DDL（DuckDB 方言，11 表 226 列，脚本自动生成）
 ├── data/                      # 本地数据缓存（gitignore，不提交，含 warehouse/fqf.duckdb 与 market/ 全市场索引·行情）
 ├── reports/                   # 报告归档（按季度）
-├── web/                       # 产品层：server.py（FastAPI 报告服务）+ query.html（手机查询页）+ index.html（网页版入口）
+├── web/                       # 产品层：server.py（FastAPI 报告服务）+ index.html（首页：搜索/报告列表/横向对比入口）+ watchlist.html（对比表）
 ├── watchlist/                 # 跟踪池（客观研究范围）
 └── README.md
 ```

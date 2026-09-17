@@ -84,7 +84,7 @@ ls tests/test_*.py | wc -l                                                  # 21
 | `daily_refresh.py` | 186 | **每日行情刷新（launchd 入口）**；配套三件套：`install_launchd.command`（安装器）+ `daily_refresh.sh`（适配层）+ `com.fqf.daily-refresh.plist`（声明式配置） |
 | `check_refresh.py` | 298 | **数据更新证据链自检**：launchd 状态 / 闸门 / 日志 / 文件 mtime / 按日归档价格序列 / 报告是否重刷 —— 六层由软到硬 |
 | `inspect_raw.py` | 170 | 数据结构查看（Code Review 辅助） |
-| `build_web_index.py` | 300 | 手机网页版首页；卡片含**现价 / 涨跌幅（红涨绿跌）/ 数据日期**，顶部显示「数据更新于」 |
+| `build_web_index.py` | 574 | 手机网页版首页：**搜索框**（防抖搜索 + 就地生成 + 进度轮询）→ **已生成报告列表**（卡片含现价 / 涨跌幅（红涨绿跌）/ 数据日期）→ **列表最下面的「横向对比」按钮** |
 | `backup.py` | 141 | 日记 + 工作记忆备份 |
 | `fetch_stock.py` | 90 | **数据拉取 CLI 入口** |
 | `export.py` | 68 | Playwright 导图（PNG @2x / PDF） |

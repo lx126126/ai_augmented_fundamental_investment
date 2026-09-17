@@ -82,7 +82,10 @@ python -m uvicorn web.server:app --host 0.0.0.0 --port 8000
 
 | 端点 | 说明 |
 |---|---|
-| `GET /` | 查询首页（`web/query.html`） |
+| `GET /` `/home` `/index.html` | 首页（`web/index.html`）：搜索框 + 已生成报告列表 + 横向对比入口 |
+| `GET /watchlist` `/watchlist.html` | 跟踪池横向对比表 |
+| `GET /reports/**` | 报告原文件静态挂载（首页卡片的相对链接落点） |
+| `GET /query` | 旧独立搜索页（兼容保留，已不是入口） |
 | `GET /api/search?q=茅台` | 全市场搜索（名称包含 / 代码前缀），带 `has_data` / `has_report` 状态 |
 | `POST /api/report` `{"query":"600519"}` | 提交生成任务，返回 `job_id` |
 | `GET /api/report/status/{job_id}` | 轮询进度（fetching → building → done/error） |

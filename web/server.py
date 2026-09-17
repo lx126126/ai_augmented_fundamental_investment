@@ -33,6 +33,17 @@
 一份"看起来完全正常"的报告。命令行里这算兜底，产品里这等于**给用户看别人的财报**。
 所以本服务在生成前显式校验数据是否真的存在（`_has_data`），缺就先拉、拉不到就明确报错。
 
+页面路由（2026-09-17 收敛为一个首页）
+---------------------------------------
+    /                    首页 = 搜索框 + 已生成报告列表 + 横向对比入口（web/index.html）
+    /home  /index.html   同上（别名：/home 是旧链接，/index.html 供页面间相对路径互链）
+    /watchlist  /watchlist.html   跟踪池横向对比表
+    /report/{code}       单个标的一页报告
+    /reports/**          报告原文件静态挂载（首页卡片的相对链接落到这里）
+
+旧 `web/query.html`（独立搜索页）已删除：它的能力被首页完整覆盖，
+两处搜索入口 = 两份同功能 JS = 必然漂移。
+
 启动
 ----
     # 本机访问
@@ -57,6 +68,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -81,7 +93,7 @@ _pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="report")
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
 
-#: 派生产物（跟踪池对比表）重建 —— 独立线程池，避免拖住串行的报告队列
+#: 派生产物（首页 + 跟踪池对比表）重建 —— 独立线程池，避免拖住串行的报告队列
 _derived_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="derived")
 _derived_lock = threading.Lock()
 _derived_state: dict = {"running": False, "queued": False,
@@ -152,39 +164,54 @@ def _build_report(code: str) -> Path:
     return p
 
 
-def _rebuild_watchlist() -> None:
-    """重建 web/watchlist.html。失败只记状态，绝不抛出（它不该影响报告）。"""
+#: 需要在新报告生成后重建的派生产物：(脚本, 超时秒)。顺序即执行顺序。
+#: build_web_index 很快（读 parquet + 写 HTML，1-2 秒）；build_watchlist 逐只跑
+#: build_template_data（缓存命中则很快，全量失效时约 2.5 分钟），所以超时给得宽。
+_DERIVED_STEPS = (("build_web_index.py", 300), ("build_watchlist.py", 1800))
+
+
+def _rebuild_derived() -> None:
+    """重建派生产物：首页 + 跟踪池对比表。失败只记状态，绝不抛出（不该影响报告）。
+
+    🔴 首页也必须在里面。只重建对比表的话，用户生成完一份新报告回到首页，
+    列表里仍然没有它（首页是构建产物）——「生成即入池」的承诺就断在最后一步。
+    """
     import subprocess  # noqa: PLC0415
     with _derived_lock:
         _derived_state.update(queued=False, running=True)
-    try:
-        r = subprocess.run([sys.executable, str(SCRIPTS / "build_watchlist.py")],
-                           cwd=str(ROOT), capture_output=True, text=True, timeout=1800)
-        ok = r.returncode == 0
-        with _derived_lock:
-            _derived_state.update(
-                last_ok=ok,
-                last_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                last_err=None if ok else (r.stderr or "").strip()[-400:],
-            )
-        print(f"[watchlist] 重建{'成功' if ok else '失败'}：{(r.stdout or '').strip()[-200:]}")
-    except Exception as e:
-        with _derived_lock:
-            _derived_state.update(last_ok=False, last_err=f"{type(e).__name__}: {e}",
-                                  last_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
-        print(f"[watchlist] 重建异常：{type(e).__name__}: {e}")
-    finally:
-        with _derived_lock:
-            _derived_state["running"] = False
+
+    ok_all, errs = True, []
+    for script, timeout in _DERIVED_STEPS:
+        try:
+            r = subprocess.run([sys.executable, str(SCRIPTS / script)],
+                               cwd=str(ROOT), capture_output=True, text=True, timeout=timeout)
+            good = r.returncode == 0
+            print(f"[derived] {script} {'成功' if good else '失败'}："
+                  f"{(r.stdout or '').strip()[-160:]}")
+            if not good:
+                errs.append(f"{script}: {(r.stderr or '').strip()[-200:]}")
+        except Exception as e:
+            good = False
+            errs.append(f"{script}: {type(e).__name__}: {e}")
+            print(f"[derived] {script} 异常：{type(e).__name__}: {e}")
+        ok_all = ok_all and good
+
+    with _derived_lock:
+        _derived_state.update(
+            last_ok=ok_all,
+            last_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            last_err=None if ok_all else " | ".join(errs)[-400:],
+            running=False,
+        )
 
 
-def _schedule_watchlist_rebuild() -> bool:
-    """提交一次重建（已有排队/在跑则合并，避免连点查询时反复重算）。"""
+def _schedule_derived_rebuild() -> bool:
+    """提交一次派生产物重建（已有排队/在跑则合并，避免连点查询时反复重算）。"""
     with _derived_lock:
         if _derived_state["queued"] or _derived_state["running"]:
             return False
         _derived_state["queued"] = True
-    _derived_pool.submit(_rebuild_watchlist)
+    _derived_pool.submit(_rebuild_derived)
     return True
 
 
@@ -226,10 +253,11 @@ def _run_job(job_id: str, code: str, market: str) -> None:
         except Exception as e:  # 入池失败不该让"报告已生成"变成失败
             added = False
             print(f"[watchlist] {code} 入池失败（不影响报告）：{type(e).__name__}: {e}")
-        queued = _schedule_watchlist_rebuild()
+        queued = _schedule_derived_rebuild()
 
         _set(job_id, "done",
-             "报告已生成，已加入跟踪池对比" + ("（对比表重建中…）" if queued else ""), 100,
+             "报告已生成，已加入跟踪池（首页与对比表重建中…）" if queued
+             else "报告已生成，已加入跟踪池", 100,
              report=str(p.relative_to(ROOT)), code=code, market=market,
              watchlist_added=added, watchlist_rebuild_queued=queued,
              finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -243,40 +271,43 @@ def _run_job(job_id: str, code: str, market: str) -> None:
 # 页面
 # --------------------------------------------------------------------------- #
 
+def _serve_html(path: Path, hint: str) -> HTMLResponse:
+    """把一个构建产物 HTML 作为响应返回；缺失则给出「先跑哪个脚本」的提示。"""
+    if not path.exists():
+        raise HTTPException(status_code=404, detail=f"{path.name} 还不存在，先跑 {hint}")
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+#: 首页三别名指向同一份产物 web/index.html：
+#:   `/`            对外唯一入口
+#:   `/home`        旧链接兼容
+#:   `/index.html`  页面间互链用相对路径（离线双击文件时只有相对路径能用），
+#:                  服务模式下相对路径会解析成 /index.html，故必须也注册。
+#: 三个别名收敛到同一个函数，不存在「两个首页各自漂移」的可能。
 @app.get("/", response_class=HTMLResponse)
-def index() -> HTMLResponse:
-    """查询首页（web/query.html）。"""
-    p = WEB_DIR / "query.html"
-    if not p.exists():
-        return HTMLResponse(
-            "<h1>fqf 一页报告服务</h1>"
-            "<p>缺少 web/query.html，可直接调用 API：</p>"
-            "<ul><li>GET /api/search?q=茅台</li>"
-            "<li>POST /api/report {\"query\": \"600519\"}</li>"
-            "<li>GET /api/report/status/{job_id}</li>"
-            "<li>GET /report/600519</li></ul>"
-        )
-    return HTMLResponse(p.read_text(encoding="utf-8"))
-
-
 @app.get("/home", response_class=HTMLResponse)
+@app.get("/index.html", response_class=HTMLResponse)
 def home() -> HTMLResponse:
-    """跟踪池卡片首页（web/index.html，含现价与数据日期）。"""
-    p = WEB_DIR / "index.html"
-    if not p.exists():
-        raise HTTPException(status_code=404, detail="web/index.html 还不存在，"
-                                                   "先跑 python scripts/build_web_index.py")
-    return HTMLResponse(p.read_text(encoding="utf-8"))
+    """首页：搜索框 + 已生成报告列表 + 横向对比入口。"""
+    return _serve_html(WEB_DIR / "index.html", "python scripts/build_web_index.py")
 
 
 @app.get("/watchlist", response_class=HTMLResponse)
+@app.get("/watchlist.html", response_class=HTMLResponse)
 def watchlist_page() -> HTMLResponse:
-    """跟踪池横向对比表（web/watchlist.html）。"""
-    p = WEB_DIR / "watchlist.html"
-    if not p.exists():
-        raise HTTPException(status_code=404, detail="web/watchlist.html 还不存在，"
-                                                   "先跑 python scripts/build_watchlist.py")
-    return HTMLResponse(p.read_text(encoding="utf-8"))
+    """跟踪池横向对比表（/watchlist.html 是页面互链用的相对路径落点）。"""
+    return _serve_html(WEB_DIR / "watchlist.html", "python scripts/build_watchlist.py")
+
+
+@app.get("/query", response_class=HTMLResponse)
+@app.get("/query.html", response_class=HTMLResponse)
+def legacy_query_page() -> HTMLResponse:
+    """旧版独立搜索页（web/query.html）—— 兼容访问，不再是产品入口。
+
+    它的能力（防抖搜索 + 就地生成 + 进度轮询）已完整并入首页 web/index.html，
+    所以首页上不再有指向它的按钮。这里保留路由只是不让旧书签 404。
+    """
+    return _serve_html(WEB_DIR / "query.html", "确认 web/query.html 是否还在仓库里")
 
 
 @app.get("/report/{code}", response_class=HTMLResponse)
@@ -453,6 +484,13 @@ def report_status(job_id: str) -> dict:
     if out.get("state") == "done":
         out["url"] = f"/report/{out['code']}"
     return out
+
+
+# 🔴 必须放在所有 @app.get 之后：mount 也是往 app.routes 里追加，注册在前会抢占匹配。
+# 报告原文（reports/{期}/{code}.html + 同名 png）—— 首页卡片链接是相对路径
+# `../reports/2026Q2/601088.html`，服务模式下解析成 /reports/...，靠这个挂载提供。
+# check_dir=False：首次运行时 reports/ 可能还不存在，不该因此起不来。
+app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR), check_dir=False), name="reports")
 
 
 if __name__ == "__main__":
