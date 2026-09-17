@@ -168,11 +168,17 @@ CREATE INDEX IF NOT EXISTS idx_segments_symbol_date
 COMMIT;
 
 -- ============================================================================
--- 附：raw 层说明
+-- 附：raw 层 schema —— 见 sql/schema_raw.sql（自动生成，11 张表 226 列）
 -- ============================================================================
--- raw 层（东财口径原始表，零加工）在 DuckDB 中为 11 张表，跨股票 UNION：
---   financial_indicator / profit_sheet / balance_sheet / cash_flow /
+-- raw 层（东财/腾讯/百度口径原始表，零加工）在 DuckDB 中为 11 张表，跨标的 UNION：
+--   profit_sheet / balance_sheet / cash_flow / financial_indicator /
 --   dividend / segments / valuation / quote / rating / competition / profile
 --
--- 在 PG 中对应 11 张表（raw.{table}），列结构与 DuckDB 挂载完全一致。
--- 此处不逐表展开（列多且随数据源变化），关键是「raw 零加工、可追溯」的分层原则。
+-- 完整 DDL（含逐列中文注释、单位口径、更新语义）落在 **sql/schema_raw.sql**，
+-- 由 `python scripts/gen_raw_schema.py` 从 DuckDB 真实表结构反向生成。
+--
+-- 为什么 raw 层 DDL 是「生成」而非「手写」：raw 表结构由
+-- `src/data/warehouse.py:load_raw_layer()` 的 `pd.concat(join="outer")` + DuckDB
+-- 类型推断自动产生，上游接口增删字段会静默改变表结构。因此 raw 层保留
+-- 「反向快照 + 漂移检测」（`gen_raw_schema.py --check`），而 mart 层（本文件）
+-- 是人工声明的稳定契约 —— 两层治理策略不同，属于有意设计。
