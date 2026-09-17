@@ -132,10 +132,17 @@ def section_log() -> None:
     txt = log.read_text(encoding="utf-8", errors="replace").splitlines()
     keep = [l for l in txt if not any(k in l for k in
             ("PerformanceWarning", "frame.insert", "pymupdf", "fitz"))]
-    starts = [l for l in keep if "每日行情刷新开始" in l]
-    ends = [l for l in keep if "结束 rc=" in l]
-    fails = [l for l in keep if "❌" in l]
-    print(f"  日志 {log.name}  （{len(txt)} 行，{_ts(log)} 最后写入）")
+    # ⚠️ 必须只分析**最后一次运行**的段落：一个日志文件里有多天/多次运行的记录
+    #    （手动重跑、测试都会追加），整文件扫关键词会把历史失败当成今天的失败。
+    starts_idx = [i for i, l in enumerate(keep) if "每日行情刷新开始" in l]
+    seg = keep[starts_idx[-1]:] if starts_idx else keep
+    n_runs = len(starts_idx)
+
+    starts = [l for l in seg if "每日行情刷新开始" in l]
+    ends = [l for l in seg if "结束 rc=" in l]
+    fails = [l for l in seg if "❌" in l]
+    print(f"  日志 {log.name}  （{len(txt)} 行，{_ts(log)} 最后写入；"
+          f"含 {n_runs} 次运行记录，下面只看最后一次）")
     for s in starts[-1:]:
         print(f"    {s.strip()}")
     for e in ends[-1:]:
@@ -150,10 +157,13 @@ def section_log() -> None:
                   f"{int((t1 - t0).total_seconds() % 60)} 秒")
         except Exception:
             pass
-    for f in fails[-3:]:
-        print(f"    {f.strip()}")
+    if fails:
+        for f in fails[-3:]:
+            print(f"    {f.strip()}")
+    else:
+        print("    ✅ 这一次没有任何失败项")
     print("    最近 3 行：")
-    for l in keep[-3:]:
+    for l in seg[-3:]:
         print(f"      {l[:110]}")
 
 

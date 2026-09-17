@@ -2,38 +2,55 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>投研排雷 · ValueLine 一页报告</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d6e">
+<title>投研排雷 · 跟踪池</title>
 <style>
 :root {
   --ink: #1a2330; --muted: #5c6b7a; --faint: #8a97a6;
   --line: #dde3ea; --accent: #0f3d6e; --accent-2: #14508c; --bg-soft: #f5f7fa;
+  --up: #c92a2a; --down: #2f9e44;
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 body {
   font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   color: var(--ink); background: #e9edf1; -webkit-font-smoothing: antialiased; min-height: 100vh;
 }
 .wrap { max-width: 640px; margin: 0 auto; padding: 28px 16px 48px; }
-.top { padding: 8px 0 20px; }
+.top { padding: 8px 0 18px; }
 .top h1 { font-size: 24px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
 .top p { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.7; }
-.top .pill { display: inline-block; margin-top: 12px; font-size: 11px; color: var(--muted); background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; }
+.pill { display: inline-block; margin: 10px 6px 0 0; font-size: 11px; color: var(--muted);
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 4px; padding: 3px 10px; }
+.pill.warn { color: #a35b00; border-color: #f0cfa0; background: #fff6e8; }
+
+.nav { display: flex; gap: 8px; margin: 14px 0 18px; }
+.nav a { flex: 1; text-align: center; text-decoration: none; font-size: 13px; font-weight: 600;
+  color: #fff; background: var(--accent); border-radius: 10px; padding: 11px 8px; }
+.nav a.ghost { color: var(--accent); background: #fff; border: 1px solid var(--line); }
+.nav a:active { opacity: .85; }
+
 .stock-list { display: flex; flex-direction: column; gap: 12px; }
 .stock-card {
   display: block; text-decoration: none; color: inherit;
-  background: #fff; border-radius: 10px; padding: 16px 18px;
+  background: #fff; border-radius: 10px; padding: 15px 18px;
   box-shadow: 0 2px 10px rgba(15,61,110,0.07);
   transition: transform .08s ease;
 }
 .stock-card:active { transform: scale(0.99); }
-.stock-card .head { display: flex; justify-content: space-between; align-items: baseline; }
+.stock-card .row1 { display: flex; justify-content: space-between; align-items: baseline; }
 .stock-card .name { font-size: 17px; font-weight: 700; color: var(--ink); }
 .stock-card .code { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
-.stock-card .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
-.stock-card .meta .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
-.stock-card .arrow { float: right; color: var(--faint); font-size: 18px; margin-top: -20px; }
-.foot { text-align: center; font-size: 11px; color: var(--faint); margin-top: 32px; line-height: 1.8; }
+.stock-card .row2 { font-size: 12px; color: var(--muted); margin-top: 5px; }
+.stock-card .row2 .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  margin-right: 5px; vertical-align: middle; }
+.stock-card .px { display: flex; align-items: baseline; gap: 10px; margin-top: 9px; }
+.stock-card .px .p { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.stock-card .px .p.na { font-size: 13px; font-weight: 400; color: var(--faint); }
+.stock-card .px .chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; }
+.empty { text-align: center; color: var(--faint); padding: 40px 8px; font-size: 13px; }
+.foot { text-align: center; font-size: 11px; color: var(--faint); margin-top: 30px; line-height: 1.8; }
 </style>
 </head>
 <body>
@@ -41,40 +58,87 @@ body {
   <div class="top">
     <h1>投研排雷</h1>
     <p>纯客观数据工具 · ValueLine 一页报告<br>数据加工 + 指标 + 风险检测，帮自己做投资决策前先排雷。</p>
-    <span class="pill">第三方机构观点 · 非本人建议 · 数据可校验</span>
+    <span class="pill">数据更新于 2026-09-17 （09-17 16:34 写入）</span>
+    <span class="pill">跟踪池 11 只</span>
+  </div>
+
+  <div class="nav">
+    <a href="watchlist.html">跟踪池横向对比</a>
+    <a class="ghost" href="/">搜索生成报告</a>
   </div>
 
   <div class="stock-list">
     <a class="stock-card" href="../reports/2026Q2/601088.html">
-      <div class="head"><span class="name">中国神华</span><span class="code">601088</span></div>
-      <div class="meta"><span class="dot" style="background:#378ADD"></span>煤炭开采 · 周期型稳健收息</div>
-      <span class="arrow">›</span>
+      <div class="row1"><span class="name">中国神华</span><span class="code">601088</span></div>
+      <div class="row2"><span class="dot" style="background:#378ADD"></span><span class="ind">煤炭开采 · 周期型 · 稳健收息</span></div>
+      <div class="px"><span class="p">46.48</span><span class="chg" style="color:#2f9e44">-1.32%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 3 个交易日</div>
     </a>
     <a class="stock-card" href="../reports/2026Q2/600519.html">
-      <div class="head"><span class="name">贵州茅台</span><span class="code">600519</span></div>
-      <div class="meta"><span class="dot" style="background:#E24B4A"></span>白酒 · 稳健增长型</div>
-      <span class="arrow">›</span>
+      <div class="row1"><span class="name">贵州茅台</span><span class="code">600519</span></div>
+      <div class="row2"><span class="dot" style="background:#E24B4A"></span><span class="ind">白酒 · 稳定增长型 · 护城河</span></div>
+      <div class="px"><span class="p">1266.98</span><span class="chg" style="color:#c92a2a">+0.71%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 3 个交易日</div>
     </a>
     <a class="stock-card" href="../reports/2026Q2/000651.html">
-      <div class="head"><span class="name">格力电器</span><span class="code">000651</span></div>
-      <div class="meta"><span class="dot" style="background:#BA7517"></span>家电 · 稳健增长型收息</div>
-      <span class="arrow">›</span>
+      <div class="row1"><span class="name">格力电器</span><span class="code">000651</span></div>
+      <div class="row2"><span class="dot" style="background:#BA7517"></span><span class="ind">家电 · 稳健增长型 · 收息</span></div>
+      <div class="px"><span class="p">37.98</span><span class="chg" style="color:#2f9e44">-0.31%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 2 个交易日</div>
     </a>
     <a class="stock-card" href="../reports/2026Q2/601328.html">
-      <div class="head"><span class="name">交通银行</span><span class="code">601328</span></div>
-      <div class="meta"><span class="dot" style="background:#888780"></span>银行 · 稳健增长型收息</div>
-      <span class="arrow">›</span>
+      <div class="row1"><span class="name">交通银行</span><span class="code">601328</span></div>
+      <div class="row2"><span class="dot" style="background:#888780"></span><span class="ind">银行 · 稳健增长型 · 收息</span></div>
+      <div class="px"><span class="p">7.58</span><span class="chg" style="color:#5c6b7a">0.00%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 2 个交易日</div>
     </a>
-    <a class="stock-card" href="../reports/2026Q2/09992.html">
-      <div class="head"><span class="name">泡泡玛特</span><span class="code">09992</span></div>
-      <div class="meta"><span class="dot" style="background:#F08BB0"></span>潮玩消费 · 快速增长型</div>
-      <span class="arrow">›</span>
+    <a class="stock-card" href="../reports/2026Q2/00700.html">
+      <div class="row1"><span class="name">腾讯控股</span><span class="code">00700</span></div>
+      <div class="row2"><span class="dot" style="background:#00A4FF"></span><span class="ind">互联网 · 稳定增长型 · 生态护城河</span></div>
+      <div class="px"><span class="p">426.00</span><span class="chg" style="color:#2f9e44">-1.71%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 2 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2025Q4/09992.html">
+      <div class="row1"><span class="name">泡泡玛特</span><span class="code">09992</span></div>
+      <div class="row2"><span class="dot" style="background:#F08BB0"></span><span class="ind">潮玩消费 · 快速增长型</span></div>
+      <div class="px"><span class="p">153.20</span><span class="chg" style="color:#c92a2a">+0.39%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 3 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2026Q2/00883.html">
+      <div class="row1"><span class="name">中国海洋石油</span><span class="code">00883</span></div>
+      <div class="row2"><span class="dot" style="background:#5B8FF9"></span><span class="ind">石油及天然气 · 周期型 · 资源/周期</span></div>
+      <div class="px"><span class="p">23.88</span><span class="chg" style="color:#2f9e44">-1.97%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 1 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2026Q2/300061.html">
+      <div class="row1"><span class="name">旗天科技</span><span class="code">300061</span></div>
+      <div class="row2"><span class="dot" style="background:#3D9A5B"></span><span class="ind">广告营销 · 稳定增长型 · 轻资产</span></div>
+      <div class="px"><span class="p">6.82</span><span class="chg" style="color:#c92a2a">+7.91%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 1 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2026Q2/600036.html">
+      <div class="row1"><span class="name">招商银行</span><span class="code">600036</span></div>
+      <div class="row2"><span class="dot" style="background:#9A6BBF"></span><span class="ind">银行Ⅱ · 稳健增长型 · 收息</span></div>
+      <div class="px"><span class="p">40.60</span><span class="chg" style="color:#2f9e44">-0.78%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 1 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2026Q2/600887.html">
+      <div class="row1"><span class="name">伊利股份</span><span class="code">600887</span></div>
+      <div class="row2"><span class="dot" style="background:#0F9B8E"></span><span class="ind">饮料乳品 · 稳定增长型 · 品牌消费</span></div>
+      <div class="px"><span class="p">26.56</span><span class="chg" style="color:#c92a2a">+1.76%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 1 个交易日</div>
+    </a>
+    <a class="stock-card" href="../reports/2026Q2/600938.html">
+      <div class="row1"><span class="name">中国海油</span><span class="code">600938</span></div>
+      <div class="row2"><span class="dot" style="background:#D4763A"></span><span class="ind">油气开采Ⅱ · 周期型 · 资源/周期</span></div>
+      <div class="px"><span class="p">32.57</span><span class="chg" style="color:#2f9e44">-1.54%</span></div>
+      <div class="stamp">2026-09-17 收盘 · 已归档 2 个交易日</div>
     </a>
   </div>
 
   <div class="foot">
-    数据来源：AKShare / 东方财富 / 巨潮年报（官方 PDF 金标准交叉校验）<br>
-    本页仅供个人研究，不含任何操作建议。
+    数据来源：AKShare / 东方财富 / 腾讯行情 / 巨潮年报（官方 PDF 金标准交叉校验）<br>
+    涨跌配色遵循中国习惯（红涨绿跌）· 本页仅供个人研究，不含任何操作建议。
   </div>
 </div>
 </body>
