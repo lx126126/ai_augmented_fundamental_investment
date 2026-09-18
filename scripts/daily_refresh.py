@@ -131,6 +131,40 @@ def _run_derived(name: str, script: str, timeout: int) -> bool:
         return False
 
 
+def _run_placeholder_audit() -> None:
+    """体检：报告里 LLM 生成的内容是否退化成了占位符。
+
+    **只告警、不计入 failed** —— 与派生展示产物同理由（见模块 docstring）：
+    这是「内容质量」检查、不是「链路失败」，重跑成本也不过是一两只标的的构建；
+    挡住闸门会让当天整批标的重拉一遍（20+ 分钟），代价与收益完全不匹配。
+
+    为什么需要这个检查：日更的 LLM 内容一律走「**只读缓存**」，所以
+    **没有缓存的标的永远不会被补上** —— 报告里一直挂着「待生成」，
+    而这条链路零报错、日志干净、文件大小正常。
+    2026-09-18 实测：11 只池内标的有 5 只的季报解读是占位符，无人知晓。
+    详见 docs/report-chains.md F9。
+    """
+    print("\n报告完整性体检（LLM 内容是否退化为占位符）")
+    try:
+        from src.report.artifacts import audit_placeholders
+        bad = audit_placeholders()
+    except Exception as e:
+        print(f"  ⚠️ 体检执行失败（不影响闸门）：{type(e).__name__}: {e}")
+        return
+
+    if not bad:
+        print("  ✓ 池内报告内容完整，无占位符")
+        return
+
+    print(f"  ⚠️ {len(bad)} 份报告含占位符（LLM 内容缺失）：")
+    for code, blocks in sorted(bad.items()):
+        print(f"      {code}: {' / '.join(blocks)}")
+    print("  ⚠️ 常见原因：该标的从未跑过不带 --daily 的构建 → LLM 缓存从未落地；")
+    print("     而日更只复用缓存，所以永远不会被补上。")
+    print("  ⚠️ 修法：python scripts/build_valueline.py <代码>（一次一只）")
+    print("     不影响当天成功判定；详见 docs/report-chains.md F9")
+
+
 def main() -> int:
     opt = _parse_args(sys.argv[1:])
     codes = opt["codes"] or load_codes()
@@ -148,10 +182,11 @@ def main() -> int:
         print("\n计划：")
         print("  1) market_snapshot.snapshot_all  → 追加行情历史 + 覆盖最新表")
         if opt["do_build"]:
-            print("  2) build_valueline.build(daily=True)  → 重刷估值/市场板块（不调 LLM）")
+            print("  2) build_valueline.build(daily=True)  → 重刷估值/市场板块（复用 LLM 缓存）")
         if opt["do_web"] and opt["do_build"]:
             print("  3) build_web_index.py  → 重刷 web/index.html")
             print("  4) build_watchlist.py  → 重刷 web/watchlist.html")
+        print("  5) 报告完整性体检（占位符扫描，只告警、不进 failed）")
         return 0
 
     snapshot_all = None
@@ -193,7 +228,11 @@ def main() -> int:
 
         if build_report is not None:
             try:
-                print(f"[{st}] 重刷报告（--daily：跳过 PDF 校验与 LLM）")
+                # ⚠️ 措辞要准：daily 不是「跳过 LLM」，而是「**复用 LLM 缓存**」。
+                # 写成「跳过」会让人以为「没重算、但旧内容还在」—— 而 build() 之后
+                # 会无条件把整份 HTML 覆盖写回归档，所以「跳过」实际等于**擦掉**
+                # （2026-09-17 就是这么把全池报告的叙事层洗成占位符的）。
+                print(f"[{st}] 重刷报告（--daily：复用 LLM 缓存，不重算、不联网）")
                 build_report(st, daily=True)
             except Exception as e:
                 print(f"  ❌ 重刷报告失败：{e}")
@@ -208,6 +247,10 @@ def main() -> int:
         # 带缓存：只有 data/raw 变动过的标的才重算。日更刚把全池行情刷了新，
         # 所以这里是全量重算（11 只实测约 2.5 分钟）；单独生成一份报告后只重算 1 只。
         _run_derived("watchlist", "build_watchlist.py", timeout=900)
+
+    # 体检放最后：它扫的是刚落盘的报告（前面各步的产物）。
+    # 只告警、不进 failed —— 理由见 _run_placeholder_audit 的 docstring。
+    _run_placeholder_audit()
 
     print(f"\n{'=' * 56}")
     if failed:

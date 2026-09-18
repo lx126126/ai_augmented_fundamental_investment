@@ -9,7 +9,12 @@
 用法：
     python scripts/build_valueline.py [股票代码] [--daily] [--refresh-narrative]
 
-    --daily              只刷新行情/估值板块，跳过 PDF 校验与 LLM 叙事
+    --daily              只刷新行情/估值板块；LLM 内容**从缓存复用**（不重算、不联网）
+                         ⚠️ 语义不是「跳过生成」—— `build()` 之后会无条件把整份 HTML
+                         覆盖写回归档，所以「跳过」等于把已有内容擦成占位符。
+                         2026-09-17 的日更就是这么把全池报告的叙事层洗掉的（零报错）。
+                         日更只读缓存 ⇒ **没有缓存的标的永远不会被补上**，
+                         要生成必须跑一次不带 --daily 的构建。
     --refresh-narrative  忽略叙事层缓存，强制重新调用 LLM 生成
 """
 from __future__ import annotations
@@ -26,6 +31,12 @@ try:
 except Exception:
     _HAS_DATA = False
     _norm_code = None
+
+# LLM 内容占位符的**唯一真源** —— 渲染端（这里）与体检端（scripts/check_placeholders.py
+# 与日更收尾）共用同一份特征串。两边各写一遍必然漂移，而漂移方向**总是「体检漏报」**
+# —— 2026-09-18 就是这么漏掉了「日更只复用缓存 ⇒ 没有缓存的标的永远补不上」。
+# 见 src/report/artifacts.py 的 PLACEHOLDERS 与 docs/report-chains.md F9。
+from src.report.artifacts import PLACEHOLDERS  # noqa: E402
 
 # 尝试导入 LLM 叙事层生成（可选，无 key 时降级为占位）
 try:
@@ -1093,7 +1104,8 @@ def build_business_model() -> str:
             val = val.split("：", 1)[-1].strip() if "：" in val else val
             segs.append(val.rstrip("。"))
     if not segs:
-        return '<div class="biz"><div class="biz-v" style="color:var(--faint);">商业模式待 LLM 生成</div></div>'
+        return ('<div class="biz"><div class="biz-v" style="color:var(--faint);">'
+                + PLACEHOLDERS["商业模式"] + "</div></div>")
 
     # 一段正文 + 护城河（相对独立，加粗引出，仍属同一段落）
     body = "。".join(segs) + "。"
@@ -1183,8 +1195,13 @@ def build_quarter_review() -> str:
     「未获取到原文」如实写出来——读者需要知道这段结论的证据强度有多少。
     """
     if not QUARTER_REVIEW:
+        # ⚠️ 归因必须准确：原话只写「需配置 DEEPSEEK_API_KEY」是**误导** —— 2026-09-18 实测：
+        # key 配着、巨潮通、facts 也有，缺的只是**缓存**（该标的从没跑过不带 --daily 的构建）。
+        # 照原话去查 key 会白费功夫，且查不出所以然。
         return ('<div style="font-size:11px;color:var(--faint);padding:8px 0;">'
-                '季度财报解读待生成（需配置 DEEPSEEK_API_KEY，且能访问巨潮资讯网）。</div>')
+                + PLACEHOLDERS["季度财报解读"]
+                + "。常见原因：该标的还没跑过完整构建（日更只复用缓存，不会生成）；"
+                  "其次是未配置 DEEPSEEK_API_KEY，或巨潮原文取不到。</div>")
     r = QUARTER_REVIEW
     meta = r.get("_meta") or {}
 
@@ -1227,6 +1244,27 @@ def build_quarter_review() -> str:
     )
 
 
+def _yi(v, default: str = "—") -> str:
+    """亿元数值 → `"1,234.5"`；None / 非数 → `"—"`（**不伪装成 0**）。
+
+    为什么必须有这个函数：`.get(key, 0)` **只吃「key 不存在」，吃不掉「key 存在但
+    值为 None」** —— 而 adapter 抽不到数据时写的正是显式 None。于是
+    `f'{(d or {}).get("本期", 0):,.1f}'` 在 None 上直接抛
+    `TypeError: unsupported format string passed to NoneType.__format__`，
+    **整份报告渲染失败、不落盘**（不是降级，是彻底没有产物）。
+
+    2026-09-18 实测：601088 的现金流归因「本期」为 None → 报告整份没生成。
+    这个 bug 被**占位符掩盖了很久** —— 季报解读为空时这段根本不渲染，所以从没暴露；
+    一旦补齐 LLM 内容，它立刻显形。教训见 docs/report-chains.md F9。
+    """
+    if v is None:
+        return default
+    try:
+        return f"{float(v):,.1f}"
+    except (TypeError, ValueError):
+        return default
+
+
 def _cashflow_block(review: dict) -> str:
     """现金流异动归因：LLM 的科目级解释 + 一条口径对照条（总额 vs 剔除财务公司后）。
 
@@ -1239,9 +1277,11 @@ def _cashflow_block(review: dict) -> str:
     yoy = ocf.get("净额同比_pct")
     adj = ocf.get("剔除财务公司科目后") or {}
     strip = ""
-    if ocf:
-        bits = [f'{ocf.get("期间") or ""} 经营现金流净额 '
-                f'{(ocf.get("经营活动产生的现金流量净额_亿元") or {}).get("本期", 0):,.1f} 亿元']
+    # ⚠️ 「本期净额」取不到时**整条对照条不渲染** —— 它存在的意义就是对照这个数，
+    # 补 0 等于凭空断言「本期为 0」。同理下面的金额一律走 _yi（None → 「—」，不崩）。
+    cur_ocf = (ocf.get("经营活动产生的现金流量净额_亿元") or {}).get("本期")
+    if ocf and cur_ocf is not None:
+        bits = [f'{ocf.get("期间") or ""} 经营现金流净额 {_yi(cur_ocf)} 亿元']
         if yoy is not None:
             cls = "up" if yoy > 0 else "down"
             bits.append(f'同比 <b class="{cls}">{yoy:+.1f}%</b>')
@@ -1249,7 +1289,7 @@ def _cashflow_block(review: dict) -> str:
             cls2 = "up" if adj["同比_pct"] > 0 else "down"
             bits.append(
                 f'剔除财务公司科目后 <b class="{cls2}">{adj["同比_pct"]:+.1f}%</b>'
-                f'（{adj.get("上期_亿元", 0):,.1f} → {adj.get("经营性现金净额_亿元", 0):,.1f} 亿元）'
+                f'（{_yi(adj.get("上期_亿元"))} → {_yi(adj.get("经营性现金净额_亿元"))} 亿元）'
             )
         strip = f'<div class="cf-strip">{" · ".join(bits)}</div>'
     items = (ocf.get("主要变动科目") or [])[:4]
@@ -1257,8 +1297,8 @@ def _cashflow_block(review: dict) -> str:
         f'<tr><td class="cf-name">{s["科目"]}'
         + ('<span class="cf-tag">财务公司</span>' if s.get("是否财务公司科目") else "")
         + "</td>"
-        f'<td class="op-num">{s.get("本期_亿元"):,.1f}</td>'
-        f'<td class="op-num">{s.get("上期_亿元"):,.1f}</td>'
+        f'<td class="op-num">{_yi(s.get("本期_亿元"))}</td>'
+        f'<td class="op-num">{_yi(s.get("上期_亿元"))}</td>'
         f'<td class="op-num">{_op_chg(s.get("变动_亿元"))}</td></tr>'
         for s in items if s.get("本期_亿元") is not None
     )
@@ -1410,14 +1450,14 @@ def build_operating_structure_block() -> str:
 def build_thesis() -> str:
     items = NARRATIVE.get("thesis", []) if NARRATIVE else []
     if not items:
-        return '<ul class="thesis"><li>投资逻辑待 LLM 生成</li></ul>'
+        return '<ul class="thesis"><li>' + PLACEHOLDERS["投资逻辑"] + "</li></ul>"
     return '<ul class="thesis">' + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
 
 
 def build_risks() -> str:
     items = NARRATIVE.get("risks", []) if NARRATIVE else []
     if not items:
-        return '<ul class="risk"><li>风险提示待 LLM 生成</li></ul>'
+        return '<ul class="risk"><li>' + PLACEHOLDERS["风险提示"] + "</li></ul>"
     return '<ul class="risk">' + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
 
 

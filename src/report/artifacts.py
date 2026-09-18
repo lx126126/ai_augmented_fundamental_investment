@@ -106,3 +106,54 @@ def inventory() -> dict:
         "removed": sorted(c for c in removed if c in on_disk),
         "shown_count": len(in_pool) + len(orphan),
     }
+
+
+# --------------------------------------------------------------------------- #
+# LLM 内容的占位符 —— 「这份报告内容完整吗」的判据
+# --------------------------------------------------------------------------- #
+
+#: LLM 生成内容的占位符特征串 —— **唯一真源**。
+#:
+#: 渲染端（`build_valueline.py`）据此拼占位 HTML，体检端（`scripts/check_placeholders.py`
+#: 与日更收尾）据此检测。⚠️ 两边各写一遍字面量必然漂移，而漂移方向总是「漏报」——
+#: 2026-09-18 实测就是这样漏掉了「日更只复用缓存 ⇒ 没有缓存的标的永远补不上」
+#: （`docs/report-chains.md` F9）：报告里明明挂着占位符，却没有任何地方会为此报警。
+#:
+#: 值是**稳定的短片段**而非完整文案 —— 文案可以随时改（例如补充原因说明），检测不受影响。
+PLACEHOLDERS: dict[str, str] = {
+    "商业模式": "商业模式待 LLM 生成",
+    "投资逻辑": "投资逻辑待 LLM 生成",
+    "风险提示": "风险提示待 LLM 生成",
+    "季度财报解读": "季度财报解读待生成",
+}
+
+
+def find_placeholders(html: str) -> list[str]:
+    """该 HTML 里命中的占位符区块名。**空列表 = 内容完整**。"""
+    return [name for name, text in PLACEHOLDERS.items() if text in html]
+
+
+def audit_placeholders() -> dict[str, list[str]]:
+    """扫全部报告，返回 `{代码: [缺失区块名, …]}` —— 只含**内容不完整**的那些。
+
+    口径与首页/对比表一致：只看**跟踪池内**标的的最新一期报告。已移出标的的报告
+    留在磁盘上是有意为之，它们的内容占位不该天天报出来（那是噪音，会训练人忽略告警）。
+
+    用途：把「LLM 内容静默退化成占位符」变成一次显式告警。它**只报告、不修复** ——
+    补内容要跑一次不带 `--daily` 的构建（日更只复用缓存，永远不会补上）。
+    """
+    from src.data import watchlist_store as wl  # 延迟导入：会连带拉起 akshare
+
+    pool = set(wl.codes())
+    bad: dict[str, list[str]] = {}
+    for code, path in sorted(scan().items()):
+        if code not in pool:
+            continue
+        try:
+            html = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        hits = find_placeholders(html)
+        if hits:
+            bad[code] = hits
+    return bad
