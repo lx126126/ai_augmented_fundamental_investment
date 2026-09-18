@@ -30,25 +30,15 @@ data/validation/*.pdf
 # 每日刷新日志（launchd 输出 + .last_success 闸门文件，本地留痕即可）
 data/logs/
 
-# >>> 跟踪池报告白名单 —— 由 `python scripts/watchlist.py sync-gitignore` 生成，勿手改 >>>
-# 机制：reports/ 下的报告**默认全部忽略**（按需查询的随手标的没有归档价值，
-#       否则仓库随使用无限膨胀）；只有「跟踪池」标的的报告入库。
-# 真源：watchlist/watchlist.json。要增删标的请改那份 json 再跑 sync-gitignore ——
-#       **手工在这里加一行会在下次 sync 时被覆盖**。
-# 漂移防线：tests/test_watchlist_store.py 有一条断言，白名单与跟踪池不一致就报错。
-reports/**/*.html
-!reports/**/601088.html
-!reports/**/600519.html
-!reports/**/000651.html
-!reports/**/601328.html
-!reports/**/00700.html
-!reports/**/09992.html
-!reports/**/00883.html
-!reports/**/300061.html
-!reports/**/600036.html
-!reports/**/600887.html
-!reports/**/600938.html
-# <<< 跟踪池报告白名单 <<<
+# 🔴 reports/ 整个目录不入库（2026-09-18 定）：仓库只留「代码 + 报告模板」。
+# 理由：报告是「按需生成」的产物 —— 本地生成、本地看，随时能重出，不需要版本留痕；
+#       之前那套「逐只白名单放行」（reports/** 忽略 + !reports/**/<code>.html）
+#       需要一直跟跟踪池同步，一次忘了同步，新报告就**静默不进库**（零报错）。
+#       索性整目录出库，连带把这条漂移风险一起消掉。
+# 连带后果（有意取舍）：GitHub 上 web/index.html 的卡片链接是 `../reports/…`，
+#       而 reports/ 不在仓库里 → 点进去 404。GitHub 侧只作代码/模板展示用。
+# 例外：templates/valueline.html 必须入库（见下方说明），它不在 reports/ 下。
+reports/
 
 # ⚠️ templates/valueline.html 故意保持跟踪：
 #   build() 会把最近一次渲染结果写到那里，tests/test_report_style.py 断言了这个路径，
