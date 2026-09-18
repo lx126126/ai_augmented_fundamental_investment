@@ -9,11 +9,12 @@
 本次已踩过两个真实 bug，都补了回归：
   ① 色值判重只看 `s.get("color")` → 旧条目没这个字段 → 新标的全部拿到 PALETTE[0] 撞色
   ② `lynch` 用精确词匹配 → 数据源的行业名带后缀（"银行Ⅱ"/"油气开采Ⅱ"）→ 全落"未分类"
+  ③ Lynch 有两套实现（报告里 LLM 判的 / 这里关键字猜的），同一标的显示成两个归类
+     → 定「以报告为准」，本模块只负责把 LLM 值写进来（见文件末的报告口径回写测试）
 """
 from __future__ import annotations
 
 import json
-import re
 
 import pytest
 
@@ -165,6 +166,83 @@ def test_classify_lynch_fallback_is_honest():
 
 
 # --------------------------------------------------------------------------- #
+# 报告口径回写（回归 bug③：Lynch 两套口径，定「以报告为准」）
+# --------------------------------------------------------------------------- #
+
+def test_upsert_from_report_updates_existing(tmp_watchlist):
+    """已在池的条目 → 按报告口径更新 lynch/industry，但**不动记账字段**。"""
+    wl, _ = tmp_watchlist
+    before = wl.get("601088")
+    status = wl.upsert_from_report("601088", name="中国神华", industry="煤炭开采",
+                                   lynch="周期型（高股息现金牛）")
+    assert status == "updated"
+    after = wl.get("601088")
+    assert after["lynch"] == "周期型（高股息现金牛）"
+    assert after["meta_source"] == "report"          # 留痕：这个值来自报告，不是关键字猜的
+    assert after["color"] == before["color"]         # 色点/入池时间属于记账信息
+    assert after.get("since") == before.get("since")
+
+
+def test_upsert_from_report_is_idempotent(tmp_watchlist):
+    """同值重复回写 → `unchanged`，且**不重写文件**（日更会天天调它）。"""
+    wl, p = tmp_watchlist
+    assert wl.upsert_from_report("601088", lynch="周期型") == "updated"
+    mtime = p.stat().st_mtime_ns
+    assert wl.upsert_from_report("601088", lynch="周期型") == "unchanged"
+    assert p.stat().st_mtime_ns == mtime
+
+
+def test_upsert_from_report_creates_when_absent(tmp_watchlist):
+    """从没入过池的标的：报告生成即入池（沿用 2026-09-17 的定规）。"""
+    wl, _ = tmp_watchlist
+    assert wl.upsert_from_report("600519", name="贵州茅台",
+                                 industry="白酒Ⅱ", lynch="稳健成长型") == "added"
+    assert "600519" in wl.codes()
+    assert wl.get("600519")["lynch"] == "稳健成长型"
+
+
+def test_upsert_from_report_revives_removed(tmp_watchlist):
+    """刻意移出的标的：**重新生成报告 = 用户主动要它** → 恢复入池。"""
+    wl, _ = tmp_watchlist
+    wl.remove("601088", reason="试试移出")
+    assert wl.upsert_from_report("601088", lynch="周期型（高股息现金牛）") == "restored"
+    s = wl.get("601088")
+    assert s["status"] == "active"
+    assert "removed_reason" not in s
+    assert s["lynch"] == "周期型（高股息现金牛）"
+
+
+def test_upsert_from_report_filters_placeholders(tmp_watchlist):
+    """占位值不写入 —— `待分析`/`未分类` 不是真实分类，写进去只会让人以为判过了。"""
+    wl, _ = tmp_watchlist
+    wl.upsert_from_report("601088", lynch="待分析", industry="未分类")
+    s = wl.get("601088")
+    assert s.get("lynch") != "待分析"          # 被过滤 → 条目保持原样（fixture 里本就没有 lynch）
+    assert s.get("industry") != "未分类"       # 原值"煤炭开采"不该被占位值顶掉
+
+
+def test_upsert_from_report_skips_illegal_code(tmp_watchlist):
+    """非法代码返回 `skipped` 而不抛异常 —— 回写失败不该把「报告已生成」变成失败。"""
+    wl, _ = tmp_watchlist
+    assert wl.upsert_from_report("000000", lynch="周期型") == "skipped"
+    assert wl.upsert_from_report("", lynch="周期型") == "skipped"
+
+
+def test_update_fields_never_revives_removed(tmp_watchlist):
+    """`update_fields()` 只回填字段、**不复活**已移出的条目。
+
+    这是 `scripts/watchlist.py sync-lynch` 走的路径：批量对齐历史数据时，
+    不该把用户亲手移出的标的悄悄放回来（那要靠 `upsert_from_report`，即重新生成报告）。
+    """
+    wl, _ = tmp_watchlist
+    wl.remove("601088")
+    assert wl.update_fields("601088", lynch="周期型", industry="煤炭开采") is False
+    s = wl.get("601088", include_removed=True)   # ⚠️ removed 的要显式带 include_removed
+    assert s is not None and s["status"] == "removed"
+    assert s.get("lynch") != "周期型"
+
+
+# --------------------------------------------------------------------------- #
 # 移出池（软删）+ 恢复
 # --------------------------------------------------------------------------- #
 
@@ -233,26 +311,37 @@ def test_removed_codes_distinguishes_from_never_pooled(tmp_watchlist):
 
 
 # --------------------------------------------------------------------------- #
-# 跨文件一致性：.gitignore 白名单（防漂移断言）
+# 跨文件不变量：reports/ 整目录不入库
 # --------------------------------------------------------------------------- #
 
-def test_gitignore_whitelist_matches_watchlist():
-    """`.gitignore` 的跟踪池白名单必须与 `watchlist.json` 完全一致。
+def test_reports_dir_fully_ignored():
+    """`reports/` 必须整体不入库，且**不允许**任何否定行把它放回来。
 
-    为什么用断言而不是"记得手工同步"：`.gitignore` 里 `reports/**/*.html` 是**全忽略**，
-    逐只放行靠 `!reports/**/<code>.html` —— 这是一份**人工维护的清单**，
-    而跟踪池会因为「生成过报告即入池」随时变长，两者必然漂移。
+    这条断言换掉了旧版的「`.gitignore` 白名单 == 跟踪池」。旧版的前提是
+    「拉链式放行」：`reports/**/*.html` 全忽略 + 逐只 `!reports/**/<code>.html` 放行。
+    那份放行清单要一直跟着跟踪池同步（池子因「生成过报告即入池」随时变长），
+    **忘同步一次，新报告就静默不进库** —— 2026-09-18 实测长江电力（600900）踩到，
+    全程零报错、零日志。
 
-    2026-09-18 实测后果：新入池的长江电力（600900）漏加白名单 → 报告静默不入库，
-    没有任何报错。这条测试把"忘了同步"从静默错误变成红色失败。
+    2026-09-18 改为整目录出库：报告只是「本地生成、本地看」的产物，仓库只留代码与模板。
+    漂移风险随之消失，但「有人手滑补一行 `!reports/...`」会把这个新不变量破坏掉，
+    所以仍然留一条断言守住它。
 
-    修法：`python scripts/watchlist.py sync-gitignore`
+    例外：`templates/valueline.html`（报告模板）**必须**入库，它不在 reports/ 下，
+    另见 `tests/test_report_style.py`。
     """
     gi = (wl.ROOT / ".gitignore").read_text(encoding="utf-8")
-    listed = set(re.findall(r"^!reports/\*\*/(\d{5,6})\.html$", gi, re.M))
-    pool = set(wl.codes())
-    assert listed == pool, (
-        "`.gitignore` 白名单与跟踪池不一致 —— 跑 `python scripts/watchlist.py sync-gitignore`\n"
-        f"  只在白名单里：{sorted(listed - pool)}\n"
-        f"  只在跟踪池里：{sorted(pool - listed)}"
+    rules = [ln.strip() for ln in gi.splitlines()
+             if ln.strip() and not ln.strip().startswith("#")]
+
+    assert "reports/" in rules or "reports/**" in rules, (
+        "`.gitignore` 里缺少 `reports/` 规则 —— 生成出来的报告会重新进版本库"
+    )
+
+    negated = [r for r in rules if r.startswith("!") and "reports" in r]
+    assert not negated, (
+        "`.gitignore` 里出现了把 reports/ 放回来的否定行：\n"
+        + "\n".join(f"  {x}" for x in negated)
+        + "\n>>> 现行约定是 reports/ **整目录**不入库（理由见 .gitignore 内注释）。\n"
+        ">>> 若确实要恢复「逐只放行」，请同时改回这条测试，别只改 .gitignore。"
     )

@@ -271,6 +271,84 @@ def add(code: str, name: str | None = None, industry: str | None = None,
     return True
 
 
+#: 报告口径回写时要过滤掉的「非真实分类」占位符。
+#: `待分析` 是 build_valueline 取不到叙事时的兜底文案；`待归类` 是 classify_lynch 的兜底。
+#: 这些值写进池子只会让人误以为"系统判过了"，所以一律不写。
+_LYNCH_PLACEHOLDERS = frozenset({"", "待分析", "待归类", "N/A", "—"})
+_INDUSTRY_PLACEHOLDERS = frozenset({"", "未分类", "行业待接入", "待归类", "N/A", "—"})
+
+
+def update_fields(code: str, *, lynch: str | None = None,
+                  industry: str | None = None, name: str | None = None) -> bool:
+    """用**报告口径**更新已在池条目的展示字段。返回是否真的写入了改动。
+
+    只动 `lynch` / `industry` / `name` 三个「报告里也有」的字段；`color`/`since`/`source`
+    是入池时的记账信息，与报告无关，不碰。
+
+    刻意移出的条目（`status == "removed"`）**不更新** —— 移出是人的决定，
+    不该因为「缓存里还有一份旧报告」被悄悄改回去。
+    """
+    c = bare(code)
+    if not c:
+        return False
+    data = _read_raw()
+    for s in data.get("stocks", []):
+        if bare(s.get("code", "")) != c:
+            continue
+        if s.get("status") == "removed":
+            return False
+        changed: dict[str, str] = {}
+        if lynch and lynch not in _LYNCH_PLACEHOLDERS and s.get("lynch") != lynch:
+            changed["lynch"] = lynch
+        if industry and industry not in _INDUSTRY_PLACEHOLDERS and s.get("industry") != industry:
+            changed["industry"] = industry
+        if name and s.get("name") != name:
+            changed["name"] = name
+        if not changed:
+            return False
+        s.update(changed)
+        # 留痕：这些字段现在是「报告口径」，不是 classify_lynch 猜的
+        s["meta_source"] = "report"
+        data["updated"] = date.today().isoformat()
+        WATCHLIST_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        return True
+    return False
+
+
+def upsert_from_report(code: str, name: str | None = None, industry: str | None = None,
+                       lynch: str | None = None) -> str:
+    """报告生成成功后的回写入口 —— **已入池就更新口径，没入池就入池**。
+
+    返回 `"added" | "restored" | "updated" | "unchanged" | "skipped"`，供调用方写日志/提示。
+    代码非法返回 `"skipped"` 而不抛异常：回写失败不该把「报告已生成」变成失败。
+
+    对**刻意移出**的条目：**恢复入池**。依据是本项目「生成过报告即入池」的定规 ——
+    用户主动查询并生成了它，就是要它回来。只想回填字段、不想复活的话用
+    `update_fields()`（`scripts/watchlist.py sync-lynch` 走的就是那条路）。
+
+    占位值（`待分析`/`待归类`/`未分类` 等，见上）会被过滤成 `None`，
+    于是 `add()` 会退回用 `classify_lynch()` 猜一个 —— 有占位总比空着强，
+    但**已经有真实值的条目不会被占位值覆盖**（`update_fields()` 会跳过）。
+    """
+    c = bare(code)
+    if not c or re.fullmatch(r"0+", c):
+        return "skipped"
+    lynch = lynch if lynch and lynch not in _LYNCH_PLACEHOLDERS else None
+    industry = industry if industry and industry not in _INDUSTRY_PLACEHOLDERS else None
+    name = name or None
+
+    existing = get(c, include_removed=True)
+    if existing is None:
+        return "added" if add(c, name=name, industry=industry, lynch=lynch) else "unchanged"
+    if existing.get("status") == "removed":
+        restore(c)
+        update_fields(c, lynch=lynch, industry=industry, name=name)
+        return "restored"
+    return "updated" if update_fields(c, lynch=lynch, industry=industry, name=name) else "unchanged"
+
+
 def remove(code: str, reason: str = "") -> dict | None:
     """移出跟踪池 —— **软删**：`status` 置 `removed`，保留名称/行业/颜色。
 

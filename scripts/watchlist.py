@@ -26,6 +26,22 @@
 留一个 `status` 就能分开：移出的排除在兜底外，链路故障的照旧兜底。想彻底删用
 `watchlist_store.prune()`。
 
+Lynch 分类：报告口径是唯一真源（2026-09-18 定）
+-----------------------------------------------
+同一个「林奇六类」在项目里有两套实现，产出**不同的字符串**：
+
+| 来源 | 实现 | 举例（长江电力 600900） |
+|---|---|---|
+| 报告里显示的 | LLM 按真实业务判（`src/report/llm.py` 的 `lynch_type`） | 稳健**成长**型 |
+| 跟踪池/对比表里的 | `watchlist_store.classify_lynch()` 关键字命中行业名 | 稳健**增长**型 · 收息 |
+
+同一个标的在两处显示不同归类 —— 结构性冲突，不是 600900 特有。已定：**以报告为准**
+（LLM 读了业务构成，比关键字猜行业名可靠；且报告是用户直接看的那份）。
+
+落地：`build_valueline.build()` 在**真实数据**分支结束时调
+`watchlist_store.upsert_from_report()` 回写；`classify_lynch()` 降级为
+「标的还没生成过报告时的占位值」。存量标的用本脚本的 `sync-lynch` 补一次。
+
 用法
 ----
     python scripts/watchlist.py list                     # 查看当前池（含已移出）
@@ -33,7 +49,7 @@
     python scripts/watchlist.py remove 600900            # 移出池（软删，可多个代码）
     python scripts/watchlist.py remove 600900 -r "试功能" # 带移出原因（回看用）
     python scripts/watchlist.py restore 600900           # 恢复入池（撤回移出）
-    python scripts/watchlist.py sync-gitignore           # 只同步白名单，不重建网页
+    python scripts/watchlist.py sync-lynch               # 全池 Lynch 按报告口径回填
     python scripts/watchlist.py remove 600900 --no-rebuild   # 只改清单，不重建网页
 
 ⚠️ 移出池**只改清单，不删磁盘文件**。报告/raw/行情归档的清理单独提示、由人决定 ——
@@ -42,7 +58,7 @@
 from __future__ import annotations
 
 import argparse
-import re
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -53,69 +69,10 @@ sys.path.insert(0, str(ROOT))
 from src.data import watchlist_store as wl  # noqa: E402
 
 SCRIPTS = ROOT / "scripts"
-GITIGNORE = ROOT / ".gitignore"
 
 #: 池子变动后必须重建的派生产物：(脚本, 超时秒)。
 #: 与 `web/server.py` 的 `_DERIVED_STEPS` **同源** —— 首页和对比表是一组，不能只重建一个。
 _DERIVED = (("build_web_index.py", 300), ("build_watchlist.py", 1800))
-
-#: `.gitignore` 白名单段的边界标记。收在同一行、可 grep，改由脚本整段重写。
-_BEGIN = "# >>> 跟踪池报告白名单"
-_END = "# <<< 跟踪池报告白名单 <<<"
-
-
-# --------------------------------------------------------------------------- #
-# 白名单同步
-# --------------------------------------------------------------------------- #
-
-def _whitelist_block(codes: list[str]) -> str:
-    lines = [
-        f"{_BEGIN} —— 由 `python scripts/watchlist.py sync-gitignore` 生成，勿手改 >>>",
-        "# 机制：reports/ 下的报告**默认全部忽略**（按需查询的随手标的没有归档价值，",
-        "#       否则仓库随使用无限膨胀）；只有「跟踪池」标的的报告入库。",
-        "# 真源：watchlist/watchlist.json。要增删标的请改那份 json 再跑 sync-gitignore ——",
-        "#       **手工在这里加一行会在下次 sync 时被覆盖**。",
-        "# 漂移防线：tests/test_watchlist_store.py 有一条断言，白名单与跟踪池不一致就报错。",
-        "reports/**/*.html",
-    ]
-    lines += [f"!reports/**/{c}.html" for c in codes]
-    lines.append(_END)
-    return "\n".join(lines)
-
-
-def sync_gitignore(quiet: bool = False) -> bool:
-    """把白名单段重写为跟踪池当前内容。返回是否有改动。"""
-    text = GITIGNORE.read_text(encoding="utf-8") if GITIGNORE.exists() else ""
-    block = _whitelist_block(wl.codes())
-
-    # 已有标记段 → 整段替换（连同它上面的旧注释一起吃掉，避免注释残留堆积）
-    pat = re.compile(rf"^(?:#[^\n]*\n)*{re.escape(_BEGIN)}.*?^{re.escape(_END)}[^\n]*$",
-                     re.M | re.S)
-    if pat.search(text):
-        new = pat.sub(lambda _m: block, text, count=1)
-    else:
-        # 首次迁移：没有标记段 → 把旧的手工白名单区整块换成标记段。
-        # ⚠️ 旧区里注释与白名单行是**交替**的（`reports/**/*.html` 之后先跟一行
-        #    `# 跟踪池（...）`，再是 `!reports/**/*.html`，中间还夹着「中国海油」注释）。
-        #    只匹配 `!reports/...` 会出现「替换掉了注释、白名单行却全留在下面」的
-        #    半替换（首次实测踩到）—— 所以两种行都要吃，直到遇到空行才停（挡住下文
-        #    `templates/valueline.html` 那段无关注释）。
-        old = re.compile(
-            r"^(?:#[^\n]*\n)*reports/\*\*/\*\.html\n"
-            r"(?:#[^\n]*\n|!reports/\*\*/\S+\.html\n)*",
-            re.M)
-        new = old.sub(lambda _m: block + "\n", text, count=1)
-        if new == text:  # 连旧段也没匹配上 → 追加到文件末尾
-            new = text.rstrip("\n") + "\n\n" + block + "\n"
-
-    if new == text:
-        if not quiet:
-            print(f"· .gitignore 白名单已是最新（{len(wl.codes())} 只），未改动")
-        return False
-    GITIGNORE.write_text(new, encoding="utf-8")
-    if not quiet:
-        print(f"✓ .gitignore 白名单已同步：{len(wl.codes())} 只")
-    return True
 
 
 # --------------------------------------------------------------------------- #
@@ -178,7 +135,6 @@ def cmd_add(args) -> int:
             print(f"· 已在池中或代码非法，跳过：{code}")
     if not added:
         return 0
-    sync_gitignore()
     if args.no_rebuild:
         print("（--no-rebuild：已跳过网页重建，页面仍是旧内容）")
         return 0
@@ -201,7 +157,6 @@ def cmd_restore(args) -> int:
             print(f"✓ 已恢复入池：{s['code']} {s.get('name', '')}")
     if not done:
         return 0
-    sync_gitignore()
     if args.no_rebuild:
         print("（--no-rebuild：已跳过网页重建，页面仍是旧内容）")
         return 0
@@ -240,7 +195,6 @@ def cmd_remove(args) -> int:
             for p in left:
                 print(f"    {p}")
 
-    sync_gitignore()
     if args.no_rebuild:
         print("（--no-rebuild：已跳过网页重建，页面仍是旧内容）")
         return 0
@@ -248,14 +202,77 @@ def cmd_remove(args) -> int:
     return 0 if rebuild() else 1
 
 
-def cmd_sync(args) -> int:
-    sync_gitignore(quiet=args.quiet)
-    return 0
+# --------------------------------------------------------------------------- #
+# Lynch 分类对齐（报告口径 → 跟踪池）
+# --------------------------------------------------------------------------- #
+
+#: 叙事层缓存目录（`build_valueline` 写、这里读）。两者必须指向同一处：
+#: 它是 LLM 判定值的落地点，也就是报告里显示的那个 lynch_type 的真源。
+NARRATIVE_CACHE = ROOT / "data" / "cache" / "narrative"
+
+
+def _cached_lynch(code: str) -> tuple[str, str]:
+    """从叙事缓存读该标的的报告口径 `(lynch_type, industry)`；读不到返回两个空串。"""
+    p = NARRATIVE_CACHE / f"{wl.bare(code)}.json"
+    if not p.exists():
+        return "", ""
+    try:
+        narr = (json.loads(p.read_text(encoding="utf-8")) or {}).get("narrative") or {}
+        return str(narr.get("lynch_type") or ""), str(narr.get("industry") or "")
+    except Exception:
+        return "", ""
+
+
+def cmd_sync_lynch(args) -> int:
+    """把跟踪池的 Lynch 分类对齐到报告口径（LLM 判定）。"""
+    targets = args.codes or wl.codes()
+    if not targets:
+        print("跟踪池为空，无事可做")
+        return 0
+
+    rows, skipped = [], []
+    for code in targets:
+        s = wl.get(code, include_removed=True)
+        if not s:
+            skipped.append((wl.bare(code), "不在池中"))
+            continue
+        if s.get("status") == "removed":
+            skipped.append((wl.bare(code), "已移出（刻意移出的不因缓存回填而复活）"))
+            continue
+        lynch, industry = _cached_lynch(code)
+        if not lynch:
+            skipped.append((wl.bare(code), "无叙事缓存 —— 该标的还没生成过完整报告"))
+            continue
+        before = s.get("lynch", "")
+        wl.update_fields(code, lynch=lynch, industry=industry)
+        after = (wl.get(code) or {}).get("lynch", "")
+        rows.append((wl.bare(code), s.get("name", ""), before, after))
+
+    changed = [r for r in rows if r[2] != r[3]]
+    print(f"Lynch 分类对齐：处理 {len(rows)} 只，其中 {len(changed)} 只有变化"
+          f"（口径 = 报告里 LLM 判定的值）\n")
+    for code, name, before, after in rows:
+        mark = "✎" if before != after else " "
+        print(f"  {mark} {code:<8} {name:<8} {before or '(空)':<22} → {after or '(空)'}")
+
+    if skipped:
+        print(f"\n跳过 {len(skipped)} 只：")
+        for code, why in skipped:
+            print(f"    {code:<8} {why}")
+
+    if not changed:
+        print("\n无字段变化，未重写文件、未重建网页。")
+        return 0
+    if args.no_rebuild:
+        print("\n（--no-rebuild：已跳过网页重建，页面仍是旧内容）")
+        return 0
+    print("\n重建派生产物：")
+    return 0 if rebuild() else 1
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="fqf 跟踪池管理（查看 / 入池 / 移出 / 同步 .gitignore 白名单）",
+        description="fqf 跟踪池管理（查看 / 入池 / 移出 / 用报告口径回填字段）",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -277,9 +294,11 @@ def main() -> int:
     p_rs.add_argument("--no-rebuild", action="store_true", help="不重建网页产物")
     p_rs.set_defaults(func=cmd_restore)
 
-    p_sync = sub.add_parser("sync-gitignore", help="把 .gitignore 白名单同步成跟踪池内容")
-    p_sync.add_argument("--quiet", action="store_true")
-    p_sync.set_defaults(func=cmd_sync)
+    p_ln = sub.add_parser("sync-lynch",
+                          help="用报告口径（LLM 判定）回填 Lynch 分类；不带代码=全池")
+    p_ln.add_argument("codes", nargs="*", help="股票代码，留空则处理全池")
+    p_ln.add_argument("--no-rebuild", action="store_true", help="不重建网页产物")
+    p_ln.set_defaults(func=cmd_sync_lynch)
 
     args = ap.parse_args()
     return args.func(args)

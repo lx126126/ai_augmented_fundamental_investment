@@ -29,6 +29,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import date, datetime
@@ -74,12 +75,23 @@ def _pe_color(pe_pct):
     return "#c92a2a"
 
 
-def _data_fingerprint(code: str) -> float:
-    """该标的数据指纹 = `data/raw/{code}/` 下所有 parquet 的最大 mtime。"""
+def _data_fingerprint(code: str) -> str:
+    """该标的的行数据指纹 = raw parquet 最大 mtime **+ 池子里该标的的展示字段**。
+
+    ⚠️ 后半截不能省。行数据里有 `industry` / `lynch` / `color` 三项，它们来自
+    `watchlist.json`（见 `collect()` 里的 `meta.get(...)`），跟 raw parquet 毫无关系。
+    2026-09-18 实测踩到：把全池 Lynch 对齐成报告口径（只改了 json，没动 raw）后重建
+    对比表，11 只**全部命中缓存**、表里还是旧的「稳健增长型 · 收息」—— 改了等于没改。
+
+    只取**该标的自己**的字段（不是整个 json 的 mtime），所以改一只不会让全池重算
+    （全池重算约 2.6 分钟，代价不小）。
+    """
     d = RAW_DIR / code
-    if not d.is_dir():
-        return 0.0
-    return max((f.stat().st_mtime for f in d.glob("*.parquet")), default=0.0)
+    mtime = max((f.stat().st_mtime for f in d.glob("*.parquet")), default=0.0) if d.is_dir() else 0.0
+    s = wl.get(code, include_removed=True) or {}
+    meta = json.dumps([s.get(k) for k in ("name", "industry", "lynch", "color")],
+                      ensure_ascii=False)
+    return f"{mtime:.6f}|{hashlib.md5(meta.encode('utf-8')).hexdigest()[:10]}"
 
 
 # --------------------------------------------------------------------------- #
@@ -168,7 +180,8 @@ def collect_with_cache(codes: list[str], refresh: bool = False,
     for code in codes:
         fp = _data_fingerprint(code)
         hit = cache.get(code)
-        if hit and code not in force_set and abs(float(hit.get("_fingerprint", -1)) - fp) < 1e-6:
+        # 指纹是字符串（`mtime|meta_hash`），精确比较；旧的纯数字指纹自然不等 → 重算一次
+        if hit and code not in force_set and hit.get("_fingerprint") == fp:
             rows.append(hit)
             reused.append(code)
             continue

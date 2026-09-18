@@ -11,105 +11,116 @@
       "code": "601088.SH",
       "name": "中国神华",
       "industry": "煤炭开采",
-      "lynch": "周期型 · 稳健收息",
+      "lynch": "周期型（高股息现金牛）",
       "status": "active",
       "since": "2026-08",
-      "color": "#378ADD"
+      "color": "#378ADD",
+      "meta_source": "report"
     },
     {
       "code": "600519.SH",
       "name": "贵州茅台",
-      "industry": "白酒",
-      "lynch": "稳定增长型 · 护城河",
+      "industry": "白酒Ⅱ",
+      "lynch": "稳健成长型",
       "status": "active",
       "since": "2026-08",
-      "color": "#E24B4A"
+      "color": "#E24B4A",
+      "meta_source": "report"
     },
     {
       "code": "000651.SZ",
       "name": "格力电器",
-      "industry": "家电",
-      "lynch": "稳健增长型 · 收息",
+      "industry": "白色家电",
+      "lynch": "缓慢增长型（高股息现金牛）",
       "status": "active",
       "since": "2026-08",
-      "color": "#BA7517"
+      "color": "#BA7517",
+      "meta_source": "report"
     },
     {
       "code": "601328.SH",
       "name": "交通银行",
-      "industry": "银行",
-      "lynch": "稳健增长型 · 收息",
+      "industry": "银行Ⅱ",
+      "lynch": "缓慢增长型（高股息价值股）",
       "status": "active",
       "since": "2026-08",
-      "color": "#888780"
+      "color": "#888780",
+      "meta_source": "report"
     },
     {
       "code": "00700.HK",
       "name": "腾讯控股",
-      "industry": "互联网",
-      "lynch": "稳定增长型 · 生态护城河",
+      "industry": "软件服务",
+      "lynch": "稳健成长型",
       "status": "active",
       "since": "2026-09",
-      "color": "#00A4FF"
+      "color": "#00A4FF",
+      "meta_source": "report"
     },
     {
       "code": "09992.HK",
       "name": "泡泡玛特",
-      "industry": "潮玩消费",
-      "lynch": "快速增长型",
+      "industry": "家庭电器及用品",
+      "lynch": "快速成长型",
       "status": "active",
       "since": "2026-08",
-      "color": "#F08BB0"
+      "color": "#F08BB0",
+      "meta_source": "report"
     },
     {
       "code": "00883.HK",
       "name": "中国海洋石油",
       "industry": "石油及天然气",
-      "lynch": "周期型 · 资源/周期",
+      "lynch": "周期型",
       "status": "active",
       "since": "2026-09",
       "color": "#5B8FF9",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
     },
     {
       "code": "300061.SZ",
       "name": "旗天科技",
       "industry": "广告营销",
-      "lynch": "稳定增长型 · 轻资产",
+      "lynch": "困境反转（尚未验证）",
       "status": "active",
       "since": "2026-09",
       "color": "#3D9A5B",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
     },
     {
       "code": "600036.SH",
       "name": "招商银行",
       "industry": "银行Ⅱ",
-      "lynch": "稳健增长型 · 收息",
+      "lynch": "稳健成长型",
       "status": "active",
       "since": "2026-09",
       "color": "#9A6BBF",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
     },
     {
       "code": "600887.SH",
       "name": "伊利股份",
       "industry": "饮料乳品",
-      "lynch": "稳定增长型 · 品牌消费",
+      "lynch": "稳健成长型",
       "status": "active",
       "since": "2026-09",
       "color": "#0F9B8E",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
     },
     {
       "code": "600938.SH",
       "name": "中国海油",
       "industry": "油气开采Ⅱ",
-      "lynch": "周期型 · 资源/周期",
+      "lynch": "周期型（高股息资源龙头）",
       "status": "active",
       "since": "2026-09",
       "color": "#D4763A",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
     },
     {
       "code": "600900.SH",

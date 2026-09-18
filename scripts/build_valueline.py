@@ -2098,6 +2098,28 @@ def _save_narrative(code: str, facts, narrative) -> None:
     )
 
 
+def _sync_watchlist(code: str, name: str, industry: str, lynch_type: str) -> None:
+    """把**报告口径**的行业 / Lynch 分类回写跟踪池（2026-09-18 定：Lynch 以报告为准）。
+
+    为什么挂在这里而不是调用方：本函数是所有报告产出的必经之路
+    （`web/server.py`、`scripts/daily_refresh.py`、命令行、`scripts/export.py` 都走 `build()`），
+    挂在这儿一处覆盖全部调用方，不会有哪条链路漏掉。
+
+    ⚠️ 只在**真实数据**分支调用。示例数据分支的 `lynch_type` 是中国神华的样例值，
+    回写到别家标的上会把归类安错对象 —— 那正是本项目最忌讳的「给用户看别家财报」。
+
+    回写失败只打印、绝不抛 —— 跟踪池是记账，报告才是交付物。
+    """
+    try:
+        from src.data import watchlist_store as _wl
+        status = _wl.upsert_from_report(code, name=name, industry=industry,
+                                        lynch=lynch_type)
+        if status in ("added", "restored", "updated"):
+            print(f"  跟踪池: {status} {code}  {industry} · {lynch_type}")
+    except Exception as e:
+        print(f"  跟踪池回写失败（不影响报告）：{type(e).__name__}: {e}")
+
+
 def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
     global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING, BACKFILL_SRC
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
@@ -2226,6 +2248,10 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
     report_out = root / "reports" / report_period / f"{code}.html"
     report_out.parent.mkdir(parents=True, exist_ok=True)
     report_out.write_text(html, encoding="utf-8")
+
+    # 报告已落盘 → 用报告口径回写跟踪池（Lynch 分类的唯一真源，见函数 docstring）
+    if data_src.startswith("真实数据"):
+        _sync_watchlist(code, COMPANY_NAME, industry, lynch_type)
 
     print(f"generated:")
     print(f"  预览: {tpl_out}")
