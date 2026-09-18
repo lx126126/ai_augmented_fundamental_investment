@@ -833,6 +833,17 @@ def fetch_hk_profile(code: str) -> pd.DataFrame | None:
 
 
 @retry(retries=5, base=2.0, cap=15.0)
+@retry(retries=2, on_error=lambda a, e: print(
+    f"[fetch] 竞争地位第 {a} 次重试：{type(e).__name__}: {e}"))
+def _fetch_yjbb(report_date: str) -> pd.DataFrame:
+    """东财业绩报表（全市场，约 1.1 万只 A 股）。
+
+    单独抽成一个函数只为挂 `@retry()` —— 原先这行裸调用被包在
+    `try/except Exception: return None` 里，**装饰器看不到异常，重试永远不会触发**。
+    """
+    return ak.stock_yjbb_em(date=report_date)
+
+
 def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame | None:
     """竞争地位：东财业绩报表（全市场营收 + 申万行业）→ 标的所在行业全部公司。
 
@@ -840,12 +851,25 @@ def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame 
     返回标的所在行业的全部公司（多行，营收降序），列：
       symbol / name / industry / revenue_yi / net_profit_yi / report_date
     adapter 据此计算行业排名、营收份额、同行对比。
+
+    ⚠️ 这是**全市场大接口**（分 24 页拉，实测 12.7 秒），比单标的接口脆得多。
+    2026-09-18 实测：新入池的长江电力（600900）首次生成报告时这里失败过一次，
+    静默返回 None → `competition.parquet` 没落盘，而连带的三处症状**全都不报错**：
+      ① 报告缺「行业排名」板块  ② 网页该标的行业显示「未分类」
+      ③ `watchlist_store._guess_industry` 拿不到行业、Lynch 归类退化成靠名称猜
+
+    故：失败**先重试**（`_fetch_yjbb`，网络抖动是主因），重试耗尽才返回 None，
+    但**必须打印留痕** —— 静默的 None 会被下游当成"这只标的没有同业数据"。
     """
     try:
-        df = ak.stock_yjbb_em(date=report_date)
-    except Exception:
+        df = _fetch_yjbb(report_date)
+    except Exception as e:  # noqa: BLE001
+        # 保持「尽力而为」语义：同业数据缺失不该拖垮整只标的的其余 11 张表
+        print(f"[fetch] 竞争地位拉取失败（重试已耗尽）：{type(e).__name__}: {e}；"
+              f"{code} 将缺行业排名数据，网页行业会显示「未分类」")
         return None
     if df is None or df.empty:
+        print(f"[fetch] 竞争地位返回空表（report_date={report_date}）：{code} 无同业数据")
         return None
 
     code = code.zfill(6)
@@ -856,6 +880,9 @@ def fetch_competition(code: str, report_date: str = "20251231") -> pd.DataFrame 
 
     self_row = df[df["symbol"] == code]
     if self_row.empty:
+        # 不是网络故障，是这只标的不在这期报表里（新股/停牌/报告期未披露）——
+        # 直接失败不重试，但也留痕，别让下游以为"拉过了、就是没有"。
+        print(f"[fetch] 竞争地位：{code} 不在 {report_date} 业绩报表中（共 {len(df)} 条），无同业数据")
         return None
     industry = self_row.iloc[0]["所处行业"]
     peers = df[df["所处行业"] == industry].copy()
