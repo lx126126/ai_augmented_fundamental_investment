@@ -27,7 +27,7 @@ def tmp_watchlist(tmp_path, monkeypatch):
     p = tmp_path / "watchlist.json"
     p.write_text(json.dumps({
         "version": 1,
-        "rules": {"max_size": 8},
+        "rules": {"cadence": "年报/中报季全量更新"},
         "stocks": [
             {"code": "601088.SH", "name": "中国神华", "industry": "煤炭开采"},
             {"code": "00700.HK", "name": "腾讯控股", "industry": "互联网"},
@@ -84,14 +84,30 @@ def test_codes_keeps_json_order(tmp_watchlist):
     assert wl.codes() == ["601088", "00700"]
 
 
-def test_max_size_from_rules(tmp_watchlist):
-    assert wl.max_size() == 8
+def test_no_max_size_anywhere(tmp_path, monkeypatch):
+    """跟踪池**不设上限**（2026-09-18 潇姐拍板）—— 防它被悄悄加回来。
+
+    为什么值得一条断言：`max_size=8` 这个「名义上限」不阻断写入，却让对比表长期挂着
+    「已超名义上限 8 只」的告警。永远为真、谁也没打算处理的告警只会训练人忽略告警 ——
+    去掉之后必须防止下次有人「顺手加个上限」。这条断言覆盖三处：模块 API、
+    缺失文件时的兜底骨架、以及真实配置。
+    """
+    assert not hasattr(wl, "max_size"), "max_size() 已删除，别加回来"
+    assert not hasattr(wl, "DEFAULT_MAX_SIZE")
+
+    monkeypatch.setattr(wl, "WATCHLIST_PATH", tmp_path / "nope.json")
+    assert wl._empty() == {"version": 1, "rules": {}, "stocks": []}
+    assert "max_size" not in json.dumps(wl._empty())
+
+    real = json.loads((wl.ROOT / "watchlist" / "watchlist.json").read_text(encoding="utf-8"))
+    assert "max_size" not in json.dumps(real.get("rules", {})), \
+        "真实 watchlist.json 的 rules 里还有 max_size"
 
 
 def test_missing_file_is_empty_not_crash(tmp_path, monkeypatch):
     monkeypatch.setattr(wl, "WATCHLIST_PATH", tmp_path / "nope.json")
     assert wl.codes() == []
-    assert wl.max_size() == wl.DEFAULT_MAX_SIZE
+    assert wl.stocks() == []
 
 
 # --------------------------------------------------------------------------- #

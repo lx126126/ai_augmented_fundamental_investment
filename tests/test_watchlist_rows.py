@@ -50,7 +50,7 @@ def bw():
 
 def _write_pool(path: Path, lynch: str, industry: str = "煤炭开采") -> None:
     path.write_text(json.dumps({
-        "version": 1, "rules": {"max_size": 8},
+        "version": 1, "rules": {"cadence": "年报/中报季全量更新"},
         "stocks": [
             {"code": "601088.SH", "name": "中国神华", "industry": industry,
              "lynch": lynch, "color": "#378ADD"},

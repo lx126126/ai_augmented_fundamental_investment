@@ -2,7 +2,6 @@
   "version": 1,
   "updated": "2026-08-20",
   "rules": {
-    "max_size": 8,
     "cadence": "年报/中报季全量更新，Q1/Q3 按需轻量更新",
     "disclaimer": "跟踪池仅为研究范围，不含任何操作建议"
   },

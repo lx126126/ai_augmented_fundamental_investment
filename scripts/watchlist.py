@@ -107,7 +107,7 @@ def cmd_list(_args) -> int:
     if not items:
         print("跟踪池为空")
         return 0
-    print(f"跟踪池 {len(items)} 只（rules.max_size = {wl.max_size()}，仅页面提示、不阻断入池）\n")
+    print(f"跟踪池 {len(items)} 只（不设上限 —— 生成过报告即入池）\n")
     for i, s in enumerate(items, 1):
         print(f"  {i:>2}. {s['code']:<11} {s.get('name', ''):<10} "
               f"│ {s.get('industry', ''):<10} │ {s.get('lynch', '')}"

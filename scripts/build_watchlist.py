@@ -294,9 +294,10 @@ def build_html(rows: list[dict], all_codes: list[str]) -> str:
     dates = [r.get("quote_date") for r in rows if r.get("quote_date")]
     newest = max(dates) if dates else "—"
     built = datetime.now().strftime("%Y-%m-%d %H:%M")
-    n, cap = len(rows), wl.max_size()
-    cap_note = (f"<span class='cap ok'>跟踪池 {n} 只</span>" if n <= cap
-                else f"<span class='cap over'>跟踪池 {n} 只 · 已超名义上限 {cap} 只</span>")
+    n = len(rows)
+    # 不再有「名义上限」：2026-09-18 潇姐拍板去掉 max_size=8。理由见
+    # src/data/watchlist_store.py 的模块 docstring —— 不阻断写入的告警只会训练人忽略告警。
+    cap_note = f"<span class='cap ok'>跟踪池 {n} 只</span>"
 
     table = _render_rows(rows)
     legend = (

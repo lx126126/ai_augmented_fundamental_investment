@@ -2,7 +2,6 @@
   "version": 1,
   "updated": "2026-09-18",
   "rules": {
-    "max_size": 8,
     "cadence": "年报/中报季全量更新，Q1/Q3 按需轻量更新",
     "disclaimer": "跟踪池仅为研究范围，不含任何操作建议"
   },
@@ -83,11 +82,12 @@
       "name": "旗天科技",
       "industry": "广告营销",
       "lynch": "困境反转（尚未验证）",
-      "status": "active",
+      "status": "removed",
       "since": "2026-09",
       "color": "#3D9A5B",
       "source": "report",
-      "meta_source": "report"
+      "meta_source": "report",
+      "removed_at": "2026-09-18"
     },
     {
       "code": "600036.SH",
@@ -133,6 +133,16 @@
       "source": "manual",
       "removed_at": "2026-09-18",
       "removed_reason": "试功能，非真实跟踪标的"
+    },
+    {
+      "code": "00300.HK",
+      "name": "美的集团",
+      "industry": "家庭电器及用品",
+      "lynch": "稳健成长型",
+      "status": "active",
+      "since": "2026-09",
+      "color": "#3D9A5B",
+      "source": "report"
     }
   ]
 }

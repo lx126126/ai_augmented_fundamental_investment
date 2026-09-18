@@ -15,10 +15,18 @@
 后果很具体：**手机首页列 6 张卡片，对比表列 6 只，而报告实际有 11 份** ——
 生成过的报告在网页上"消失"了。本模块把清单收敛为唯一来源。
 
-入池规则（2026-09-17 定，潇姐）
-------------------------------
-**生成过报告即入池**，不设硬上限。`rules.max_size` 只作页面提示
-（「名义上限 8 只 · 当前 N 只」），不阻断写入。
+入池规则（2026-09-17 定，2026-09-18 收紧，潇姐）
+----------------------------------------------
+**生成过报告即入池，不设上限。**
+
+2026-09-17 那条「`rules.max_size = 8` 只作页面提示、不阻断写入」是**半吊子**：
+它不阻断写入，却让对比表表头长期挂着「已超名义上限 8 只」的橙色告警 ——
+一个永远为真、谁也没打算处理的告警，只会训练人忽略告警。2026-09-18 潇姐拍板
+**直接去掉这个上限**：`rules.max_size` 字段、`max_size()` 函数与全部展示点一并删除，
+`tests/test_watchlist_store.py` 加了断言防它被加回来。
+
+池子变大后真正的约束不是「几只」，而是**对比表能横向放下几只**（现在是列式宽表，
+加一只多一列）—— 那是渲染问题，该在渲染层解决，不该由数据层假装限制。
 
 用法
 ----
@@ -43,9 +51,6 @@ PALETTE = (
     "#F08BB0", "#5B8FF9", "#3D9A5B", "#9A6BBF", "#0F9B8E",
     "#D4763A", "#7A6FF0",
 )
-
-#: 跟踪池名义上限（`rules.max_size`）；仅用于页面提示，不阻断入池。
-DEFAULT_MAX_SIZE = 8
 
 #: Lynch 归类规则（关键字 → 归类），按顺序**首个命中即用**。
 #: 用关键字而非精确匹配：数据源给的行业名带后缀（"银行Ⅱ"）、带细分
@@ -115,13 +120,18 @@ def with_exchange(code: str) -> str:
 # 读
 # --------------------------------------------------------------------------- #
 
+def _empty() -> dict:
+    """跟踪池缺失/损坏时的空骨架（**不含 `rules.max_size`**，见模块 docstring）。"""
+    return {"version": 1, "rules": {}, "stocks": []}
+
+
 def _read_raw() -> dict:
     if not WATCHLIST_PATH.exists():
-        return {"version": 1, "rules": {"max_size": DEFAULT_MAX_SIZE}, "stocks": []}
+        return _empty()
     try:
         return json.loads(WATCHLIST_PATH.read_text(encoding="utf-8"))
     except Exception:
-        return {"version": 1, "rules": {"max_size": DEFAULT_MAX_SIZE}, "stocks": []}
+        return _empty()
 
 
 def stocks(include_removed: bool = False) -> list[dict]:
@@ -163,10 +173,6 @@ def removed_codes() -> set[str]:
     只是名字退化成代码）。两者靠 `status` 区分，不能靠"在不在池里"。
     """
     return {s["bare"] for s in stocks(include_removed=True) if s.get("status") == "removed"}
-
-
-def max_size() -> int:
-    return int(_read_raw().get("rules", {}).get("max_size", DEFAULT_MAX_SIZE) or DEFAULT_MAX_SIZE)
 
 
 def get(code: str, include_removed: bool = False) -> dict | None:

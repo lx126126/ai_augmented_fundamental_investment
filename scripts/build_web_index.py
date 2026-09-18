@@ -33,7 +33,6 @@
 """
 from __future__ import annotations
 
-import re
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -44,8 +43,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from src.data import watchlist_store as wl  # noqa: E402
+from src.report import artifacts  # noqa: E402
 
-REPORTS_DIR = ROOT / "reports"
 WEB_DIR = ROOT / "web"
 RAW_DIR = ROOT / "data" / "raw"
 MARKET_DIR = ROOT / "data" / "market"
@@ -59,22 +58,14 @@ FLAT_COLOR = "#5c6b7a"
 _STALE_DAYS = 4
 
 
-def _period_key(p: str) -> tuple[int, int]:
-    m = re.match(r"(\d{4})Q([1-4])", p)
-    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
-
-
 def _scan_reports() -> dict[str, str]:
-    """扫描 reports/，返回 {code: 最新报告期相对路径}。"""
-    result: dict[str, str] = {}
-    if not REPORTS_DIR.exists():
-        return result
-    for period_dir in sorted(REPORTS_DIR.iterdir(), key=lambda d: _period_key(d.name), reverse=True):
-        if not period_dir.is_dir() or period_dir.name == "xhs":
-            continue
-        for html in period_dir.glob("*.html"):
-            result.setdefault(html.stem, html.relative_to(ROOT).as_posix())
-    return result
+    """扫描 reports/，返回 {code: 最新报告期相对路径}。
+
+    判据在 `src/report/artifacts.py`（原先这里是一份自己的实现：跳过 `xhs` 目录 +
+    按报告期排序）。**不要再在这里写第二份** —— 服务端 `_find_report` 曾经用的是
+    「按 mtime 取最大」，两份口径不同，见该模块 docstring 里那张对账表。
+    """
+    return {code: p.relative_to(ROOT).as_posix() for code, p in artifacts.scan().items()}
 
 
 def _quote(code: str) -> dict | None:

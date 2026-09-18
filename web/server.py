@@ -36,10 +36,15 @@
 页面路由（2026-09-17 收敛为一个首页）
 ---------------------------------------
     /                    首页 = 搜索框 + 已生成报告列表 + 横向对比入口（web/index.html）
-    /home  /index.html   同上（别名：/home 是旧链接，/index.html 供页面间相对路径互链）
+    /home  /index.html  /web/index.html   同上（别名：/home 是旧链接；另两个供页面间
+                          相对路径互链 —— 首页互链用 `index.html`、报告页回首页用
+                          `../../web/index.html`，服务模式下分别解析成这两个路径）
     /watchlist  /watchlist.html   跟踪池横向对比表
     /report/{code}       单个标的一页报告
     /reports/**          报告原文件静态挂载（首页卡片的相对链接落到这里）
+
+「什么算一份报告」由 `src/report/artifacts.py` 统一定义（报告期目录 + 取最新期 +
+排除 reports/xhs 发布包）。本文件不再自己 glob 报告文件。
 
 旧 `web/query.html`（独立搜索页）已删除：它的能力被首页完整覆盖，
 两处搜索入口 = 两份同功能 JS = 必然漂移。
@@ -78,6 +83,7 @@ sys.path.insert(0, str(SCRIPTS))  # build_valueline 里有裸导入 `from _sampl
 from src.data import market_index, watchlist_store  # noqa: E402
 from src.data.fetcher import fetch_all, fetch_all_hk  # noqa: E402
 from src.data.storage import save_all  # noqa: E402
+from src.report import artifacts  # noqa: E402
 
 RAW_DIR = ROOT / "data" / "raw"
 REPORTS_DIR = ROOT / "reports"
@@ -128,9 +134,14 @@ def _has_data(code: str) -> bool:
 
 
 def _find_report(code: str) -> Path | None:
-    """找该标的最新报告文件（reports/{期}/{code}.html）。"""
-    cands = list(REPORTS_DIR.glob(f"*/{code}.html"))
-    return max(cands, key=lambda p: p.stat().st_mtime) if cands else None
+    """找该标的的最新报告文件。
+
+    🔴 判据统一在 `src/report/artifacts.py`，这里不再自己 glob —— 原先用的是
+    `reports.glob("*/{code}.html")` 取 mtime 最大，会把 `reports/xhs/600519.html`
+    （小红书九宫格发布包）当成报告；而 `build_web_index` 用的是「跳过 xhs + 按报告期
+    取最新」。两处口径不同，迟早对不上（详见该模块 docstring）。
+    """
+    return artifacts.find(code)
 
 
 def _report_fresh(code: str) -> bool:
@@ -284,15 +295,18 @@ def _serve_html(path: Path, hint: str) -> HTMLResponse:
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
-#: 首页三别名指向同一份产物 web/index.html：
-#:   `/`            对外唯一入口
-#:   `/home`        旧链接兼容
-#:   `/index.html`  页面间互链用相对路径（离线双击文件时只有相对路径能用），
-#:                  服务模式下相对路径会解析成 /index.html，故必须也注册。
-#: 三个别名收敛到同一个函数，不存在「两个首页各自漂移」的可能。
+#: 首页四别名指向同一份产物 web/index.html：
+#:   `/`              对外唯一入口
+#:   `/home`          旧链接兼容
+#:   `/index.html`    页面间互链用相对路径（离线双击文件时只有相对路径能用），
+#:                    服务模式下相对路径会解析成 /index.html，故必须也注册。
+#:   `/web/index.html` 同上，供**报告页**用：报告在 reports/{期}/ 下，回首页的相对路径
+#:                    是 `../../web/index.html`，服务模式下解析成 /web/index.html。
+#: 四个别名收敛到同一个函数，不存在「两个首页各自漂移」的可能。
 @app.get("/", response_class=HTMLResponse)
 @app.get("/home", response_class=HTMLResponse)
 @app.get("/index.html", response_class=HTMLResponse)
+@app.get("/web/index.html", response_class=HTMLResponse)
 def home() -> HTMLResponse:
     """首页：搜索框 + 已生成报告列表 + 横向对比入口。"""
     return _serve_html(WEB_DIR / "index.html", "python scripts/build_web_index.py")
@@ -320,15 +334,13 @@ def legacy_query_page() -> HTMLResponse:
 def view_report(code: str) -> HTMLResponse:
     """查看已生成的报告 HTML。
 
-    代码规范化：按用户原样 → 补 5 位（港股）→ 补 6 位（A 股）依次尝试。
-    **先试原样**很重要：600036 若直接补 5 位会变成 00036（不符规范）甚至撞到别的标的。
+    代码规范化（按用户原样 → 补 5 位港股 → 补 6 位 A 股依次尝试）已在
+    `artifacts.find()` 里 —— **先试原样**很重要：600036 若直接补 5 位会变成 00036
+    （不符规范）甚至撞到别的标的。这里不再重复一份候选逻辑。
     """
-    c = str(code).strip().upper().split(".")[0]
-    candidates = [c] if not c.isdigit() else [c, c.zfill(5), c.zfill(6)]
-    for x in candidates:
-        p = _find_report(x)
-        if p:
-            return HTMLResponse(p.read_text(encoding="utf-8"))
+    p = _find_report(code)
+    if p:
+        return HTMLResponse(p.read_text(encoding="utf-8"))
     raise HTTPException(status_code=404, detail=f"暂无 {code} 的报告，请先生成")
 
 
@@ -338,13 +350,30 @@ def view_report(code: str) -> HTMLResponse:
 
 @app.get("/api/health")
 def health() -> dict:
+    """服务状态 + **报告口径对账**。
+
+    `reports` 是**唯一对外口径**，与首页卡片数/对比表列数同源自
+    `src/report/artifacts.inventory()`。2026-09-18 之前这里算的是
+    `reports/*/*.html` 的文件个数（14），而首页只列跟踪池里的（11）——
+    同一个东西两个数，用户问「到底几份」。现在 `reports` == 首页显示数，
+    另外两个字段给出**对不上的原因**，而不是把差异藏起来。
+    """
     idx = market_index.INDEX_PATH
-    n_reports = len(list(REPORTS_DIR.glob("*/*.html"))) if REPORTS_DIR.exists() else 0
+    inv = artifacts.inventory()
     return {
         "ok": True,
         "index": {"path": str(idx.relative_to(ROOT)), "exists": idx.exists(),
                   **market_index.stats()},
-        "reports": n_reports,
+        #: 对外口径：首页卡片 / 对比表列数（池内 + 池外兜底）
+        "reports": inv["shown_count"],
+        "reports_detail": {
+            "in_pool": len(inv["in_pool"]),        # 池内且有报告
+            "orphan": len(inv["orphan"]),          # 有报告但不在池（>0 = 入池链路可能断了）
+            "removed": len(inv["removed"]),        # 刻意移出，报告仍在磁盘
+            "missing": len(inv["missing"]),        # 在池但还没报告
+            "on_disk": len(inv["on_disk"]),        # 磁盘上全部报告文件（已排除 reports/xhs）
+        },
+        "orphan_codes": inv["orphan"],
         "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
 
@@ -410,10 +439,14 @@ def search(q: str = Query(..., min_length=1, description="代码或名称，如 
 
 @app.get("/api/reports")
 def list_reports() -> dict:
-    """已生成的报告清单（按修改时间倒序）。"""
-    if not REPORTS_DIR.exists():
-        return {"count": 0, "results": []}
-    files = sorted(REPORTS_DIR.glob("*/*.html"), key=lambda p: p.stat().st_mtime, reverse=True)
+    """已生成的报告清单（按报告期倒序，同期内按修改时间倒序）。
+
+    口径同 `/api/health`：走 `artifacts.scan()`，**不含** `reports/xhs/` 下的发布包
+    （原先用 `glob("*/*.html")`，把九宫格发布包也列成了「报告」）。
+    """
+    files = sorted(artifacts.scan().values(),
+                   key=lambda p: (artifacts.period_key(p.parent.name), p.stat().st_mtime),
+                   reverse=True)
     results = []
     for p in files[:200]:
         code = p.stem
@@ -438,7 +471,8 @@ def watchlist_state() -> dict:
     active = [s for s in items if s.get("status") != "removed"]
     return {
         "count": len(active),
-        "max_size": watchlist_store.max_size(),
+        # 2026-09-18 去掉 `max_size`：跟踪池不再有名义上限（见 watchlist_store 模块 docstring），
+        # 响应里留一个永远是 8 的字段只会让前端再算一次「超没超」。
         "items": [
             {"code": s["bare"], "name": s.get("name", ""),
              "industry": s.get("industry", ""), "lynch": s.get("lynch", ""),
