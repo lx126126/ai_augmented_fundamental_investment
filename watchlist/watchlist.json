@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-09-17",
+  "updated": "2026-09-18",
   "rules": {
     "max_size": 8,
     "cadence": "年报/中报季全量更新，Q1/Q3 按需轻量更新",
@@ -110,6 +110,18 @@
       "since": "2026-09",
       "color": "#D4763A",
       "source": "report"
+    },
+    {
+      "code": "600900.SH",
+      "name": "长江电力",
+      "industry": "电力",
+      "lynch": "稳健增长型 · 收息",
+      "status": "removed",
+      "since": "2026-09",
+      "color": "#7A6FF0",
+      "source": "manual",
+      "removed_at": "2026-09-18",
+      "removed_reason": "试功能，非真实跟踪标的"
     }
   ]
 }

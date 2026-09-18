@@ -124,17 +124,23 @@ def _read_raw() -> dict:
         return {"version": 1, "rules": {"max_size": DEFAULT_MAX_SIZE}, "stocks": []}
 
 
-def stocks() -> list[dict]:
+def stocks(include_removed: bool = False) -> list[dict]:
     """跟踪池条目（保持 json 里的顺序 = 页面上的人工排序）。
 
     每条都补齐 `bare`（无后缀代码）与 `color`（色点），调用方无需自己算。
+    默认**不含** `status == "removed"` 的条目（见 `remove()` 的软删说明）。
     """
     out: list[dict] = []
+    # ⚠️ enumerate 在下标过滤前算：`color` 的兜底 `PALETTE[i % len]` 依赖**原始位置**，
+    #    若先过滤再取下标，一次移出会让后面所有未落盘颜色的标的换色。
     for i, s in enumerate(_read_raw().get("stocks", [])):
         code = str(s.get("code", "")).strip()
         if not code:
             continue
         item = dict(s)
+        item.setdefault("status", "active")
+        if item["status"] == "removed" and not include_removed:
+            continue
         item["bare"] = bare(code)
         item["code"] = with_exchange(item["bare"]) if "." not in code else code
         item["color"] = s.get("color") or PALETTE[i % len(PALETTE)]
@@ -145,17 +151,27 @@ def stocks() -> list[dict]:
 
 
 def codes() -> list[str]:
-    """跟踪池代码（无后缀），保持 json 顺序。"""
+    """跟踪池代码（无后缀），保持 json 顺序。**不含已移出的**。"""
     return [s["bare"] for s in stocks()]
+
+
+def removed_codes() -> set[str]:
+    """已移出跟踪池的代码集合（软删留痕）。
+
+    存在的理由：`build_web_index` 对「有报告但不在池里」有兜底卡片（防入池链路断），
+    而**刻意移出**的标的必须排除在外 —— 否则「移出池」在首页上不生效（卡片仍在，
+    只是名字退化成代码）。两者靠 `status` 区分，不能靠"在不在池里"。
+    """
+    return {s["bare"] for s in stocks(include_removed=True) if s.get("status") == "removed"}
 
 
 def max_size() -> int:
     return int(_read_raw().get("rules", {}).get("max_size", DEFAULT_MAX_SIZE) or DEFAULT_MAX_SIZE)
 
 
-def get(code: str) -> dict | None:
+def get(code: str, include_removed: bool = False) -> dict | None:
     c = bare(code)
-    for s in stocks():
+    for s in stocks(include_removed=include_removed):
         if s["bare"] == c:
             return s
     return None
@@ -240,7 +256,12 @@ def add(code: str, name: str | None = None, industry: str | None = None,
     c = bare(code)
     if not c or re.fullmatch(r"0+", c):
         return False
-    if get(c) is not None:
+    existing = get(c, include_removed=True)
+    if existing is not None:
+        # 已移出的标的重新入池 → **恢复原条目**，不追加新条目
+        # （否则 json 里同名两条：active 一条 + removed 一条，留痕重复且难清理）。
+        if existing.get("status") == "removed":
+            return restore(c)
         return False
 
     name = name or _display_name(c)
@@ -248,6 +269,53 @@ def add(code: str, name: str | None = None, industry: str | None = None,
     lynch = lynch or classify_lynch(industry, name)
     _append(with_exchange(c), name, industry, lynch, source=source)
     return True
+
+
+def remove(code: str, reason: str = "") -> dict | None:
+    """移出跟踪池 —— **软删**：`status` 置 `removed`，保留名称/行业/颜色。
+
+    为什么软删而不是删条目：`build_web_index` 对「有报告但不在池里」有兜底卡片
+    （防入池链路静默断掉）。硬删会让**刻意移出**和**链路故障**长得一模一样，
+    兜底卡片于是照旧显示被移出的标的（2026-09-18 实测：移出 600900 后首页仍有卡片，
+    且名称退化成裸代码）。留一个 `status` 就能把两者分开。
+
+    硬删（彻底清掉条目）用 `prune()`。返回被移出的条目，不存在或已移出返回 None。
+    """
+    c = bare(code)
+    data = _read_raw()
+    for s in data.get("stocks", []):
+        if bare(s.get("code", "")) != c:
+            continue
+        if s.get("status") == "removed":
+            return None
+        s["status"] = "removed"
+        s["removed_at"] = date.today().isoformat()
+        if reason:
+            s["removed_reason"] = reason
+        data["updated"] = date.today().isoformat()
+        WATCHLIST_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        return dict(s, bare=c)
+    return None
+
+
+def restore(code: str) -> bool:
+    """把已移出的标的重新纳入跟踪池（清掉 `status`/`removed_at`/`removed_reason`）。"""
+    c = bare(code)
+    data = _read_raw()
+    for s in data.get("stocks", []):
+        if bare(s.get("code", "")) != c or s.get("status") != "removed":
+            continue
+        s["status"] = "active"
+        for k in ("removed_at", "removed_reason"):
+            s.pop(k, None)
+        data["updated"] = date.today().isoformat()
+        WATCHLIST_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        return True
+    return False
 
 
 def ensure_codes(codes_in: list[str]) -> list[str]:

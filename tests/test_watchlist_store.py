@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -161,3 +162,97 @@ def test_classify_lynch_by_keyword(industry, expected_kw):
 
 def test_classify_lynch_fallback_is_honest():
     assert wl.classify_lynch("玄学服务") == wl._LYNCH_FALLBACK
+
+
+# --------------------------------------------------------------------------- #
+# 移出池（软删）+ 恢复
+# --------------------------------------------------------------------------- #
+
+def test_remove_is_soft_delete(tmp_watchlist):
+    """移出是软删：条目留在 json 里、status 变 removed，但默认读不到。"""
+    _, p = tmp_watchlist
+    out = wl.remove("00700", reason="试功能")
+    assert out and out["bare"] == "00700"
+    assert wl.codes() == ["601088"]                       # 默认读：不含
+    assert "00700" in wl.removed_codes()
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    assert len(raw["stocks"]) == 2                        # 条目**没被删掉**
+    gone = wl.get("00700", include_removed=True)
+    assert gone["status"] == "removed" and gone["removed_reason"] == "试功能"
+
+
+def test_remove_is_idempotent(tmp_watchlist):
+    assert wl.remove("00700") is not None
+    assert wl.remove("00700") is None            # 已移出，不重复写
+    assert wl.remove("999999") is None           # 不存在
+
+
+def test_restore_brings_it_back(tmp_watchlist):
+    wl.remove("00700")
+    assert wl.restore("00700") is True
+    assert wl.codes() == ["601088", "00700"]     # 顺序保持 json 原序
+    gone = wl.get("00700", include_removed=True)
+    assert gone["status"] == "active"
+    assert "removed_at" not in gone and "removed_reason" not in gone
+    assert wl.restore("00700") is False          # 本就在池中
+
+
+def test_add_on_removed_restores_instead_of_duplicating(tmp_watchlist):
+    """回归：对已移出的标的 `add` 必须恢复原条目，不能追加出第二条同名记录。"""
+    _, p = tmp_watchlist
+    wl.remove("00700")
+    assert wl.add("00700") is True
+    raw = json.loads(p.read_text(encoding="utf-8"))
+    assert len(raw["stocks"]) == 2, "同一条目被追加了两次"
+    assert wl.codes() == ["601088", "00700"]
+
+
+def test_remove_does_not_shift_other_colors(tmp_watchlist, monkeypatch):
+    """回归：`stocks()` 的色值兜底用**原始下标** —— 移出一条不能让后面的标的换色。
+
+    若先按下标过滤再算 `PALETTE[i % len]`，移出第 1 只会让第 2 只的兜底色变化。
+    """
+    monkeypatch.setattr(wl, "_display_name", lambda c: "测试标的")
+    for c in ("600887", "600938"):
+        wl.add(c)
+    before = {s["bare"]: s["color"] for s in wl.stocks()}
+    wl.remove("601088")                            # 移出**第 1 条**
+    after = {s["bare"]: s["color"] for s in wl.stocks()}
+    for c, col in after.items():
+        assert col == before[c], f"{c} 因其他标的被移出而换色：{before[c]} → {col}"
+
+
+def test_removed_codes_distinguishes_from_never_pooled(tmp_watchlist):
+    """`removed_codes()` 只含**刻意移出**的，不含从没入过池的。
+
+    这个区分是首页兜底卡片正确与否的全部依据（见 `build_web_index.build_cards`）。
+    """
+    wl.remove("00700")
+    assert wl.removed_codes() == {"00700"}
+    assert "600887" not in wl.removed_codes()      # 从没入过池
+
+
+# --------------------------------------------------------------------------- #
+# 跨文件一致性：.gitignore 白名单（防漂移断言）
+# --------------------------------------------------------------------------- #
+
+def test_gitignore_whitelist_matches_watchlist():
+    """`.gitignore` 的跟踪池白名单必须与 `watchlist.json` 完全一致。
+
+    为什么用断言而不是"记得手工同步"：`.gitignore` 里 `reports/**/*.html` 是**全忽略**，
+    逐只放行靠 `!reports/**/<code>.html` —— 这是一份**人工维护的清单**，
+    而跟踪池会因为「生成过报告即入池」随时变长，两者必然漂移。
+
+    2026-09-18 实测后果：新入池的长江电力（600900）漏加白名单 → 报告静默不入库，
+    没有任何报错。这条测试把"忘了同步"从静默错误变成红色失败。
+
+    修法：`python scripts/watchlist.py sync-gitignore`
+    """
+    gi = (wl.ROOT / ".gitignore").read_text(encoding="utf-8")
+    listed = set(re.findall(r"^!reports/\*\*/(\d{5,6})\.html$", gi, re.M))
+    pool = set(wl.codes())
+    assert listed == pool, (
+        "`.gitignore` 白名单与跟踪池不一致 —— 跑 `python scripts/watchlist.py sync-gitignore`\n"
+        f"  只在白名单里：{sorted(listed - pool)}\n"
+        f"  只在跟踪池里：{sorted(pool - listed)}"
+    )

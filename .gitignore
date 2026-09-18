@@ -30,27 +30,25 @@ data/validation/*.pdf
 # 每日刷新日志（launchd 输出 + .last_success 闸门文件，本地留痕即可）
 data/logs/
 
-# 报告归档：只跟踪「观察池」标的，按需生成的报告不入库（方案 B，2026-09-17 拍板）
-#
-# 背景：产品上线后「每查一只就多一个 reports/<期>/<code>.html」，仓库会随使用无限膨胀，
-#       而按需生成的多是随手查询的标的，没有归档价值。
-# 注意：gitignore 对**已跟踪**文件无效 —— 新增此规则后，历史上已入库的非观察池报告
-#       需要显式 `git rm --cached <file>`（文件保留在磁盘上，服务照常可读）。
-# 维护：新增/移除观察池标的时，同步增删下面一行 !reports/**/<code>.html
+# >>> 跟踪池报告白名单 —— 由 `python scripts/watchlist.py sync-gitignore` 生成，勿手改 >>>
+# 机制：reports/ 下的报告**默认全部忽略**（按需查询的随手标的没有归档价值，
+#       否则仓库随使用无限膨胀）；只有「跟踪池」标的的报告入库。
+# 真源：watchlist/watchlist.json。要增删标的请改那份 json 再跑 sync-gitignore ——
+#       **手工在这里加一行会在下次 sync 时被覆盖**。
+# 漂移防线：tests/test_watchlist_store.py 有一条断言，白名单与跟踪池不一致就报错。
 reports/**/*.html
-# 跟踪池（watchlist/watchlist.json，2026-09-17 起「生成过报告即入池」，共 11 只）
+!reports/**/601088.html
+!reports/**/600519.html
 !reports/**/000651.html
+!reports/**/601328.html
 !reports/**/00700.html
 !reports/**/09992.html
-!reports/**/600519.html
-!reports/**/601088.html
-!reports/**/601328.html
+!reports/**/00883.html
 !reports/**/300061.html
 !reports/**/600036.html
 !reports/**/600887.html
-# 中国海油 A/H 两只（小红书发布包素材，长期保留）
 !reports/**/600938.html
-!reports/**/00883.html
+# <<< 跟踪池报告白名单 <<<
 
 # ⚠️ templates/valueline.html 故意保持跟踪：
 #   build() 会把最近一次渲染结果写到那里，tests/test_report_style.py 断言了这个路径，

@@ -155,10 +155,16 @@ def _card(code: str, meta: dict, path: str, q: dict | None, hist_n: int) -> str:
 
 
 def build_cards(newest_report: dict[str, str]) -> tuple[str, list[str]]:
-    """生成卡片 HTML。顺序：跟踪池顺序优先，池外有报告的追加在后。"""
+    """生成卡片 HTML。顺序：跟踪池顺序优先，池外有报告的追加在后。
+
+    ⚠️ 兜底卡片要**排除刻意移出的标的**（`wl.removed_codes()`）：那两个 for 循环
+    处理的是两类完全不同的情况 —— 池内是正常态，池外是异常态。若不排除移出的，
+    「移出跟踪池」在首页上就不生效（卡片仍在，名字退化成裸代码）。
+    """
     pool = wl.stocks()
     pool_codes = [s["bare"] for s in pool]
-    extra = [c for c in sorted(newest_report) if c not in pool_codes]
+    removed = wl.removed_codes()
+    extra = [c for c in sorted(newest_report) if c not in pool_codes and c not in removed]
 
     cards, shown = [], []
     for s in pool:
