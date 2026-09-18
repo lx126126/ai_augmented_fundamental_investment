@@ -109,9 +109,13 @@ def cmd_list(_args) -> int:
         return 0
     print(f"跟踪池 {len(items)} 只（不设上限 —— 生成过报告即入池）\n")
     for i, s in enumerate(items, 1):
+        # `source` / `since` 是老条目可能没有的字段（它们入池时这套元数据还没引入）
+        # —— 缺值必须兜底成 `—`，否则打印成 `(, 2026-08)`，看起来像字段坏了。
+        src = s.get("source") or "—"
+        since = s.get("since") or "—"
         print(f"  {i:>2}. {s['code']:<11} {s.get('name', ''):<10} "
               f"│ {s.get('industry', ''):<10} │ {s.get('lynch', '')}"
-              f"  {s.get('color', '')}  ({s.get('source', '')}, {s.get('since', '')})")
+              f"  {s.get('color', '')}  ({src}, {since})")
 
     gone = [s for s in wl.stocks(include_removed=True) if s.get("status") == "removed"]
     if gone:
