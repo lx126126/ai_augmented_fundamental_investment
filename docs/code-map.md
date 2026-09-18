@@ -113,9 +113,11 @@ ls tests/test_*.py | wc -l                                                  # 21
                   │        ├→ src.data.quality.validate_all     （勾稽体检 → sanity）
                   │        ├→ src.analysis.fraud.fraud_check    （M-Score 等）
                   │        ├→ src.review.lynch.classify         （六类分类）
-                  │        ├→ src.report.mda_extract.extract    （经营结构，缓存）
-                  │        ├→ src.report.llm.generate_narrative （叙事层）  ← 跳过：--daily
-                  │        └→ src.report.quarterly_review.get_or_generate  ← 跳过：--daily
+│        ├→ src.report.mda_extract.extract    （经营结构，缓存）
+│        ├→ src.report.llm.generate_narrative （叙事层）
+│        │       daily=True → **复用缓存**（ignore_hash=True，不调 LLM）
+│        └→ src.report.quarterly_review.get_or_generate
+│                daily=True → **只读缓存**（cache_only=True，不联网）
                   ├→ 渲染（数十个 build_xxx() 从全局变量读数据）
                   └→ templates/valueline.html  +  reports/{期}/{code}.html
 
@@ -137,8 +139,12 @@ ls tests/test_*.py | wc -l                                                  # 21
 | 叙事层 | `data/cache/`（LLM） | facts-hash（**含估值与市值**） | 行情一变即失效重新生成 LLM |
 | 季度解读 | `data/cache/quarterly_review/` | facts-hash | `--refresh-narrative` 强制刷新 |
 
-> ⚠️ 叙事层哈希含行情 → **每次刷新股价都会重新调用 LLM**。这是设计行为，
-> 但也意味着「只想更新股价」时应该用 `--daily`（跳过 LLM），否则会白烧 token。
+> ⚠️ 叙事层哈希含行情 → **每次刷新股价都会让哈希失效**。所以日更 / 只刷估值时必须走
+> `--daily`，否则会白烧 token。
+> 🔴 但 `--daily` **不能「跳过 LLM」了事**：跳过 = 叙事留空，而 `build()` 会无条件把整份
+> HTML 覆盖写回归档 —— 实测 2026-09-17 那次日更把 11 只报告的「投资逻辑 / 风险提示」
+> 全洗成了「待 LLM 生成」，零报错。现在的语义是 **`--daily` 复用缓存**
+> （叙事 `ignore_hash=True`、季报解读 `cache_only=True`），细节见 `docs/report-chains.md` §8。
 
 ---
 
@@ -170,13 +176,19 @@ ls tests/test_*.py | wc -l                                                  # 21
 `build_web_index.py`、`build_watchlist.py`、`daily_refresh.py`、`web/server.py`
 全部改读它 —— 三处 `STOCK_META` 已全部删除。
 
-**入池规则**（2026-09-17 定）：**生成过报告即入池**，不设硬上限。
-`rules.max_size = 8` 降级为页面提示（「跟踪池 11 只 · 已超名义上限 8 只」），不阻断写入。
-落地点两处：`web/server.py`（网页按需生成后 `add()`）与 `daily_refresh.py`（读同一清单）。
-海油 A+H、伊利、300061 已按此规则补入，当前 **11 只**。
+**入池规则**（2026-09-17 定，2026-09-18 收紧）：**生成过报告即入池，不设上限**。
+`rules.max_size = 8` 那一版「仅页面提示」已**删除**（不阻断写入却长期显示「已超名义上限」，
+只会训练人忽略告警）；`max_size()` 函数、`rules.max_size` 字段、对比表表头告警与
+`/api/watchlist` 响应字段一并去掉，`tests/test_watchlist_store.py::test_no_max_size_anywhere`
+防它被加回来。
+落地点两处：`web/server.py`（网页按需生成后 `upsert_from_report()`）与
+`build_valueline._sync_watchlist()`（报告口径回写，覆盖全部调用方）。
 
-⚠️ 新增/移除标的时**只需改 `watchlist/watchlist.json`**；但 `.gitignore` 里
-`reports/**/*.html` 的白名单需同步增删一行（报告默认不入库，只留跟踪池的）。
+⚠️ 新增/移除标的**只需改 `watchlist/watchlist.json`**（或跑 `scripts/watchlist.py`），
+不再需要同步任何清单 —— `reports/` 已于 2026-09-18 **整目录出库**，仓库只留代码与报告模板，
+原先那套 `reports/**/*.html` + `!reports/**/<code>.html` 白名单机制已彻底删除。
+
+> 运行时链路（旧标的更新 / 新标的生成、launchd、失败面）见 **`docs/report-chains.md`**。
 
 **后果**：
 

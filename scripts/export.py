@@ -12,6 +12,8 @@
 说明：
     - PNG 为高清长图（device_scale_factor=2），可直接用于小红书 / 小程序素材。
     - PDF 按 A4 打印，适合归档与分享。
+    - 两者都**不含导航元素**（报告页顶部的「← 返回首页」由本脚本注入 CSS 隐藏）：
+      导出物是交付素材，带返回链接很出戏。
 """
 from __future__ import annotations
 
@@ -41,6 +43,11 @@ def export(html_path: Path, out_dir: Path, formats: list[str], width: int = 1080
         )
         page.goto(uri)
         page.wait_for_timeout(300)
+        # 隐藏页面上的导航元素（报告页顶部的「← 返回首页」）。
+        # 🔴 不能只靠 CSS 的 @media print：PNG 走的是**屏幕**媒体，
+        #    媒体查询拦不住它 —— 长图素材里会明晃晃印着一个返回链接。
+        #    这里显式注入，对 PNG 与 PDF 都生效。
+        page.add_style_tag(content=".nav-back { display: none !important; }")
 
         if "png" in formats:
             page.screenshot(path=str(out_dir / f"{stem}.png"), full_page=True)

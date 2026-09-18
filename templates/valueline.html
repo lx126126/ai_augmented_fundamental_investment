@@ -50,6 +50,13 @@ body {
 }
 .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid var(--accent); }
 .co-name { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: var(--accent); line-height: 1.15; }
+/* 「← 返回首页」入口（2026-09-18 加）。
+   href 是 `../web/index.html` 占位符，**同一个值不能同时满足两个产出位置**：
+   templates/valueline.html 在仓库根下一层、reports/{期}/ 在两层，相对路径必须分开算
+   （见 build() 里的两次 replace）。服务模式下两者都解析成 /web/index.html，
+   由 web/server.py 的路由别名兜住。导出长图/PDF 时由 scripts/export.py 隐藏。 */
+.nav-back { margin: 0 0 14px; }
+.nav-back a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; border: 1px solid var(--line); background: var(--bg-soft); border-radius: 4px; padding: 4px 11px; }
 .co-name .en { font-size: 14px; font-weight: 400; color: var(--faint); letter-spacing: 0.5px; margin-left: 10px; }
 .co-meta { margin-top: 9px; font-size: 12px; color: var(--muted); line-height: 1.8; }
 .co-meta .tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; margin-right: 7px; border: 1px solid var(--line); background: var(--bg-soft); color: var(--muted); }
@@ -351,6 +358,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 <body>
 <div class="page">
 
+  <div class="nav-back"><a href="../web/index.html">← 返回首页</a></div>
+
   <div class="header">
     <div>
       <div class="co-name">中国海油</div>
@@ -364,15 +373,15 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
     <div class="header-right">
       <span class="quarter">2026Q2 更新</span>
       <div class="badges">
-        <span class="badge lynch">林奇分类：待分析</span>
-        <span class="badge graham">格雷厄姆质量：—（资产负债率 26.7% · 流动比率 3.24 · 近5年连续盈利 · 净现金）</span>
+        <span class="badge lynch">林奇分类：周期型（高股息资源龙头）</span>
+        <span class="badge graham">格雷厄姆质量：高（资产负债率 26.7% · 流动比率 3.24 · 近5年连续盈利 · 净现金）</span>
       </div>
     </div>
   </div>
 
   <div class="section">
     <div class="sec-title">商业模式 <span class="hint">靠什么赚钱 · 竞争地位 · 护城河</span></div>
-<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">主营业务为原油和天然气的勘探、开发、生产及销售；分业务收入占比：勘探及生产 86.8%、贸易业务 13.0%、公司 0.26%。</div></div>
+<div class="biz"><div class="biz-v" style="font-size:12px;line-height:1.9;color:#33404f;">主营业务为原油和天然气的勘探、开发、生产及销售；分业务收入占比：勘探及生产 86.8%、贸易业务 13.0%、公司 0.26%。靠勘探及生产板块贡献86.8%收入，即原油和天然气的勘探、开发、生产与销售，贸易业务以13.0%收入占比辅助流转。利润核心来自上游勘探及生产，贸易业务虽占收入13.0%但以流转为主，公司整体净利率30.7%体现上游盈利主导。<span style="color:var(--accent);font-weight:600;">护城河：</span>行业营业总收入排名第1/5家，份额96.16%，资源禀赋与规模构成壁垒，海上油气勘探开发的高资本开支与牌照门槛形成天然护城河。</div></div>
 <div class="competition"><div class="comp-title">竞争地位 · 油气开采Ⅱ（2025 年报）<span class="comp-note">营业总收入口径：东财业绩报表</span></div><div class="comp-grid"><div class="comp-item"><div class="lbl">营业总收入排名</div><div class="v">第 1 / 5</div></div><div class="comp-item"><div class="lbl">营业总收入份额</div><div class="v" style="color:var(--accent-2)">96.2%</div></div><div class="comp-item"><div class="lbl">营业总收入</div><div class="v">3982 亿</div></div></div><div class="peer-list"><div class="peer-row self"><span class="peer-name">中国海油</span><div class="peer-track"><div class="peer-bar" style="width:100.0%"></div></div><span class="peer-val">3982</span></div><div class="peer-row"><span class="peer-name">新潮能源</span><div class="peer-track"><div class="peer-bar" style="width:1.8%"></div></div><span class="peer-val">73</span></div><div class="peer-row"><span class="peer-name">海南矿业</span><div class="peer-track"><div class="peer-bar" style="width:1.1%"></div></div><span class="peer-val">44</span></div><div class="peer-row"><span class="peer-name">蓝焰控股</span><div class="peer-track"><div class="peer-bar" style="width:0.5%"></div></div><span class="peer-val">21</span></div><div class="peer-row"><span class="peer-name">ST洲际</span><div class="peer-track"><div class="peer-bar" style="width:0.5%"></div></div><span class="peer-val">21</span></div></div></div>
   </div>
 
@@ -387,8 +396,8 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
   </div>
 
   <div class="section">
-    <div class="sec-title">季度财报解读 <span class="hint">AI 摘要 · 依据 最新定期报告原文 + 单季财务数据</span></div>
-<div style="font-size:11px;color:var(--faint);padding:8px 0;">季度财报解读待生成（需配置 DEEPSEEK_API_KEY，且能访问巨潮资讯网）。</div>
+    <div class="sec-title">季度财报解读 <span class="hint">AI 摘要 · 依据 半年报原文 + 单季财务数据</span></div>
+<div class="qrev"><div class="qr-grid"><div class="qr-col"><div class="qr-h">季度数据表现</div><p>26Q2单季营业总收入1265.8亿元、归母净利润466.7亿元，同比分别增长25.6%和41.6%，环比增长9.0%和19.2%；单季毛利率55.6%、净利率36.9%，经营现金流净额864.8亿元，同比增长66.6%。年初至今累计营业总收入2426.6亿元、归母净利润858.2亿元，同比分别增长16.9%和23.4%，累计经营现金流净额1416.3亿元，同比增长29.7%。对比单季走势序列，26Q2收入与利润均创序列内新高，毛利率55.6%为序列最高水平，收入同比增速25.6%也是序列内最高，扭转了25Q2、25Q4收入同比为负的态势。最关键变化是单季收入同比由25Q2的-12.6%大幅回升至25.6%，量价齐升驱动业绩重回高增长。</p></div><div class="qr-col"><div class="qr-h">经营结构解读</div><p>分业务收入占比显示，勘探及生产业务占比86.8%，贸易业务占比13.0%，公司占比0.26%，收入结构高度集中于上游油气勘探生产。原文披露上半年油气销售收入2060.86亿元，同比增长20.0%，其中石油液体收入1789.13亿元，同比增长24.2%，天然气收入271.73亿元，同比下降2.1%。石油液体销量303.6百万桶，同比增长4.7%，实现价格85.49美元/桶，同比上涨23.6%；天然气销量492.3十亿立方英尺，同比增长0.6%，实现价格8.00美元/千立方英尺，同比上涨1.3%。收入增长主要由石油液体量价齐升驱动，天然气收入小幅下滑，结构上石油液体贡献进一步强化。</p></div><div class="qr-col"><div class="qr-h">管理层观点与战略</div><p>管理层表示，下半年将坚持价值勘探、大中型油气田勘探思路，不断夯实资源基础；严守安全生产底线，持续提升建产效能，确保全年生产经营目标顺利完成；深化精益管理，持续巩固成本竞争优势，不断提高价值创造能力。上半年资本支出619.93亿元，同比上升7.6%，其中勘探投资96.28亿元、开发投资390.94亿元、生产资本化128.39亿元。公司未披露量化营业总收入增长目标，仅能归纳上述质性的重点方向。</p></div></div><div class="qr-cf-wrap"><div class="qr-h">现金流异动归因</div><p>本期现金流归因数据未取到，无法按科目拆解经营现金流同比变动的具体原因。从原文披露看，上半年经营活动产生的现金流量净额为1416.31亿元，同比增加29.7%，主要变动科目为油气销量及国际油价同步上涨带来的销售现金流入增加；投资活动现金流量净额为-547.33亿元，同比减少25.8%，主要是投资定期存款的净流出减少；融资活动现金流量净额为-33.42亿元，同比减少85.1%，主要是本期偿还债务支付的现金同比减少。由于未提供「剔除财务公司科目后」的主业口径数据，无法判断总额变动是否主要由财务公司科目造成，此处不作推测。</p></div><div class="qr-watch-wrap"><div class="qr-h">投资者需要关注</div><ul class="qr-watch"><li>下半年石油液体实现价格能否维持85美元/桶以上，验证油价假设对收入增速的支撑</li><li>油气销量增速能否延续，特别是石油液体销量同比4.7%的增幅是否进一步扩大</li><li>勘探费用同比大增50.1%后，下半年风险勘探投入节奏及对利润的影响</li></ul></div><div class="qr-foot">依据：中国海洋石油有限公司2026年半年度报告 · 原文「管理层讨论与分析」4295 字 · 由 DeepSeek 基于上述材料生成，AI 摘要非本人观点</div></div>
   </div>
 
   <div class="section">
@@ -411,12 +420,12 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">投资逻辑</div>
-<ul class="thesis"><li>投资逻辑待 LLM 生成</li></ul>
+<ul class="thesis"><li>资产负债率仅26.7%，经营现金流2090.4亿远超净利1220.8亿，财务稳健且现金创造能力强。</li><li>分红比例44.6%、股息率3.4%，在周期型龙头中提供持续现金回报，符合格雷厄姆安全边际。</li><li>行业营业总收入份额96.16%、排名第1，规模优势显著，油价中枢稳定时盈利韧性突出。</li></ul>
   </div>
 
   <div class="section">
     <div class="sec-title">风险提示</div>
-<ul class="risk"><li>风险提示待 LLM 生成</li></ul>
+<ul class="risk"><li>PE近10年分位90%、PB分位75%，估值处于历史高位，若油价回落则盈利与估值双承压。</li><li>2025年营业总收入3982.2亿同比下滑，净利1220.8亿较2024年1379.4亿下降，周期下行已现。</li><li>收入86.8%依赖勘探及生产，油价波动直接冲击利润，贸易业务13.0%难以对冲上游价格风险。</li></ul>
   </div>
 
   <div class="section">
@@ -427,7 +436,7 @@ table.dense .row-head { font-weight: 500; color: #33404f; }
 
   <div class="section">
     <div class="sec-title">数据校验记录</div>
-<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>7/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>✓ 总负债</b>：一致</div><div><b>✓ 总股本</b>：一致</div><div><b>业务勾稽：</b>8/8 项通过</div><div><b>校验日期：</b>2026-09-17</div></div>
+<div class="verify"><div><b>数据来源：</b>AKShare（主）+ 东方财富（备用）；金标准：巨潮官方年报 PDF</div><div><b>校验结果：</b>7/7 项与官方年报一致（容差 &lt;0.1%）</div><div><b>✓ 营业收入</b>：一致</div><div><b>✓ 归母净利润</b>：一致</div><div><b>✓ 经营现金流净额</b>：一致</div><div><b>✓ 归母净资产</b>：一致</div><div><b>✓ 总资产</b>：一致</div><div><b>✓ 总负债</b>：一致</div><div><b>✓ 总股本</b>：一致</div><div><b>业务勾稽：</b>8/8 项通过</div><div><b>校验日期：</b>2026-09-18</div></div>
   </div>
 
   <div class="footer">

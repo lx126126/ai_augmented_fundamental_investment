@@ -145,3 +145,33 @@ def test_builder_is_the_template_source():
     assert "TEMPLATE = " in src, "模板应内联在 build_valueline.py 的 TEMPLATE 变量里"
     # 产物路径必须由脚本写出（说明它是产物，不是源）
     assert 'root / "templates" / "valueline.html"' in src or "templates\" / \"valueline.html" in src
+
+
+def test_report_back_home_link_works_offline_and_behind_server():
+    """报告页顶部的「← 返回首页」必须两种打开方式都能点开，且不进导出素材。
+
+    报告落在 `reports/{期}/`（比仓库根深两层），首页在 `web/`（深一层）——
+    **同一个相对路径不可能同时满足两个落点**，所以 href 写成 `@@HOME_HREF@@` 占位符、
+    由 `build()` 按落点各替换一次。服务模式下两个相对路径都解析成 `/web/index.html`，
+    靠 `server.py` 的路由别名兜住（离线双击走的是文件系统路径）。
+
+    第三层要求来自导出：`scripts/export.py` 用 Playwright 截**全页长图**当小红书素材，
+    页面上带个「返回首页」很出戏。而且 PNG 走的是**屏幕**媒体，`@media print` 拦不住，
+    必须由导出脚本显式隐藏。
+    """
+    src = _builder_src()
+    tpl = src[src.find("TEMPLATE = "):]
+    assert '<a href="@@HOME_HREF@@">← 返回首页</a>' in tpl, "报告模板里没有回首页入口"
+
+    hrefs = set(re.findall(r'^\s*(?:tpl|report)_href = "([^"]+)"', src, re.M))
+    assert hrefs == {"../web/index.html", "../../web/index.html"}, (
+        f"两个产出位置的相对路径必须各自算，实际：{hrefs}"
+    )
+
+    srv = (ROOT / "web" / "server.py").read_text(encoding="utf-8")
+    assert '@app.get("/web/index.html"' in srv, \
+        "服务端缺少 /web/index.html 别名 —— 服务模式下报告页的返回链接会 404"
+
+    exp = (ROOT / "scripts" / "export.py").read_text(encoding="utf-8")
+    assert ".nav-back" in exp and "display: none" in exp, \
+        "导出脚本没有隐藏导航元素 —— 长图/PDF 素材里会出现「返回首页」"
