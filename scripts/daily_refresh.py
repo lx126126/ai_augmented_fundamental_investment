@@ -53,7 +53,6 @@ webserver」那一整套（需 3~4GB 常驻内存）。而本场景的负载是�
 """
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
 import traceback
@@ -65,7 +64,6 @@ sys.path.insert(0, str(ROOT))
 # scripts/ 也要进 path：build_valueline.py 里是裸导入 `from _sample_data import ...`
 sys.path.insert(0, str(SCRIPTS))
 
-WATCHLIST = ROOT / "watchlist" / "watchlist.json"
 RAW_DIR = ROOT / "data" / "raw"
 
 
@@ -82,15 +80,21 @@ def _store_code(code: str) -> str:
 
 
 def load_codes() -> list[str]:
-    """读跟踪池；文件缺失或为空时回退扫描 data/raw 已落盘标的。"""
-    if WATCHLIST.exists():
-        try:
-            data = json.loads(WATCHLIST.read_text(encoding="utf-8"))
-            codes = [s["code"] for s in data.get("stocks", []) if s.get("code")]
-            if codes:
-                return codes
-        except Exception as e:
-            print(f"[warn] 读跟踪池失败，回退扫描 data/raw：{e}")
+    """读跟踪池；文件缺失或为空时回退扫描 data/raw 已落盘标的。
+
+    🔴 **必须走 `watchlist_store.codes()`，不能直接读 json 取全部 code**。
+    2026-09-18 加软删（`status: removed` 留痕、`restore` 可撤回）之后，直接读 json
+    会把**已移出的标的也算进来** —— 实测 300061 / 600900 移出后每天仍被刷新：
+    白拉行情、白刷报告，且「移出池」这件事在数据层从未生效（页面上看不出、
+    日志里也不报错，只是每天多干两份活）。
+    """
+    try:
+        from src.data import watchlist_store as wl
+        codes = wl.codes()  # 内部已过滤 status == "removed"
+        if codes:
+            return codes
+    except Exception as e:
+        print(f"[warn] 读跟踪池失败，回退扫描 data/raw：{e}")
     if RAW_DIR.exists():
         return sorted(p.name for p in RAW_DIR.iterdir() if p.is_dir())
     return []

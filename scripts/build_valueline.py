@@ -1612,6 +1612,13 @@ body {
 }
 .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 16px; border-bottom: 3px solid var(--accent); }
 .co-name { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: var(--accent); line-height: 1.15; }
+/* 「← 返回首页」入口（2026-09-18 加）。
+   href 是 `@@HOME_HREF@@` 占位符，**同一个值不能同时满足两个产出位置**：
+   templates/valueline.html 在仓库根下一层、reports/{期}/ 在两层，相对路径必须分开算
+   （见 build() 里的两次 replace）。服务模式下两者都解析成 /web/index.html，
+   由 web/server.py 的路由别名兜住。导出长图/PDF 时由 scripts/export.py 隐藏。 */
+.nav-back { margin: 0 0 14px; }
+.nav-back a { display: inline-block; font-size: 12px; color: var(--muted); text-decoration: none; border: 1px solid var(--line); background: var(--bg-soft); border-radius: 4px; padding: 4px 11px; }
 .co-name .en { font-size: 14px; font-weight: 400; color: var(--faint); letter-spacing: 0.5px; margin-left: 10px; }
 .co-meta { margin-top: 9px; font-size: 12px; color: var(--muted); line-height: 1.8; }
 .co-meta .tag { display: inline-block; padding: 2px 9px; border-radius: 3px; font-size: 11px; margin-right: 7px; border: 1px solid var(--line); background: var(--bg-soft); color: var(--muted); }
@@ -1922,6 +1929,8 @@ TEMPLATE = """<!DOCTYPE html>
 <body>
 <div class="page">
 
+  <div class="nav-back"><a href="@@HOME_HREF@@">← 返回首页</a></div>
+
   <div class="header">
     <div>
       <div class="co-name">@@COMPANY_NAME@@</div>
@@ -2068,11 +2077,15 @@ def _facts_hash(facts) -> str:
     return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
-def _load_cached_narrative(code: str, facts):
+def _load_cached_narrative(code: str, facts, ignore_hash: bool = False):
     """读叙事层缓存：仅当事实数据哈希一致时复用，数据一变自动失效。
 
     LLM 输出本身不确定（同样的事实每次生成文本都不同），每次重建都重调既烧 token
     又让报告内容无意义地漂移。缓存后「数据没变 → 叙事不变」。
+
+    `ignore_hash=True`：不看哈希，直接取**最近一次生成的那份叙事**。
+    日更链路用它 —— 见 `daily` 分支的说明：日更改的是行情，财务事实没变，
+    叙事文本必须留下来，否则每天 16:30 一过，所有标的的投资逻辑/风险提示都变成占位。
     """
     import json
     p = NARRATIVE_CACHE_DIR / f"{code}.json"
@@ -2080,7 +2093,7 @@ def _load_cached_narrative(code: str, facts):
         return None
     try:
         obj = json.loads(p.read_text(encoding="utf-8"))
-        if obj.get("hash") == _facts_hash(facts):
+        if ignore_hash or obj.get("hash") == _facts_hash(facts):
             return obj.get("narrative")
     except Exception:
         return None
@@ -2164,25 +2177,44 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
         COMPANY_CODE = code
-        # LLM 生成叙事层（数据先行）。每日刷新跳过（财务数据未变，叙事不变，省 token）
+        # LLM 生成叙事层（数据先行）
         NARRATIVE = None
-        if (not daily) and _HAS_LLM and real.get("narrative_data"):
-            _facts = real["narrative_data"]
-            NARRATIVE = None if refresh_narrative else _load_cached_narrative(code, _facts)
-            if NARRATIVE is None:
-                NARRATIVE = generate_narrative(_facts)
-                if NARRATIVE:
-                    _save_narrative(code, _facts, NARRATIVE)
-                print("  叙事层: LLM 重新生成")
-            else:
-                print("  叙事层: 复用缓存（事实数据未变）")
+        if real.get("narrative_data"):
+            if daily:
+                # 🔴 日更必须**复用缓存**，不能像原来那样直接跳过。
+                # 跳过 = 叙事留空，而 build() 下面照常把整份 HTML 覆盖写回
+                # `reports/{期}/{code}.html` —— 于是每天 16:30 一过，全池报告的
+                # 「投资逻辑 / 风险提示 / 商业模式」都变成「待 LLM 生成」，
+                # **零报错、零日志**。2026-09-18 实测：11 只归档报告全中，
+                # 而同日按需生成的长江电力 / 美的集团是完整的。
+                # ignore_hash=True：日更改的是**行情**，财务事实没变，叙事就该留着
+                #（哈希里含市值/估值，行情一动哈希必变，不能拿哈希判断该不该留）。
+                NARRATIVE = _load_cached_narrative(
+                    code, real["narrative_data"], ignore_hash=True)
+                print("  叙事层: 复用上次缓存（日更不重算，省 token）")
+            elif _HAS_LLM:
+                _facts = real["narrative_data"]
+                NARRATIVE = None if refresh_narrative else _load_cached_narrative(code, _facts)
+                if NARRATIVE is None:
+                    NARRATIVE = generate_narrative(_facts)
+                    if NARRATIVE:
+                        _save_narrative(code, _facts, NARRATIVE)
+                    print("  叙事层: LLM 重新生成")
+                else:
+                    print("  叙事层: 复用缓存（事实数据未变）")
         # 季度财报解读：抓最新定期报告原文 + 单季财务事实 → DeepSeek（同样按事实哈希缓存）
         QUARTER_REVIEW = None
-        if (not daily) and _HAS_QREVIEW and real.get("quarter_review_facts"):
-            QUARTER_REVIEW = get_quarter_review(
-                code, real["quarter_review_facts"], refresh=refresh_narrative
-            )
-            print("  季度财报解读: " + ("已生成" if QUARTER_REVIEW else "跳过（无 API key 或生成失败）"))
+        if _HAS_QREVIEW and real.get("quarter_review_facts"):
+            if daily:
+                # 同叙事层：日更只读缓存，绝不联网（重抓巨潮原文 + 调模型都太贵）
+                QUARTER_REVIEW = get_quarter_review(
+                    code, real["quarter_review_facts"], cache_only=True)
+                print("  季度财报解读: " + ("复用缓存" if QUARTER_REVIEW else "无缓存，保留占位"))
+            else:
+                QUARTER_REVIEW = get_quarter_review(
+                    code, real["quarter_review_facts"], refresh=refresh_narrative
+                )
+                print("  季度财报解读: " + ("已生成" if QUARTER_REVIEW else "跳过（无 API key 或生成失败）"))
         data_src = f"真实数据 {code}"
     else:
         report_period = "2026Q2"
@@ -2240,14 +2272,20 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
 
     root = Path(__file__).resolve().parent.parent
 
+    # 「← 返回首页」的 href 随产出位置不同（`@@HOME_HREF@@` 占位符的定义见 TEMPLATE 上方）：
+    #   templates/valueline.html      深度 1 → ../web/index.html
+    #   reports/{期}/{code}.html      深度 2 → ../../web/index.html
+    tpl_href = "../web/index.html"
+    report_href = "../../web/index.html"
+
     # 1. templates/valueline.html（预览/调版式）
     tpl_out = root / "templates" / "valueline.html"
-    tpl_out.write_text(html, encoding="utf-8")
+    tpl_out.write_text(html.replace("@@HOME_HREF@@", tpl_href), encoding="utf-8")
 
     # 2. reports/{报告期}/{code}.html（归档报告）
     report_out = root / "reports" / report_period / f"{code}.html"
     report_out.parent.mkdir(parents=True, exist_ok=True)
-    report_out.write_text(html, encoding="utf-8")
+    report_out.write_text(html.replace("@@HOME_HREF@@", report_href), encoding="utf-8")
 
     # 报告已落盘 → 用报告口径回写跟踪池（Lynch 分类的唯一真源，见函数 docstring）
     if data_src.startswith("真实数据"):

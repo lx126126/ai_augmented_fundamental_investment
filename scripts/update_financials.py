@@ -58,7 +58,6 @@ from src.data.storage import save_all, missing_tables  # noqa: E402
 from src.data import market_index  # noqa: E402
 
 RAW_DIR = ROOT / "data" / "raw"
-WATCHLIST = ROOT / "watchlist" / "watchlist.json"
 LOG_DIR = ROOT / "data" / "logs"
 
 
@@ -75,15 +74,14 @@ def store_code(symbol: str) -> str:
 
 
 def _load_watchlist() -> list[tuple[str, str]]:
-    if not WATCHLIST.exists():
-        return []
-    obj = json.loads(WATCHLIST.read_text(encoding="utf-8"))
-    out = []
-    for s in obj.get("stocks", []):
-        code = str(s.get("code", "")).split(".")[0]
-        if code:
-            out.append((store_code(code), "HK" if is_hk(code) else "A"))
-    return out
+    """观察池标的（`--scope watchlist`）。
+
+    走 `watchlist_store.codes()` 而不是直接读 json：软删（`status: removed`）的条目
+    必须排除，否则「移出池」的标的仍会被季更拉一遍财报（见 daily_refresh.load_codes
+    的同款说明）。
+    """
+    from src.data import watchlist_store as wl
+    return [(store_code(c), "HK" if is_hk(c) else "A") for c in wl.codes()]
 
 
 def _resolve_targets(scope: str, codes: list[str] | None) -> list[tuple[str, str]]:

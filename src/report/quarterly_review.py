@@ -179,7 +179,7 @@ def generate(facts: dict, mdd_text: str, report_meta: dict | None) -> dict | Non
 
 
 def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
-                    stale_days: float = 3.0) -> dict | None:
+                    stale_days: float = 3.0, cache_only: bool = False) -> dict | None:
     """带缓存的入口：财务事实或报告原文一变，缓存自动失效。
 
     缓存键同时包含「财务事实哈希」与「原文哈希」——只哈希财务事实的话，
@@ -187,6 +187,11 @@ def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
 
     另外设了 stale_days：命中缓存时不再重抓巨潮（否则每次重建报告都要多打两三个
     网络请求），超过该天数才重新拉一次公告，避免新报告披露后长期不更新。
+
+    `cache_only=True`：**只读缓存，绝不联网、不调模型**（日更链路用）。
+    命中条件放宽成「缓存文件存在」—— 不看 facts_hash、不看年龄。理由：
+    日更改的是**行情**，财务事实没变，解读文本就该留着；没有缓存才返回 None，
+    由渲染层显示占位（诚实地表示「这只还没生成过解读」）。
     """
     if not facts:
         return None
@@ -200,6 +205,15 @@ def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
             cached_obj = json.loads(cache_path.read_text(encoding="utf-8"))
         except Exception:
             cached_obj = None
+
+    if cache_only:
+        if not (cached_obj or {}).get("review"):
+            return None
+        review = dict(cached_obj.get("review") or {})
+        review["_meta"] = cached_obj.get("meta") or {}
+        review["_cached"] = True
+        return review or None
+
     if cached_obj and not refresh:
         import time
         age_days = (time.time() - cache_path.stat().st_mtime) / 86400
