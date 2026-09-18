@@ -76,12 +76,34 @@ body {
 .section-title .tip { font-size: 11px; color: var(--faint); }
 .stock-list { display: flex; flex-direction: column; gap: 12px; }
 .stock-card {
-  display: block; text-decoration: none; color: inherit;
-  background: #fff; border-radius: 10px; padding: 15px 18px;
+  position: relative;
+  background: #fff; border-radius: 10px;
   box-shadow: 0 2px 10px rgba(15,61,110,0.07);
   transition: transform .08s ease;
 }
 .stock-card:active { transform: scale(0.99); }
+.stock-card .card-main {
+  display: block; text-decoration: none; color: inherit; padding: 15px 18px;
+}
+/* 卡片右下角的「加入/移出对比」按钮。
+   ⚠️ 默认 display:none —— 双击文件离线打开时没有后端可调，按钮点了只会失败，
+      所以由脚本探测到服务后再统一切成可见（`.on`）。 */
+.stock-card .wk {
+  position: absolute; bottom: 13px; right: 14px; display: none;
+  font-family: inherit; font-size: 11px; line-height: 1; padding: 6px 10px;
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+}
+.stock-card .wk.on { display: inline-block; }
+.stock-card .wk:active { transform: scale(0.96); }
+.stock-card .wk[disabled] { opacity: .55; cursor: default; }
+/* 在池里 → 给的是「移出」动作，用暖色；不在池里 → 「加入」，用主色 */
+.stock-card .wk[data-state="active"] {
+  color: #8a5a00; border-color: #efd9a6; background: #fff9ec;
+}
+.stock-card .wk[data-state="removed"] {
+  color: var(--accent-2); border-color: #bcd3ec; background: #eef4fb; font-weight: 600;
+}
 .stock-card .row1 { display: flex; justify-content: space-between; align-items: baseline; }
 .stock-card .name { font-size: 17px; font-weight: 700; color: var(--ink); }
 .stock-card .code { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -92,7 +114,8 @@ body {
 .stock-card .px .p { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stock-card .px .p.na { font-size: 13px; font-weight: 400; color: var(--faint); }
 .stock-card .px .chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; }
+/* 右侧留出按钮的位置（按钮绝对定位在右下角，不参与文档流） */
+.stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; padding-right: 92px; }
 .stock-list .empty { text-align: center; color: var(--faint); padding: 40px 8px; font-size: 13px; }
 
 /* ---------- ③ 横向对比：报告列表最下面 ---------- */
@@ -135,72 +158,105 @@ body {
       <span class="tip">点击卡片进入报告</span>
     </div>
     <div class="stock-list">
-      <a class="stock-card" href="../reports/2026Q2/601088.html">
-        <div class="row1"><span class="name">中国神华</span><span class="code">601088</span></div>
-        <div class="row2"><span class="dot" style="background:#378ADD"></span><span class="ind">煤炭开采 · 周期型 · 稳健收息</span></div>
-        <div class="px"><span class="p">46.48</span><span class="chg" style="color:#2f9e44">-1.32%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/600519.html">
-        <div class="row1"><span class="name">贵州茅台</span><span class="code">600519</span></div>
-        <div class="row2"><span class="dot" style="background:#E24B4A"></span><span class="ind">白酒 · 稳定增长型 · 护城河</span></div>
-        <div class="px"><span class="p">1266.98</span><span class="chg" style="color:#c92a2a">+0.71%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/000651.html">
-        <div class="row1"><span class="name">格力电器</span><span class="code">000651</span></div>
-        <div class="row2"><span class="dot" style="background:#BA7517"></span><span class="ind">家电 · 稳健增长型 · 收息</span></div>
-        <div class="px"><span class="p">37.98</span><span class="chg" style="color:#2f9e44">-0.31%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/601328.html">
-        <div class="row1"><span class="name">交通银行</span><span class="code">601328</span></div>
-        <div class="row2"><span class="dot" style="background:#888780"></span><span class="ind">银行 · 稳健增长型 · 收息</span></div>
-        <div class="px"><span class="p">7.58</span><span class="chg" style="color:#5c6b7a">0.00%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/00700.html">
-        <div class="row1"><span class="name">腾讯控股</span><span class="code">00700</span></div>
-        <div class="row2"><span class="dot" style="background:#00A4FF"></span><span class="ind">互联网 · 稳定增长型 · 生态护城河</span></div>
-        <div class="px"><span class="p">426.00</span><span class="chg" style="color:#2f9e44">-1.71%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2025Q4/09992.html">
-        <div class="row1"><span class="name">泡泡玛特</span><span class="code">09992</span></div>
-        <div class="row2"><span class="dot" style="background:#F08BB0"></span><span class="ind">潮玩消费 · 快速增长型</span></div>
-        <div class="px"><span class="p">153.20</span><span class="chg" style="color:#c92a2a">+0.39%</span></div>
-        <div class="stamp">2025Q4 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/00883.html">
-        <div class="row1"><span class="name">中国海洋石油</span><span class="code">00883</span></div>
-        <div class="row2"><span class="dot" style="background:#5B8FF9"></span><span class="ind">石油及天然气 · 周期型 · 资源/周期</span></div>
-        <div class="px"><span class="p">23.88</span><span class="chg" style="color:#2f9e44">-1.97%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/300061.html">
-        <div class="row1"><span class="name">旗天科技</span><span class="code">300061</span></div>
-        <div class="row2"><span class="dot" style="background:#3D9A5B"></span><span class="ind">广告营销 · 稳定增长型 · 轻资产</span></div>
-        <div class="px"><span class="p">6.82</span><span class="chg" style="color:#c92a2a">+7.91%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/600036.html">
-        <div class="row1"><span class="name">招商银行</span><span class="code">600036</span></div>
-        <div class="row2"><span class="dot" style="background:#9A6BBF"></span><span class="ind">银行Ⅱ · 稳健增长型 · 收息</span></div>
-        <div class="px"><span class="p">40.60</span><span class="chg" style="color:#2f9e44">-0.78%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/600887.html">
-        <div class="row1"><span class="name">伊利股份</span><span class="code">600887</span></div>
-        <div class="row2"><span class="dot" style="background:#0F9B8E"></span><span class="ind">饮料乳品 · 稳定增长型 · 品牌消费</span></div>
-        <div class="px"><span class="p">26.56</span><span class="chg" style="color:#c92a2a">+1.76%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
-      </a>
-      <a class="stock-card" href="../reports/2026Q2/600938.html">
-        <div class="row1"><span class="name">中国海油</span><span class="code">600938</span></div>
-        <div class="row2"><span class="dot" style="background:#D4763A"></span><span class="ind">油气开采Ⅱ · 周期型 · 资源/周期</span></div>
-        <div class="px"><span class="p">32.57</span><span class="chg" style="color:#2f9e44">-1.54%</span></div>
-        <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
-      </a>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/601088.html">
+          <div class="row1"><span class="name">中国神华</span><span class="code">601088</span></div>
+          <div class="row2"><span class="dot" style="background:#378ADD"></span><span class="ind">煤炭开采 · 周期型（高股息现金牛）</span></div>
+          <div class="px"><span class="p">46.48</span><span class="chg" style="color:#2f9e44">-1.32%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="601088"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/600519.html">
+          <div class="row1"><span class="name">贵州茅台</span><span class="code">600519</span></div>
+          <div class="row2"><span class="dot" style="background:#E24B4A"></span><span class="ind">白酒Ⅱ · 稳健成长型</span></div>
+          <div class="px"><span class="p">1266.98</span><span class="chg" style="color:#c92a2a">+0.71%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="600519"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/000651.html">
+          <div class="row1"><span class="name">格力电器</span><span class="code">000651</span></div>
+          <div class="row2"><span class="dot" style="background:#BA7517"></span><span class="ind">白色家电 · 缓慢增长型（高股息现金牛）</span></div>
+          <div class="px"><span class="p">37.98</span><span class="chg" style="color:#2f9e44">-0.31%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="000651"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/601328.html">
+          <div class="row1"><span class="name">交通银行</span><span class="code">601328</span></div>
+          <div class="row2"><span class="dot" style="background:#888780"></span><span class="ind">银行Ⅱ · 缓慢增长型（高股息价值股）</span></div>
+          <div class="px"><span class="p">7.58</span><span class="chg" style="color:#5c6b7a">0.00%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="601328"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/00700.html">
+          <div class="row1"><span class="name">腾讯控股</span><span class="code">00700</span></div>
+          <div class="row2"><span class="dot" style="background:#00A4FF"></span><span class="ind">软件服务 · 稳健成长型</span></div>
+          <div class="px"><span class="p">426.00</span><span class="chg" style="color:#2f9e44">-1.71%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="00700"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2025Q4/09992.html">
+          <div class="row1"><span class="name">泡泡玛特</span><span class="code">09992</span></div>
+          <div class="row2"><span class="dot" style="background:#F08BB0"></span><span class="ind">家庭电器及用品 · 快速成长型</span></div>
+          <div class="px"><span class="p">153.20</span><span class="chg" style="color:#c92a2a">+0.39%</span></div>
+          <div class="stamp">2025Q4 · 2026-09-17 收盘 · 已归档 3 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="09992"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/00883.html">
+          <div class="row1"><span class="name">中国海洋石油</span><span class="code">00883</span></div>
+          <div class="row2"><span class="dot" style="background:#5B8FF9"></span><span class="ind">石油及天然气 · 周期型</span></div>
+          <div class="px"><span class="p">23.88</span><span class="chg" style="color:#2f9e44">-1.97%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="00883"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/300061.html">
+          <div class="row1"><span class="name">旗天科技</span><span class="code">300061</span></div>
+          <div class="row2"><span class="dot" style="background:#3D9A5B"></span><span class="ind">广告营销 · 困境反转（尚未验证）</span></div>
+          <div class="px"><span class="p">6.82</span><span class="chg" style="color:#c92a2a">+7.91%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="300061"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/600036.html">
+          <div class="row1"><span class="name">招商银行</span><span class="code">600036</span></div>
+          <div class="row2"><span class="dot" style="background:#9A6BBF"></span><span class="ind">银行Ⅱ · 稳健成长型</span></div>
+          <div class="px"><span class="p">40.60</span><span class="chg" style="color:#2f9e44">-0.78%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="600036"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/600887.html">
+          <div class="row1"><span class="name">伊利股份</span><span class="code">600887</span></div>
+          <div class="row2"><span class="dot" style="background:#0F9B8E"></span><span class="ind">饮料乳品 · 稳健成长型</span></div>
+          <div class="px"><span class="p">26.56</span><span class="chg" style="color:#c92a2a">+1.76%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 1 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="600887"></button>
+      </div>
+      <div class="stock-card">
+        <a class="card-main" href="../reports/2026Q2/600938.html">
+          <div class="row1"><span class="name">中国海油</span><span class="code">600938</span></div>
+          <div class="row2"><span class="dot" style="background:#D4763A"></span><span class="ind">油气开采Ⅱ · 周期型（高股息资源龙头）</span></div>
+          <div class="px"><span class="p">32.57</span><span class="chg" style="color:#2f9e44">-1.54%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-17 收盘 · 已归档 2 个交易日</div>
+        </a>
+        <button class="wk" type="button" data-code="600938"></button>
+      </div>
     </div>
   </div>
 
@@ -258,8 +314,63 @@ body {
                 + '下方报告列表仍可直接点开。启动服务：'
                 + 'python -m uvicorn web.server:app --host 0.0.0.0 --port 8000', true);
         $('go').disabled = true;
+        return;
       }
+      initWkButtons();
     });
+
+  // ---------- 对比列表：卡片右下角的「加入 / 移出」按钮 ----------
+  // ⚠️ 按钮状态不能在构建期写死：首页是构建产物，而跟踪池随时会变（本页按钮自己就会改它）。
+  //    所以每次打开页面从 /api/watchlist 拉一次当前池，再决定每张卡片的按钮是「移出」还是「加入」。
+  function paintBtn(btn, state) {
+    btn.dataset.state = state;
+    btn.textContent = state === 'active' ? '移出对比' : '加入对比';
+    btn.disabled = false;
+    btn.classList.add('on');
+  }
+
+  function initWkButtons() {
+    fetch('/api/watchlist', { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) {
+        var inPool = {};
+        (d.items || []).forEach(function (it) {
+          if (it.status !== 'removed') inPool[it.code] = true;
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.wk'), function (btn) {
+          paintBtn(btn, inPool[btn.dataset.code] ? 'active' : 'removed');
+          btn.addEventListener('click', function () { toggleWk(btn); });
+        });
+      })
+      .catch(function () { /* 拉不到就把按钮留在隐藏态，不做「看起来能点其实不行」的假按钮 */ });
+  }
+
+  function toggleWk(btn) {
+    var code = btn.dataset.code;
+    var back = btn.dataset.state;
+    var action = back === 'active' ? 'remove' : 'add';
+    btn.disabled = true;
+    btn.textContent = action === 'remove' ? '移出中…' : '加入中…';
+    fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, action: action })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.detail || '请求失败');
+        paintBtn(btn, action === 'remove' ? 'removed' : 'active');
+        var nm = res.j.name || code;
+        setHint(nm + (action === 'remove'
+          ? ' 已移出对比列表 —— 刷新后该卡片会消失（想撤回：再点「加入对比」，或跑 scripts/watchlist.py restore ' + code + '）'
+          : ' 已加入对比列表')
+          + (res.j.rebuild_queued ? '；首页与对比表重建中…' : ''));
+      })
+      .catch(function (err) {
+        paintBtn(btn, back);
+        setHint('操作失败：' + err.message, true);
+      });
+  }
 
   // ---------- 搜索 ----------
   function renderCands(list) {

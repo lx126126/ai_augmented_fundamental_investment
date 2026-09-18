@@ -245,21 +245,27 @@ def _run_job(job_id: str, code: str, market: str) -> None:
              "正在生成一页报告（LLM 叙事 + 年报 PDF 交叉校验，约 2-4 分钟）…", 70)
         p = _build_report(code)
 
-        # 生成成功即入跟踪池（幂等），并异步重建对比表 —— 见模块 docstring
+        # 生成成功即入跟踪池，并异步重建对比表 —— 见模块 docstring
         with _jobs_lock:
             name = (_jobs.get(job_id) or {}).get("name")
+        # 报告生成时 `build_valueline._sync_watchlist()` 已按**报告口径**回写过一次
+        # （Lynch 分类以报告为准）。这里**再兜一次**是刻意的：那条回写被 try 包着、
+        # 失败只打印，如果它失败了而这里也不管，就会出现「报告生成成功、对比表里却没有」
+        # —— 正是 2026-09-17 要修的那个问题。`upsert_from_report` 幂等，重复调用无副作用。
         try:
-            added = watchlist_store.add(code, name=name)
+            status = watchlist_store.upsert_from_report(code, name=name)
         except Exception as e:  # 入池失败不该让"报告已生成"变成失败
-            added = False
+            status = "skipped"
             print(f"[watchlist] {code} 入池失败（不影响报告）：{type(e).__name__}: {e}")
+        in_pool = watchlist_store.get(code) is not None
         queued = _schedule_derived_rebuild()
 
         _set(job_id, "done",
              "报告已生成，已加入跟踪池（首页与对比表重建中…）" if queued
              else "报告已生成，已加入跟踪池", 100,
              report=str(p.relative_to(ROOT)), code=code, market=market,
-             watchlist_added=added, watchlist_rebuild_queued=queued,
+             watchlist_added=in_pool, watchlist_status=status,
+             watchlist_rebuild_queued=queued,
              finished_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     except Exception as e:
         _set(job_id, "error", f"生成失败：{type(e).__name__}: {e}", 0,
@@ -419,6 +425,67 @@ def list_reports() -> dict:
             "generated_at": datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
         })
     return {"count": len(results), "results": results}
+
+
+@app.get("/api/watchlist")
+def watchlist_state() -> dict:
+    """跟踪池当前状态 —— 供首页卡片按钮决定显示「加入对比」还是「移出对比」。
+
+    `removed` 也一并返回：刻意移出的标的，按钮要显示成「加入」把人叫回来。
+    首页兜底卡片已排除 removed（见 build_web_index.build_cards），但按钮状态要一致。
+    """
+    items = watchlist_store.stocks(include_removed=True)
+    active = [s for s in items if s.get("status") != "removed"]
+    return {
+        "count": len(active),
+        "max_size": watchlist_store.max_size(),
+        "items": [
+            {"code": s["bare"], "name": s.get("name", ""),
+             "industry": s.get("industry", ""), "lynch": s.get("lynch", ""),
+             "color": s.get("color", ""), "status": s.get("status", "active")}
+            for s in items
+        ],
+    }
+
+
+@app.post("/api/watchlist")
+def watchlist_edit(payload: dict) -> dict:
+    """把标的加入 / 移出横向对比列表（= 跟踪池）。
+
+    body: `{"code": "600519", "action": "add"|"remove", "reason": "…"}`
+
+    返回后**异步**重建首页与对比表：重建要十几秒（逐只跑 build_template_data），
+    不能让手机端干等；重建请求会被合并，连点不会重复重算。
+    """
+    code = str(payload.get("code", "")).strip()
+    action = str(payload.get("action", "")).strip().lower()
+    if not code:
+        raise HTTPException(status_code=400, detail="缺少 code 参数")
+    if action not in ("add", "remove"):
+        raise HTTPException(status_code=400, detail="action 只能是 add 或 remove")
+
+    bare = watchlist_store.bare(code)
+    if action == "add":
+        # 已移出的走 restore（恢复原条目，不追加第二条）；从没入过池的才 add
+        if watchlist_store.get(bare, include_removed=True) is None:
+            watchlist_store.add(bare, source="manual")
+        else:
+            watchlist_store.restore(bare)
+        state = "active"
+    else:
+        out = watchlist_store.remove(bare, reason=str(payload.get("reason", "") or ""))
+        if out is None and watchlist_store.get(bare, include_removed=True) is None:
+            raise HTTPException(status_code=404, detail=f"{code} 不在对比列表里，无需移出")
+        state = "removed"
+
+    s = watchlist_store.get(bare, include_removed=True) or {}
+    return {
+        "ok": True, "code": bare, "action": action, "state": state,
+        "name": s.get("name", ""), "industry": s.get("industry", ""),
+        "lynch": s.get("lynch", ""), "color": s.get("color", ""),
+        "count": len(watchlist_store.codes()),
+        "rebuild_queued": _schedule_derived_rebuild(),
+    }
 
 
 @app.post("/api/report")

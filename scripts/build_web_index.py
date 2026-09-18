@@ -142,15 +142,21 @@ def _card(code: str, meta: dict, path: str, q: dict | None, hist_n: int) -> str:
         bits = [period, "尚未拉取行情"]
 
     stamp = " · ".join(x for x in bits if x)
+    # 结构：外层 div 承载卡片外观，`<a>` 只包「可点进报告」的主体，按钮是它的**兄弟**
+    # —— HTML 规范不允许 `<a>` 内嵌 button；写成父子关系虽然浏览器能跑，但点击行为
+    # 要靠 stopPropagation 兜，且语义非法。分开就没有这个问题。
     return (
-        f'      <a class="stock-card" href="../{path}">\n'
-        f'        <div class="row1"><span class="name">{name}</span>'
+        f'      <div class="stock-card">\n'
+        f'        <a class="card-main" href="../{path}">\n'
+        f'          <div class="row1"><span class="name">{name}</span>'
         f'<span class="code">{code}</span></div>\n'
-        f'        <div class="row2"><span class="dot" style="background:{color}"></span>'
+        f'          <div class="row2"><span class="dot" style="background:{color}"></span>'
         f'<span class="ind">{sub}</span></div>\n'
-        f'        {price_html}\n'
-        f'        <div class="stamp">{stamp}</div>\n'
-        f'      </a>'
+        f'          {price_html}\n'
+        f'          <div class="stamp">{stamp}</div>\n'
+        f'        </a>\n'
+        f'        <button class="wk" type="button" data-code="{code}"></button>\n'
+        f'      </div>'
     )
 
 
@@ -293,12 +299,34 @@ body {
 .section-title .tip { font-size: 11px; color: var(--faint); }
 .stock-list { display: flex; flex-direction: column; gap: 12px; }
 .stock-card {
-  display: block; text-decoration: none; color: inherit;
-  background: #fff; border-radius: 10px; padding: 15px 18px;
+  position: relative;
+  background: #fff; border-radius: 10px;
   box-shadow: 0 2px 10px rgba(15,61,110,0.07);
   transition: transform .08s ease;
 }
 .stock-card:active { transform: scale(0.99); }
+.stock-card .card-main {
+  display: block; text-decoration: none; color: inherit; padding: 15px 18px;
+}
+/* 卡片右下角的「加入/移出对比」按钮。
+   ⚠️ 默认 display:none —— 双击文件离线打开时没有后端可调，按钮点了只会失败，
+      所以由脚本探测到服务后再统一切成可见（`.on`）。 */
+.stock-card .wk {
+  position: absolute; bottom: 13px; right: 14px; display: none;
+  font-family: inherit; font-size: 11px; line-height: 1; padding: 6px 10px;
+  border-radius: 999px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); background: #fff; color: var(--muted);
+}
+.stock-card .wk.on { display: inline-block; }
+.stock-card .wk:active { transform: scale(0.96); }
+.stock-card .wk[disabled] { opacity: .55; cursor: default; }
+/* 在池里 → 给的是「移出」动作，用暖色；不在池里 → 「加入」，用主色 */
+.stock-card .wk[data-state="active"] {
+  color: #8a5a00; border-color: #efd9a6; background: #fff9ec;
+}
+.stock-card .wk[data-state="removed"] {
+  color: var(--accent-2); border-color: #bcd3ec; background: #eef4fb; font-weight: 600;
+}
 .stock-card .row1 { display: flex; justify-content: space-between; align-items: baseline; }
 .stock-card .name { font-size: 17px; font-weight: 700; color: var(--ink); }
 .stock-card .code { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
@@ -309,7 +337,8 @@ body {
 .stock-card .px .p { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .stock-card .px .p.na { font-size: 13px; font-weight: 400; color: var(--faint); }
 .stock-card .px .chg { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; }
+/* 右侧留出按钮的位置（按钮绝对定位在右下角，不参与文档流） */
+.stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; padding-right: 92px; }
 .stock-list .empty { text-align: center; color: var(--faint); padding: 40px 8px; font-size: 13px; }
 
 /* ---------- ③ 横向对比：报告列表最下面 ---------- */
@@ -410,8 +439,63 @@ __CARDS__
                 + '下方报告列表仍可直接点开。启动服务：'
                 + 'python -m uvicorn web.server:app --host 0.0.0.0 --port 8000', true);
         $('go').disabled = true;
+        return;
       }
+      initWkButtons();
     });
+
+  // ---------- 对比列表：卡片右下角的「加入 / 移出」按钮 ----------
+  // ⚠️ 按钮状态不能在构建期写死：首页是构建产物，而跟踪池随时会变（本页按钮自己就会改它）。
+  //    所以每次打开页面从 /api/watchlist 拉一次当前池，再决定每张卡片的按钮是「移出」还是「加入」。
+  function paintBtn(btn, state) {
+    btn.dataset.state = state;
+    btn.textContent = state === 'active' ? '移出对比' : '加入对比';
+    btn.disabled = false;
+    btn.classList.add('on');
+  }
+
+  function initWkButtons() {
+    fetch('/api/watchlist', { cache: 'no-store' })
+      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function (d) {
+        var inPool = {};
+        (d.items || []).forEach(function (it) {
+          if (it.status !== 'removed') inPool[it.code] = true;
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.wk'), function (btn) {
+          paintBtn(btn, inPool[btn.dataset.code] ? 'active' : 'removed');
+          btn.addEventListener('click', function () { toggleWk(btn); });
+        });
+      })
+      .catch(function () { /* 拉不到就把按钮留在隐藏态，不做「看起来能点其实不行」的假按钮 */ });
+  }
+
+  function toggleWk(btn) {
+    var code = btn.dataset.code;
+    var back = btn.dataset.state;
+    var action = back === 'active' ? 'remove' : 'add';
+    btn.disabled = true;
+    btn.textContent = action === 'remove' ? '移出中…' : '加入中…';
+    fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: code, action: action })
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (!res.ok) throw new Error(res.j.detail || '请求失败');
+        paintBtn(btn, action === 'remove' ? 'removed' : 'active');
+        var nm = res.j.name || code;
+        setHint(nm + (action === 'remove'
+          ? ' 已移出对比列表 —— 刷新后该卡片会消失（想撤回：再点「加入对比」，或跑 scripts/watchlist.py restore ' + code + '）'
+          : ' 已加入对比列表')
+          + (res.j.rebuild_queued ? '；首页与对比表重建中…' : ''));
+      })
+      .catch(function (err) {
+        paintBtn(btn, back);
+        setHint('操作失败：' + err.message, true);
+      });
+  }
 
   // ---------- 搜索 ----------
   function renderCands(list) {
