@@ -20,14 +20,11 @@ from .pdf_parser import (
     parse_income_statement,
     parse_key_financials,
 )
+from ..plausibility import IMPLAUSIBLE_RATIO, is_implausible  # noqa: F401  （IMPLAUSIBLE_RATIO 供外部引用）
 
 TOLERANCE_PCT = 0.1  # 容差 0.1%
 RECONCILE_TOLERANCE_PCT = 1.0  # 覆盖容差 1%（放宽，避免四舍五入误判）
-
-# 超过此倍数视为「PDF 解析/单位识别错误」而非「接口数据错误」，只告警不覆盖。
-# 依据：真实的追溯重述差异通常 1.2~2 倍（神华总资产 9038 vs 6278 = 1.44 倍），
-# 极端如短期借款也就 31 倍；而单位识别错误是整百/整万倍的（交行曾算出 999999 倍）。
-IMPLAUSIBLE_DIFF_PCT = 100_000  # 1000 倍
+# 判据、经验依据、以及「为什么用倍率而不是百分比」见 src/plausibility.py
 
 # 合并资产负债表字段 → 中文标签（用于覆盖记录展示）
 _BS_LABEL = {
@@ -261,10 +258,15 @@ def reconcile_balance_sheet(code: str, year: int,
         if pdf_val == 0 and api_val == 0:
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
-        if diff > IMPLAUSIBLE_DIFF_PCT:
-            # 差 1000 倍以上几乎必然是 PDF 解析/单位识别错误（如把「百万元」读成「万元」），
+        if is_implausible(api_val, pdf_val):
+            # 量级差 100 倍以上几乎必然是 PDF 解析/单位识别错误（如把「千元」读成「元」），
             # 若当作接口错误覆盖，会把正确的接口值改成错的，宁可跳过并告警。
-            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%（疑似 PDF 解析/单位识别错误，非接口错误）")
+            if api_val and pdf_val:
+                ratio_txt = f"{max(abs(api_val), abs(pdf_val)) / min(abs(api_val), abs(pdf_val)):.1f} 倍"
+            else:
+                ratio_txt = "一侧为 0"
+            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%、{ratio_txt}"
+                  f"（疑似 PDF 解析/单位识别错误，非接口错误）")
             continue
         if diff > RECONCILE_TOLERANCE_PCT:
             corrections.append({
@@ -344,10 +346,15 @@ def _reconcile_statement(code: str, year: int, table: str, parser, pdf_dir, data
         if pdf_val == 0 and api_val == 0:
             continue
         diff = abs(api_val - pdf_val) / pdf_val * 100 if pdf_val else 0
-        if diff > IMPLAUSIBLE_DIFF_PCT:
-            # 差 1000 倍以上几乎必然是 PDF 解析/单位识别错误（如把「百万元」读成「万元」），
+        if is_implausible(api_val, pdf_val):
+            # 量级差 100 倍以上几乎必然是 PDF 解析/单位识别错误（如把「千元」读成「元」），
             # 若当作接口错误覆盖，会把正确的接口值改成错的，宁可跳过并告警。
-            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%（疑似 PDF 解析/单位识别错误，非接口错误）")
+            if api_val and pdf_val:
+                ratio_txt = f"{max(abs(api_val), abs(pdf_val)) / min(abs(api_val), abs(pdf_val)):.1f} 倍"
+            else:
+                ratio_txt = "一侧为 0"
+            print(f"[reconcile] 跳过 {field}：差异 {diff:.0f}%、{ratio_txt}"
+                  f"（疑似 PDF 解析/单位识别错误，非接口错误）")
             continue
         if diff > RECONCILE_TOLERANCE_PCT:
             label = _INCOME_LABEL.get(field, _CASH_FLOW_LABEL.get(field, field))

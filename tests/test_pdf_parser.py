@@ -140,11 +140,35 @@ def test_cash_flow_extracts_ocf_and_capex():
     ("单位：万元", "万元"),
     ("（人民币元）", "元"),
     ("单位：元", "元"),
+    ("单位：元  币种：人民币", "元"),
     ("无任何单位标注", "元"),
+    # --- 千元：A 股年报利润表最常见单位之一，曾整类漏登记（美的 000333 实测）---
+    # 旧实现的 `单位[:：]\s*[^，。\n]*?(…|元)` 里惰性前缀会逐字符右移，
+    # 在「千」处不匹配、右移一格命中裸「元」→「单位：千元」被认成「元」，数值小 1000 倍。
+    ("单位：千元", "千元"),
+    ("单位：人民币千元", "千元"),
+    ("金额单位：人民币千元", "千元"),
+    ("(除特别注明外，金额单位为人民币千元)", "千元"),   # 美的 000333 年报实际写法（无冒号）
+    ("（除特别注明外，金额单位为人民币千元）", "千元"),
 ])
 def test_detect_unit(text, expected):
     from src.validation.pdf_parser import _detect_unit
     assert _detect_unit(text) == expected
+
+
+def test_unit_multiplier_covers_every_detectable_unit():
+    """`_detect_unit` 能返回的单位，`_UNIT_MULTIPLIER` 必须全都有换算乘数。
+
+    缺键的后果不是报错而是**静默按 1 处理**（`.get(unit, 1)`），整体差一个数量级。
+    """
+    from src.validation.pdf_parser import _UNIT_MULTIPLIER
+    for unit in ("元", "千元", "万元", "百万元", "亿元"):
+        assert unit in _UNIT_MULTIPLIER, f"_UNIT_MULTIPLIER 缺 {unit}"
+    assert _UNIT_MULTIPLIER["千元"] == 1e3
+    # 乘数必须严格递增，写错顺序（如千元 > 万元）会静默算错
+    order = ["元", "千元", "万元", "百万元", "亿元"]
+    mults = [_UNIT_MULTIPLIER[u] for u in order]
+    assert mults == sorted(mults) and len(set(mults)) == len(mults)
 
 
 def test_bank_annual_report_parsed_in_millions():
@@ -160,37 +184,22 @@ def test_bank_annual_report_parsed_in_millions():
     assert g["total_assets"] == pytest.approx(155483.88e8, rel=0.01)
 
 
-# ---------------------------------------------------------------------------
-# 单位识别（_detect_unit）：银行年报用括号夹注「（除另有标明外，人民币百万元）」，
-# 页面里没有「单位」二字；且「百万元」含「万元」，贪婪匹配会先命中「万元」→ 差 100 倍。
-# ---------------------------------------------------------------------------
-@pytest.mark.parametrize("text,expected", [
-    ("单位：人民币百万元", "百万元"),
-    ("金额单位: 人民币百万元", "百万元"),
-    ("（除另有标明外，人民币百万元）", "百万元"),   # 交行 601328 年报实际写法
-    ("(人民币百万元)", "百万元"),
-    ("人民币百万元", "百万元"),
-    ("单位：万元", "万元"),
-    ("（人民币元）", "元"),
-    ("单位：元", "元"),
-    ("无任何单位标注", "元"),
-])
-def test_detect_unit(text, expected):
-    from src.validation.pdf_parser import _detect_unit
-    assert _detect_unit(text) == expected
+def test_meidi_income_statement_in_thousands():
+    """美的 000333 2025 年报利润表：单位「千元」，解析值须与接口同量级。
 
-
-def test_bank_annual_report_parsed_in_millions():
-    """交行 2025 年报：单位「百万元」，解析值必须与接口值同量级（亿元口径）。"""
-    pdf = DATA_DIR / "validation" / "601328_2025年报.pdf"
+    实测 2026-09-18：单位识别漏「千元」→ 销售费用解析成 0.4289 亿（真值 428.9149 亿），
+    reconcile 把它当接口错误覆盖进报告，利润饼图显示「销售费用 0.4 亿」。
+    """
+    pdf = DATA_DIR / "validation" / "000333_2025年报.pdf"
     if not pdf.exists():
-        pytest.skip("缺交行年报 PDF（数据资产，.gitignore 排除）")
-    from src.validation.pdf_parser import parse_key_financials
-    g = parse_key_financials(pdf)
-    assert g.get("operating_revenue"), "未解析出营业收入"
-    # 265,071 百万元 = 2650.71 亿元（若单位误判为万元则只有 26.5 亿）
-    assert g["operating_revenue"] == pytest.approx(2650.71e8, rel=0.01)
-    assert g["total_assets"] == pytest.approx(155483.88e8, rel=0.01)
+        pytest.skip("缺美的年报 PDF（数据资产，.gitignore 排除）")
+    from src.validation.pdf_parser import parse_income_statement
+    g = parse_income_statement(pdf)
+    assert g.get("sell_expense"), "未解析出销售费用"
+    assert g["sell_expense"] == pytest.approx(428.9149e8, rel=0.01)
+    assert g["admin_expense"] == pytest.approx(160.9231e8, rel=0.01)
+    assert g["total_profit"] == pytest.approx(530.8534e8, rel=0.01)
+    assert g["income_tax"] == pytest.approx(85.6515e8, rel=0.01)
 
 
 # ---------------------------------------------------------------------------

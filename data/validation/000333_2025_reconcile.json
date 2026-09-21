@@ -1,0 +1,38 @@
+{
+  "code": "000333",
+  "year": 2025,
+  "items": [
+    {
+      "table": "profit_sheet",
+      "field": "sell_expense",
+      "label": "销售费用",
+      "api_yi": 428.9149,
+      "pdf_yi": 0.4289149,
+      "diff_pct": 99900.0
+    },
+    {
+      "table": "profit_sheet",
+      "field": "admin_expense",
+      "label": "管理费用",
+      "api_yi": 160.92311,
+      "pdf_yi": 0.16092311,
+      "diff_pct": 99900.0
+    },
+    {
+      "table": "profit_sheet",
+      "field": "total_profit",
+      "label": "利润总额",
+      "api_yi": 530.85343,
+      "pdf_yi": 0.53085343,
+      "diff_pct": 99900.0
+    },
+    {
+      "table": "profit_sheet",
+      "field": "income_tax",
+      "label": "所得税费用",
+      "api_yi": 85.65147,
+      "pdf_yi": 0.08565147,
+      "diff_pct": 99900.0
+    }
+  ]
+}

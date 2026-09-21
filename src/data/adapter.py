@@ -19,6 +19,7 @@ from .cleaner import (
     forward_adjust_kline,
 )
 from ..analysis.fraud import fraud_check
+from ..plausibility import IMPLAUSIBLE_DIFF_PCT
 from .listing_group import sibling_code
 
 
@@ -248,9 +249,12 @@ def _apply_corrections(raw: dict[str, pd.DataFrame], code: str,
             diff_pct = item.get("diff_pct")
             if not table or not field or pdf_yi is None or table not in out:
                 continue
-            # 保护：diff_pct 异常大（如 >1e6%）说明 PDF 解析单位识别错误（元/万元/亿元错位），
+            # 保护：diff_pct 异常大的说明 PDF 解析单位识别错误（元/千元/万元/亿元错位），
             # 而非真实的重述偏差，跳过该条避免把错误解析值应用进数据。
-            if diff_pct is not None and abs(diff_pct) > 1e6:
+            # 阈值与生产端（validator）同源，见 src/validation/plausibility.py。
+            # 这里是**最后一道闸**：历史上本处用裸魔数 1e6（10000 倍），比生产端的
+            # 100_000（1000 倍）还松，两道闸量级对不上、都拦不住 1000 倍的单位错误。
+            if diff_pct is not None and abs(diff_pct) > IMPLAUSIBLE_DIFF_PCT:
                 continue
             df = out[table]
             if field not in df.columns or "report_date" not in df.columns:
