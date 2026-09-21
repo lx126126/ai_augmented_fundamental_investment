@@ -46,8 +46,13 @@
 「什么算一份报告」由 `src/report/artifacts.py` 统一定义（报告期目录 + 取最新期 +
 排除 reports/xhs 发布包）。本文件不再自己 glob 报告文件。
 
-旧 `web/query.html`（独立搜索页）已删除：它的能力被首页完整覆盖，
-两处搜索入口 = 两份同功能 JS = 必然漂移。
+旧 `web/query.html`（独立搜索页）**不再是产品入口**，但**文件与路由都保留**：
+它的能力已被首页完整覆盖（两处搜索入口 = 两份同功能 JS = 必然漂移），
+所以首页上不再有任何指向它的入口；路由留着的唯一理由是**防旧书签 404**
+（她手机上的旧链接 / 浏览器历史点进来还能用）。见 `docs/mobile-web.md`。
+
+⚠️ 别把「不再是入口」读成「可以删掉」—— 2026-09-18 曾按「已删除」处理差点删了它。
+真要删得同时改 `/query`、`/query.html` 两个路由与 `docs/mobile-web.md` 那一行。
 
 启动
 ----
@@ -476,6 +481,7 @@ def watchlist_state() -> dict:
         "items": [
             {"code": s["bare"], "name": s.get("name", ""),
              "industry": s.get("industry", ""), "lynch": s.get("lynch", ""),
+             "lynch_note": s.get("lynch_note", ""),
              "color": s.get("color", ""), "status": s.get("status", "active")}
             for s in items
         ],
@@ -516,7 +522,8 @@ def watchlist_edit(payload: dict) -> dict:
     return {
         "ok": True, "code": bare, "action": action, "state": state,
         "name": s.get("name", ""), "industry": s.get("industry", ""),
-        "lynch": s.get("lynch", ""), "color": s.get("color", ""),
+        "lynch": s.get("lynch", ""), "lynch_note": s.get("lynch_note", ""),
+        "color": s.get("color", ""),
         "count": len(watchlist_store.codes()),
         "rebuild_queued": _schedule_derived_rebuild(),
     }

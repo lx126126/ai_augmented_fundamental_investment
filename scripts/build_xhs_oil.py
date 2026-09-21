@@ -260,8 +260,9 @@ def _latest_annual(d: dict) -> dict:
 def slide_cover(a, h, pm, rate_date) -> str:
     av, hv = a["valuation"], h["valuation"]
     an = a["__annual_latest__"]
-    lynch = a.get("__narrative__") or {}
-    lynch_type = lynch.get("lynch_type") or "周期型"
+    # 林奇分类走与报告徽章同一个口径（`build_xhs._lynch_label` → src/review/lynch.py）。
+    # 原先的 `or "周期型"` 是硬编码兜底：叙事层缺值时会把**猜测**当事实展示出来。
+    lynch_type = bx._lynch_label(a.get("__narrative__"))
 
     def stat(k, v):
         return f'<div class="stat"><div class="stat-n">{v}</div><div class="stat-l">{k}</div></div>'

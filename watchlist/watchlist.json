@@ -20,7 +20,7 @@
       "code": "600519.SH",
       "name": "贵州茅台",
       "industry": "白酒Ⅱ",
-      "lynch": "稳健成长型",
+      "lynch": "稳健成长",
       "status": "active",
       "since": "2026-08",
       "color": "#E24B4A",
@@ -30,21 +30,23 @@
       "code": "000651.SZ",
       "name": "格力电器",
       "industry": "白色家电",
-      "lynch": "缓慢增长型（高股息现金牛）",
+      "lynch": "缓慢增长",
       "status": "active",
       "since": "2026-08",
       "color": "#BA7517",
-      "meta_source": "report"
+      "meta_source": "report",
+      "lynch_note": "高股息现金牛"
     },
     {
       "code": "601328.SH",
       "name": "交通银行",
       "industry": "银行Ⅱ",
-      "lynch": "缓慢增长型（大盘国有银行）",
+      "lynch": "缓慢增长",
       "status": "active",
       "since": "2026-08",
       "color": "#888780",
-      "meta_source": "report"
+      "meta_source": "report",
+      "lynch_note": "大盘国有银行"
     },
     {
       "code": "00700.HK",
@@ -60,7 +62,7 @@
       "code": "09992.HK",
       "name": "泡泡玛特",
       "industry": "家庭电器及用品",
-      "lynch": "快速成长型",
+      "lynch": "快速成长",
       "status": "active",
       "since": "2026-08",
       "color": "#F08BB0",
@@ -93,7 +95,7 @@
       "code": "600036.SH",
       "name": "招商银行",
       "industry": "银行Ⅱ",
-      "lynch": "稳健成长型",
+      "lynch": "稳健成长",
       "status": "active",
       "since": "2026-09",
       "color": "#9A6BBF",
@@ -104,7 +106,7 @@
       "code": "600887.SH",
       "name": "伊利股份",
       "industry": "饮料乳品",
-      "lynch": "稳健成长型",
+      "lynch": "稳健成长",
       "status": "active",
       "since": "2026-09",
       "color": "#0F9B8E",
@@ -115,12 +117,13 @@
       "code": "600938.SH",
       "name": "中国海油",
       "industry": "油气开采Ⅱ",
-      "lynch": "周期型（高股息资源龙头）",
+      "lynch": "周期型",
       "status": "active",
       "since": "2026-09",
       "color": "#D4763A",
       "source": "report",
-      "meta_source": "report"
+      "meta_source": "report",
+      "lynch_note": "高股息资源龙头"
     },
     {
       "code": "600900.SH",
@@ -138,11 +141,24 @@
       "code": "00300.HK",
       "name": "美的集团",
       "industry": "家庭电器及用品",
-      "lynch": "稳健成长型",
+      "lynch": "稳健成长",
       "status": "active",
       "since": "2026-09",
       "color": "#3D9A5B",
-      "source": "report"
+      "source": "report",
+      "meta_source": "report"
+    },
+    {
+      "code": "000333.SZ",
+      "name": "美的集团",
+      "industry": "白色家电",
+      "lynch": "稳健成长",
+      "status": "active",
+      "since": "2026-09",
+      "color": "#7A6FF0",
+      "source": "report",
+      "lynch_note": "高股息现金牛",
+      "meta_source": "report"
     }
   ]
 }

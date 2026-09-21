@@ -14,8 +14,12 @@
 重建对比表时 **11 只全部命中缓存**，表里还是旧的「稳健增长型 · 收息」——
 改了等于没改，且零报错。
 
-修法：指纹 = `raw mtime + 该标的自身四个展示字段的 hash`。只取该标的自己的字段
+修法：指纹 = `raw mtime + 该标的自身五个展示字段的 hash`。只取该标的自己的字段
 （不是整个 json 的 mtime），所以改一只不会让全池重算。
+
+⚠️ 也踩过一次「加了字段忘了加指纹」：2026-09-18 引入 `lynch_note`（注解从分类字符串里
+拆出来）时差点漏掉，那样只改注解不会失效缓存 —— **这类漏是静默的**，界面上看不出来。
+`test_fingerprint_changes_when_lynch_note_changes` 就是为它立的岗。
 """
 from __future__ import annotations
 
@@ -48,14 +52,15 @@ def bw():
     return mod
 
 
-def _write_pool(path: Path, lynch: str, industry: str = "煤炭开采") -> None:
+def _write_pool(path: Path, lynch: str, industry: str = "煤炭开采",
+                note: str = "") -> None:
     path.write_text(json.dumps({
         "version": 1, "rules": {"cadence": "年报/中报季全量更新"},
         "stocks": [
             {"code": "601088.SH", "name": "中国神华", "industry": industry,
-             "lynch": lynch, "color": "#378ADD"},
+             "lynch": lynch, "lynch_note": note, "color": "#378ADD"},
             {"code": "600519.SH", "name": "贵州茅台", "industry": "白酒Ⅱ",
-             "lynch": "稳健成长型", "color": "#E24B4A"},
+             "lynch": "稳健成长", "lynch_note": "", "color": "#E24B4A"},
         ],
     }, ensure_ascii=False), encoding="utf-8")
 
@@ -70,7 +75,7 @@ def env(bw, tmp_path, monkeypatch):
     (raw / "600519").mkdir(parents=True)
     (raw / "600519" / "profit_sheet.parquet").write_bytes(b"x" * 300)
 
-    _write_pool(pool, lynch="稳健增长型 · 收息")
+    _write_pool(pool, lynch="稳健成长", note="收息")
     monkeypatch.setattr(bw.wl, "WATCHLIST_PATH", pool)
     monkeypatch.setattr(bw, "RAW_DIR", raw)
     return bw, pool, raw
@@ -80,16 +85,28 @@ def test_fingerprint_changes_when_pool_field_changes(env):
     """改 json 里的 `lynch`（raw 一个字都没动）→ 指纹必须变，否则缓存会盖住改动。"""
     bw, pool, _ = env
     before = bw._data_fingerprint("601088")
-    _write_pool(pool, lynch="周期型（高股息现金牛）")
+    _write_pool(pool, lynch="周期型", note="高股息现金牛")
     after = bw._data_fingerprint("601088")
     assert before != after
+
+
+def test_fingerprint_changes_when_lynch_note_changes(env):
+    """只改 `lynch_note` 也必须让指纹变 —— 注解是独立展示字段，不是 `lynch` 的附属。
+
+    漏掉它 = 「注解改了、页面没变」且零报错（`collect()` 里 `lynch_note` 会进行数据，
+    但指纹不含它就不会重算）。与 `lynch` 同等对待。
+    """
+    bw, pool, _ = env
+    before = bw._data_fingerprint("601088")
+    _write_pool(pool, lynch="稳健成长", note="另一种注解")
+    assert bw._data_fingerprint("601088") != before
 
 
 def test_fingerprint_changes_when_industry_changes(env):
     """`industry` 同理 —— 它也是从 json 来的展示字段。"""
     bw, pool, _ = env
     before = bw._data_fingerprint("601088")
-    _write_pool(pool, lynch="稳健增长型 · 收息", industry="煤炭开采Ⅱ")
+    _write_pool(pool, lynch="稳健成长", note="收息", industry="煤炭开采Ⅱ")
     assert bw._data_fingerprint("601088") != before
 
 
@@ -97,7 +114,7 @@ def test_fingerprint_ignores_other_codes(env):
     """改 A 的字段**不该**让 B 的指纹也变 —— 否则改一次要重算全池（约 2.6 分钟）。"""
     bw, pool, _ = env
     other_before = bw._data_fingerprint("600519")
-    _write_pool(pool, lynch="周期型（高股息现金牛）")   # 只动 601088
+    _write_pool(pool, lynch="周期型", note="高股息现金牛")   # 只动 601088
     assert bw._data_fingerprint("600519") == other_before
 
 

@@ -42,6 +42,10 @@ import re
 from datetime import date
 from pathlib import Path
 
+# 林奇分类的规范值 / 同义写法归一 / 占位符集合 —— 全仓唯一真源在 `src/review/lynch.py`。
+# 纯逻辑模块（只依赖 re），不会连带拉起 akshare，可以放模块级。
+from src.review.lynch import LYNCH_PLACEHOLDERS, normalize, split_note
+
 ROOT = Path(__file__).resolve().parent.parent.parent
 WATCHLIST_PATH = ROOT / "watchlist" / "watchlist.json"
 
@@ -225,7 +229,7 @@ def _guess_industry(code: str) -> str:
 
 
 def _append(code_full: str, name: str, industry: str, lynch: str,
-            source: str = "report") -> None:
+            lynch_note: str = "", source: str = "report") -> None:
     data = _read_raw()
     raw_stocks = data.setdefault("stocks", [])
     # 色值落盘而不是靠下标现算：否则 prune/重排会让**后面所有标的换色**。
@@ -241,6 +245,7 @@ def _append(code_full: str, name: str, industry: str, lynch: str,
         "name": name,
         "industry": industry,
         "lynch": lynch,
+        "lynch_note": lynch_note,
         "status": "active",
         "since": date.today().strftime("%Y-%m"),
         "color": color,
@@ -272,24 +277,47 @@ def add(code: str, name: str | None = None, industry: str | None = None,
 
     name = name or _display_name(c)
     industry = industry or _guess_industry(c)
-    lynch = lynch or classify_lynch(industry, name)
-    _append(with_exchange(c), name, industry, lynch, source=source)
+    # 关键字猜出来的也是**复合值**（`稳健增长型 · 收息`）→ 同样过归一化，
+    # 让「还没生成过报告」的标的与「已生成」的标的在池子里长得一样。
+    lynch, note = _normalize_lynch(lynch or classify_lynch(industry, name))
+    _append(with_exchange(c), name, industry, lynch, lynch_note=note, source=source)
     return True
 
 
-#: 报告口径回写时要过滤掉的「非真实分类」占位符。
-#: `待分析` 是 build_valueline 取不到叙事时的兜底文案；`待归类` 是 classify_lynch 的兜底。
-#: 这些值写进池子只会让人误以为"系统判过了"，所以一律不写。
-_LYNCH_PLACEHOLDERS = frozenset({"", "待分析", "待归类", "N/A", "—"})
+#: 报告口径回写时要过滤掉的「非真实分类」占位符 —— **单一真源在 `src/review/lynch.py`**，
+#: 这里只做别名引用。原先两边各写一份，正是「同义词判断写两遍、必然漂移」的老问题。
+_LYNCH_PLACEHOLDERS = LYNCH_PLACEHOLDERS
 _INDUSTRY_PLACEHOLDERS = frozenset({"", "未分类", "行业待接入", "待归类", "N/A", "—"})
 
 
-def update_fields(code: str, *, lynch: str | None = None,
+def _normalize_lynch(raw: str) -> tuple[str, str]:
+    """任意写法 → `(规范值, 注解)`。**池子里的 `lynch` 只允许出现 6 个规范值。**
+
+    `周期型（高股息现金牛）` → `("周期型", "高股息现金牛")`
+    `稳健增长型 · 收息`       → `("稳健成长", "收息")`
+    `待归类`                  → `("待归类", "")`  ← 见下面那条
+
+    识别不出时**返回原文而不是空串**：这是展示字段，界面上出现一个认不出的值
+    （"待归类" / "玄学型"）一眼就能看出该补映射，比静默留空或静默套默认值都好排查。
+    ⚠️ 反过来说，**别把这里改成 `normalize(...) or "稳健成长"`** —— 那会把认不出的值
+    伪装成正常归类，是本项目最忌的静默错数。
+    """
+    body, note = split_note(raw or "")
+    canon = normalize(body)
+    if canon:
+        return canon, note
+    return (body or (raw or "").strip()), note
+
+
+def update_fields(code: str, *, lynch: str | None = None, lynch_note: str | None = None,
                   industry: str | None = None, name: str | None = None) -> bool:
     """用**报告口径**更新已在池条目的展示字段。返回是否真的写入了改动。
 
-    只动 `lynch` / `industry` / `name` 三个「报告里也有」的字段；`color`/`since`/`source`
-    是入池时的记账信息，与报告无关，不碰。
+    只动 `lynch` / `lynch_note` / `industry` / `name` 四个「报告里也有」的字段；
+    `color`/`since`/`source` 是入池时的记账信息，与报告无关，不碰。
+
+    `lynch` 传进来的任意写法都会被 `_normalize_lynch()` 收成规范值，
+    注解（「高股息现金牛」这类）落到 `lynch_note`；两者的分工见该函数。
 
     刻意移出的条目（`status == "removed"`）**不更新** —— 移出是人的决定，
     不该因为「缓存里还有一份旧报告」被悄悄改回去。
@@ -304,8 +332,15 @@ def update_fields(code: str, *, lynch: str | None = None,
         if s.get("status") == "removed":
             return False
         changed: dict[str, str] = {}
-        if lynch and lynch not in _LYNCH_PLACEHOLDERS and s.get("lynch") != lynch:
-            changed["lynch"] = lynch
+        if lynch:
+            # 归一化后再过滤占位符：`待分析` / `玄学型` 都过不了 normalize，
+            # 但前者是「还没跑过报告」、后者是「映射表该补了」，两者都不该落库。
+            canon, note = _normalize_lynch(lynch)
+            if canon and canon not in _LYNCH_PLACEHOLDERS and s.get("lynch") != canon:
+                changed["lynch"] = canon
+            note = note if lynch_note is None else lynch_note.strip()
+            if note and s.get("lynch_note") != note:
+                changed["lynch_note"] = note
         if industry and industry not in _INDUSTRY_PLACEHOLDERS and s.get("industry") != industry:
             changed["industry"] = industry
         if name and s.get("name") != name:
@@ -324,11 +359,15 @@ def update_fields(code: str, *, lynch: str | None = None,
 
 
 def upsert_from_report(code: str, name: str | None = None, industry: str | None = None,
-                       lynch: str | None = None) -> str:
+                       lynch: str | None = None, lynch_note: str | None = None) -> str:
     """报告生成成功后的回写入口 —— **已入池就更新口径，没入池就入池**。
 
     返回 `"added" | "restored" | "updated" | "unchanged" | "skipped"`，供调用方写日志/提示。
     代码非法返回 `"skipped"` 而不抛异常：回写失败不该把「报告已生成」变成失败。
+
+    `lynch` 接受任意写法（`周期型（高股息现金牛）` / `稳健增长型 · 收息`），
+    由 `_normalize_lynch()` 收成 6 个规范值之一，注解落到 `lynch_note`；
+    调用方已经归一化过就传规范值 + 注解，两条路等价。
 
     对**刻意移出**的条目：**恢复入池**。依据是本项目「生成过报告即入池」的定规 ——
     用户主动查询并生成了它，就是要它回来。只想回填字段、不想复活的话用
@@ -344,15 +383,17 @@ def upsert_from_report(code: str, name: str | None = None, industry: str | None 
     lynch = lynch if lynch and lynch not in _LYNCH_PLACEHOLDERS else None
     industry = industry if industry and industry not in _INDUSTRY_PLACEHOLDERS else None
     name = name or None
+    lynch_note = (lynch_note or "").strip() or None
 
     existing = get(c, include_removed=True)
     if existing is None:
         return "added" if add(c, name=name, industry=industry, lynch=lynch) else "unchanged"
     if existing.get("status") == "removed":
         restore(c)
-        update_fields(c, lynch=lynch, industry=industry, name=name)
+        update_fields(c, lynch=lynch, lynch_note=lynch_note, industry=industry, name=name)
         return "restored"
-    return "updated" if update_fields(c, lynch=lynch, industry=industry, name=name) else "unchanged"
+    ok = update_fields(c, lynch=lynch, lynch_note=lynch_note, industry=industry, name=name)
+    return "updated" if ok else "unchanged"
 
 
 def remove(code: str, reason: str = "") -> dict | None:
@@ -385,7 +426,12 @@ def remove(code: str, reason: str = "") -> dict | None:
 
 
 def restore(code: str) -> bool:
-    """把已移出的标的重新纳入跟踪池（清掉 `status`/`removed_at`/`removed_reason`）。"""
+    """把已移出的标的重新纳入跟踪池（清掉 `status`/`removed_at`/`removed_reason`）。
+
+    ⚠️ 顺手**归一化 `lynch`**：移出期间该字段是「冻结」的（`update_fields` 不碰
+    removed 条目），所以它可能停在被移出那天之前的老写法上（`稳健增长型 · 收息`）。
+    复活时不归一化，老写法就会跟着回到对比表里 —— 那正是 2026-09-18 要修的那种漂移。
+    """
     c = bare(code)
     data = _read_raw()
     for s in data.get("stocks", []):
@@ -394,6 +440,11 @@ def restore(code: str) -> bool:
         s["status"] = "active"
         for k in ("removed_at", "removed_reason"):
             s.pop(k, None)
+        if s.get("lynch"):
+            canon, note = _normalize_lynch(s["lynch"])
+            s["lynch"] = canon or s["lynch"]
+            if note and not s.get("lynch_note"):
+                s["lynch_note"] = note
         data["updated"] = date.today().isoformat()
         WATCHLIST_PATH.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"

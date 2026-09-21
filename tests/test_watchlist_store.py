@@ -193,10 +193,41 @@ def test_upsert_from_report_updates_existing(tmp_watchlist):
                                    lynch="周期型（高股息现金牛）")
     assert status == "updated"
     after = wl.get("601088")
-    assert after["lynch"] == "周期型（高股息现金牛）"
+    # 2026-09-18 起池子里只存**规范值**，注解拆到 lynch_note（见 _normalize_lynch）
+    assert after["lynch"] == "周期型"
+    assert after["lynch_note"] == "高股息现金牛"
     assert after["meta_source"] == "report"          # 留痕：这个值来自报告，不是关键字猜的
     assert after["color"] == before["color"]         # 色点/入池时间属于记账信息
     assert after.get("since") == before.get("since")
+
+
+def test_lynch_stored_value_is_always_canonical(tmp_watchlist):
+    """**池子里的 `lynch` 只能是 6 个规范值之一** —— 这是对比表能横向比较的前提。
+
+    写法漂移的三种真实来源都过一遍：LLM 自由输出、括号注解、`·` 注解。
+    识别不出的值**保留原文**（界面上看得出来）而不是套个默认值。
+    """
+    from src.review.lynch import CANONICAL_TYPES
+
+    wl, _ = tmp_watchlist
+    cases = [
+        ("601088", "周期型（高股息现金牛）", "周期型", "高股息现金牛"),
+        ("600519", "稳健成长型", "稳健成长", ""),
+        ("000651", "缓慢增长型（高股息现金牛）", "缓慢增长", "高股息现金牛"),
+        ("601328", "稳健增长型 · 收息", "稳健成长", "收息"),
+        ("00700", "稳健成长", "稳健成长", ""),
+        ("09992", "快速增长型", "快速成长", ""),
+        # 认不出 → 原文落库（可见），绝不伪装成某个类别
+        ("00883", "玄学型", "玄学型", ""),
+    ]
+    for code, raw, want_lynch, want_note in cases:
+        wl.upsert_from_report(code, lynch=raw)
+        s = wl.get(code) or {}
+        assert s.get("lynch") == want_lynch, f"{code} {raw!r} → {s.get('lynch')!r}"
+        assert (s.get("lynch_note") or "") == want_note, f"{code} {raw!r} 注解错"
+        # 除了刻意保留的原文那种，值都必须在枚举内
+        if want_lynch != "玄学型":
+            assert s.get("lynch") in CANONICAL_TYPES
 
 
 def test_upsert_from_report_is_idempotent(tmp_watchlist):
@@ -208,13 +239,25 @@ def test_upsert_from_report_is_idempotent(tmp_watchlist):
     assert p.stat().st_mtime_ns == mtime
 
 
+def test_upsert_from_report_note_change_is_not_unchanged(tmp_watchlist):
+    """只改注解也算改动 —— 否则「注解改了但页面没变」会静默发生。
+
+    与 `build_watchlist._data_fingerprint()` 是同一类坑：字段进了池子就必须进指纹。
+    """
+    wl, _ = tmp_watchlist
+    assert wl.upsert_from_report("601088", lynch="周期型", lynch_note="高股息现金牛") == "updated"
+    assert wl.get("601088")["lynch_note"] == "高股息现金牛"
+    assert wl.upsert_from_report("601088", lynch="周期型", lynch_note="资源一体化") == "updated"
+    assert wl.get("601088")["lynch_note"] == "资源一体化"
+
+
 def test_upsert_from_report_creates_when_absent(tmp_watchlist):
     """从没入过池的标的：报告生成即入池（沿用 2026-09-17 的定规）。"""
     wl, _ = tmp_watchlist
     assert wl.upsert_from_report("600519", name="贵州茅台",
                                  industry="白酒Ⅱ", lynch="稳健成长型") == "added"
     assert "600519" in wl.codes()
-    assert wl.get("600519")["lynch"] == "稳健成长型"
+    assert wl.get("600519")["lynch"] == "稳健成长"     # 规范值，不是 LLM 的「稳健成长型」
 
 
 def test_upsert_from_report_revives_removed(tmp_watchlist):
@@ -225,7 +268,8 @@ def test_upsert_from_report_revives_removed(tmp_watchlist):
     s = wl.get("601088")
     assert s["status"] == "active"
     assert "removed_reason" not in s
-    assert s["lynch"] == "周期型（高股息现金牛）"
+    assert s["lynch"] == "周期型"
+    assert s["lynch_note"] == "高股息现金牛"
 
 
 def test_upsert_from_report_filters_placeholders(tmp_watchlist):

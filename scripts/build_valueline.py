@@ -38,6 +38,17 @@ except Exception:
 # 见 src/report/artifacts.py 的 PLACEHOLDERS 与 docs/report-chains.md F9。
 from src.report.artifacts import PLACEHOLDERS  # noqa: E402
 
+# 林奇分类的**唯一口径**（`CANONICAL_TYPES` 6 值 + `normalize()` 同义写作归一）。
+# 报告徽章、跟踪池回写都必须走它 —— 原先 LLM 自由输出，同一类别在同一池子里出现
+# 「稳健成长」/「稳健成长型」/「稳健增长型 · 收息」三种写法，对比表里像三个类别。
+# 归一化发生在**渲染时**，所以存量缓存不用重调 LLM。见 src/review/lynch.py 模块头。
+from src.review.lynch import (  # noqa: E402
+    CANONICAL_TYPES,
+    LYNCH_PLACEHOLDERS,
+    normalize,
+    split_note,
+)
+
 # 尝试导入 LLM 叙事层生成（可选，无 key 时降级为占位）
 try:
     from src.report.llm import generate_narrative
@@ -2151,7 +2162,37 @@ def _save_narrative(code: str, facts, narrative) -> None:
     )
 
 
-def _sync_watchlist(code: str, name: str, industry: str, lynch_type: str) -> None:
+def _lynch_fields(raw: str, note_field: str = "") -> tuple[str, str, str]:
+    """叙事层的林奇分类 → `(显示值, 规范值, 注解)`。
+
+    - **显示值**：规范值优先；识别不出时**保留原文**（报告要如实反映 LLM 说了什么）
+    - **规范值**：`CANONICAL_TYPES` 之一；识别不出返回**空串**（调用方据此决定不回写）
+    - **注解**：优先取 LLM 的 `lynch_note` 字段；老缓存没这个字段时，
+      就地从 `周期型（高股息现金牛）` 这类写法里剥出来（`split_note`）
+
+    ⚠️ 识别不出时**打印告警**而不是静默套个默认值 —— 「兜底成稳健成长」会让池子看着正常、
+    实际归类是编的，正是本项目最忌的静默错数。告警出现即说明 prompt 或 `_TYPE_ALIASES` 该补了。
+    """
+    raw = (raw or "").strip()
+    if raw in LYNCH_PLACEHOLDERS:
+        return raw, "", ""          # 「待分析」这类是链路未就位，不是分类异常 —— 别报警
+    body, legacy_note = split_note(raw)
+    canon = normalize(body)
+    if canon and canon not in CANONICAL_TYPES:
+        # 别名表把值写错时的兜底断言（`normalize` 只从 _TYPE_ALIASES 取值，
+        # 那两张表一旦不同步就会出现这里）。宁可退回原文也不要显示一个表外的值。
+        print(f"  ⚠️ 林奇分类归一化结果不在规范值里：{canon!r}（检查 _TYPE_ALIASES）")
+        canon = ""
+    if raw and not canon:
+        print(f"  ⚠️ 林奇分类无法归一化：{raw!r} —— 报告按原文显示，跟踪池不回写"
+              f"（该补 src/review/lynch.py 的 _TYPE_ALIASES 或收紧 prompt 了）")
+    # 失败时用**剥掉注解的 body** 而不是原始串：与 watchlist_store._normalize_lynch 一致，
+    # 否则注解会被显示两遍（一次在 lynch_type 里、一次在 lynch_note 里）。
+    return (canon or body or raw), canon, (note_field.strip() or legacy_note)
+
+
+def _sync_watchlist(code: str, name: str, industry: str, lynch_type: str,
+                    lynch_note: str = "") -> None:
     """把**报告口径**的行业 / Lynch 分类回写跟踪池（2026-09-18 定：Lynch 以报告为准）。
 
     为什么挂在这里而不是调用方：本函数是所有报告产出的必经之路
@@ -2161,20 +2202,25 @@ def _sync_watchlist(code: str, name: str, industry: str, lynch_type: str) -> Non
     ⚠️ 只在**真实数据**分支调用。示例数据分支的 `lynch_type` 是中国神华的样例值，
     回写到别家标的上会把归类安错对象 —— 那正是本项目最忌讳的「给用户看别家财报」。
 
+    ⚠️ `lynch_type` 传的是**规范值**（`_lynch_fields` 的第 2 个返回值）。空串表示「归一化
+    失败」，此时**只更新行业、不动 Lynch** —— 留着旧值比安一个编的类别好。
+
     回写失败只打印、绝不抛 —— 跟踪池是记账，报告才是交付物。
     """
     try:
         from src.data import watchlist_store as _wl
         status = _wl.upsert_from_report(code, name=name, industry=industry,
-                                        lynch=lynch_type)
+                                        lynch=lynch_type or None,
+                                        lynch_note=lynch_note or None)
         if status in ("added", "restored", "updated"):
-            print(f"  跟踪池: {status} {code}  {industry} · {lynch_type}")
+            shown = f"{lynch_type}{f' · {lynch_note}' if lynch_note else ''}" or "（未归一化，未回写）"
+            print(f"  跟踪池: {status} {code}  {industry} · {shown}")
     except Exception as e:
         print(f"  跟踪池回写失败（不影响报告）：{type(e).__name__}: {e}")
 
 
 def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = False) -> None:
-    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING, BACKFILL_SRC
+    global YEARS, FINANCIALS, QUARTER_LABELS, QUARTERLY, SEGMENT_LABELS, SEGMENTS, VALUATION, GRAHAM, RATING, FRAUD, COMPETITION, BUSINESS_MAP, CURRENT_POSITION, ANNUAL_RATES, PIE_DATA, COMPANY_NAME, COMPANY_CODE, NARRATIVE, RECONCILE_LOG, SANITY, CURRENCY_NOTE, VAL_CURRENCY_HINT, QUARTER_REVIEW, OPERATING, SWING_FACTS, BACKFILL_SRC
     # 货币口径：港股财报原生人民币，市值/股价原生港元，双币种标注避免误读
     CURRENCY_NOTE = (
         "港股标的 · 财务数据为人民币，股价/市值为港元"
@@ -2270,7 +2316,10 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
     publish_date = quote_date.isoformat() if quote_date else _date.today().isoformat()
 
     industry = (COMPETITION or {}).get("industry") or _narr(["industry"], "行业待接入")
-    lynch_type = _narr(["lynch_type"], "待分析")
+    # 林奇分类：叙事层的自由写法 → (显示值, 规范值, 注解)。显示值进徽章（规范值 · 注解），
+    # 规范值用于回写跟踪池（空串=归一化失败，只更新行业、不动 Lynch）。
+    lynch_type, lynch_canon, lynch_note = _lynch_fields(
+        _narr(["lynch_type"], "待分析"), _narr(["lynch_note"], ""))
     graham_badge = build_graham_badge()
 
     html = (
@@ -2327,9 +2376,11 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
     report_out.parent.mkdir(parents=True, exist_ok=True)
     report_out.write_text(html.replace("@@HOME_HREF@@", report_href), encoding="utf-8")
 
-    # 报告已落盘 → 用报告口径回写跟踪池（Lynch 分类的唯一真源，见函数 docstring）
+    # 报告已落盘 → 用报告口径回写跟踪池（Lynch 分类的唯一真源，见函数 docstring）。
+    # 传**规范值**（lynch_canon，空串=归一化失败）而不是显示值 —— 池子里只允许出现
+    # CANONICAL_TYPES 的 6 个值，注解走独立的 lynch_note 字段。
     if data_src.startswith("真实数据"):
-        _sync_watchlist(code, COMPANY_NAME, industry, lynch_type)
+        _sync_watchlist(code, COMPANY_NAME, industry, lynch_canon, lynch_note)
 
     print(f"generated:")
     print(f"  预览: {tpl_out}")

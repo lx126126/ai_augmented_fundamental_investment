@@ -34,6 +34,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data.adapter import build_template_data  # noqa: E402
+# 林奇分类的规范口径（`CANONICAL_TYPES` 6 值 + 同义写法归一）。
+# 小红书卡片也是用户看得见的产物 —— 报告徽章写「稳健成长」、卡片写「稳健成长型」，
+# 就是同一份内容两个说法。口径真源见 src/review/lynch.py 模块头。
+from src.review import lynch as _lynch  # noqa: E402
+
+
+def _lynch_label(narrative: dict | None) -> str:
+    """叙事层 → 展示用的林奇分类：`规范值 · 注解`，两者都没有时返回 `—`。
+
+    注解优先取 LLM 的 `lynch_note`，老缓存没有这个字段就地从
+    「周期型（高股息现金牛）」这类写法里剥出来。
+    """
+    n = narrative or {}
+    body, legacy_note = _lynch.split_note(str(n.get("lynch_type") or ""))
+    canon = _lynch.normalize(body)
+    if not canon and not body:
+        return "—"
+    note = str(n.get("lynch_note") or "").strip() or legacy_note
+    label = canon or body          # 归一化失败也要显示原文，不显示空
+    return f"{label} · {note}" if note else label
 
 # 配色（对齐报告品牌色）
 C = {
@@ -217,7 +237,7 @@ def slide_cover(data, narrative) -> str:
     peers = comp.get("peers_count")
     rank_txt = f"{industry} 行业第 {rank}" + (f" / {peers} 家" if peers else "")
 
-    lynch = (narrative or {}).get("lynch_type") or "—"
+    lynch = _lynch_label(narrative)          # 规范值 · 注解（口径同报告徽章）
     gbadge = (narrative or {}).get("graham_badge") or "—"
     gbadge_short = gbadge.split("（")[0].strip() if gbadge else "—"
 

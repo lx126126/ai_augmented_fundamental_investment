@@ -116,6 +116,9 @@ def _card(code: str, meta: dict, path: str, q: dict | None, hist_n: int) -> str:
     name = meta.get("name", code)
     industry = meta.get("industry", "")
     lynch = meta.get("lynch", "")
+    # 卡片副标题**刻意不带 `lynch_note` 注解**（对比表与 CLI `list` 带）。
+    # 卡片是导航用的紧凑块，注解会让副标题长出一截、在小屏上换行；
+    # 注解属于「这只为什么这么分类」的解释性信息，归报告徽章与对比表。
     sub = " · ".join(x for x in (industry, lynch) if x)
     color = meta.get("color", "#868e96")
     period = path.split("/")[1] if "/" in path else ""

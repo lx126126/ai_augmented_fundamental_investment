@@ -3,25 +3,92 @@
 
 投资决策的「决策总开关」：不同类型公司，该看什么、赌什么、怎么验证完全不同。
 这里把「林奇分类 → 该看的核心指标」固化成映射，供投研日记自动推导。
+
+分类值为什么必须收成枚举（2026-09-18）
+--------------------------------------
+`lynch_type` 原先由 LLM 自由输出，prompt 里写的是「**如** 周期型/稳健成长/…，**可加
+简短后缀**」——「如」+「可加后缀」= 输出必然不稳定。实测同一天同一池子里同一类别出现
+了三种写法：
+
+| 标的 | 池子里的值 | 规范化后 |
+|---|---|---|
+| 601088 神华 | `周期型（高股息现金牛）` | 周期型 · 高股息现金牛 |
+| 00700 腾讯 | `稳健成长` | 稳健成长 |
+| 600519 茅台 | `稳健成长型` | 稳健成长 |
+| 600900 长电 | `稳健增长型 · 收息` | 稳健成长 · 收息 |
+
+对比表把这几只排在一起时，同一类别看起来像三个类别。**所以分类值收成
+`CANONICAL_TYPES` 的 6 个值，后缀注解走独立字段/`split_note()`**：
+
+- LLM 侧：`src/report/llm.py` 的 prompt 要求**原样输出 6 值之一**，注解另填 `lynch_note`
+- 读取侧：历史缓存的自由写法（含括号、`·`、`增长/成长` 混用）由 `normalize()` 兜住 ——
+  归一化发生在**渲染时**，所以不用重新调 LLM、不花钱
+- 落库侧：`watchlist_store` 只存规范值 + `lynch_note`，见该模块的 `_normalize_lynch()`
+
+⚠️ 加新写法时**只改 `_TYPE_ALIASES` 一张表**，别在别处再写一遍同义词判断
+（原先 `src/review/lynch.py` 与 `src/data/watchlist_store.py` 各有一张表，这正是漂移的来源之一）。
 """
 from __future__ import annotations
 
-# 六类公司的关键词 → 类别名（用于从 lynch_type 字符串里模糊匹配）
-_CATEGORY_KEYWORDS = {
+import re
+
+#: 注解的两种写法：全/半角括号，或 `·` 分隔（`split_note` 用）
+_NOTE_PAREN_RE = re.compile(r"^(?P<body>.+?)\s*[（(]\s*(?P<note>[^）)]*?)\s*[）)]\s*$")
+_NOTE_DOT_RE = re.compile(r"^(?P<body>.+?)\s*[·・]\s*(?P<note>.+?)\s*$")
+
+#: 林奇六类的**规范值** —— 全仓唯一口径。报告徽章、跟踪池、对比表都只出现这 6 个。
+#: 顺序按「周期 → 成长 → 收息 → 反转 → 资产」排，供 UI 做稳定排序用。
+CANONICAL_TYPES: tuple[str, ...] = (
+    "周期型",
+    "快速成长",
+    "稳健成长",
+    "缓慢增长",
+    "困境反转",
+    "资产富余",
+)
+
+#: 「还没有真实分类」的占位值 —— 写进池子只会让人误以为「系统判过了」，一律不落库。
+#: `待分析` 是 `build_valueline` 取不到叙事时的兜底文案；`待归类` 是 `classify_lynch` 的兜底。
+#: `src/data/watchlist_store.py` 直接引用这一份，别在那边再抄一遍。
+LYNCH_PLACEHOLDERS: frozenset[str] = frozenset({"", "待分析", "待归类", "N/A", "—"})
+
+#: 同义写法 → 规范值。**长关键词优先匹配**（见 `_ALIAS_SORTED`），
+#: 否则「稳健成长」会被「成长」抢先命中成「快速成长」。
+_TYPE_ALIASES: dict[str, str] = {
+    # 周期
     "周期": "周期型",
-    "快速成长": "快速成长",
+    # 成长（快速增长 / 稳定增长 是林奇的原话，成长/增长 两套译名都要吃）
     "快速增长": "快速成长",
-    "成长": "快速成长",
+    "快速成长": "快速成长",
     "稳定成长": "稳健成长",
     "稳健成长": "稳健成长",
+    "稳健增长": "稳健成长",
+    "稳定增长": "稳健成长",
+    "成长": "快速成长",          # 裸「成长」兜底放在最长优先的最后
+    # 缓慢增长 / 收息
+    # ⚠️ 刻意**不登记**裸「增长」：`"增长" in "高速增长"` 成立，会把「高速增长」静默判成
+    #    缓慢增长（原先没有这条时是「识别不出→保留原文」，保留原文才是诚实的行为）。
+    #    裸「成长」同理有风险，但它是 2026-09-18 之前就有的行为，改动它会牵动 journal 产物。
     "缓慢增长": "缓慢增长",
-    "红利": "缓慢增长",   # 红利/收息股同缓慢增长类
+    "红利": "缓慢增长",          # 红利/收息股同缓慢增长类
+    # 困境反转
     "困境反转": "困境反转",
     "反转": "困境反转",
-    "资产富余": "资产隐蔽",
-    "资产隐蔽": "资产隐蔽",
-    "隐蔽资产": "资产隐蔽",
+    # 资产富余（三种译名）
+    "资产富余": "资产富余",
+    "资产隐蔽": "资产富余",
+    "隐蔽资产": "资产富余",
 }
+
+#: 规范值 → `_CATEGORY_METRICS` 的键名。两者只差「资产富余 / 资产隐蔽」一处
+#: —— 历史遗留：指标表的键写的是「资产隐蔽」。留在这里做一次显式翻译，
+#: 别去改指标表的键（`journal.py` 的私有产物已按老键名生成过）。
+_TYPE_TO_METRICS_KEY: dict[str, str] = {"资产富余": "资产隐蔽"}
+
+#: 按长度降序的关键词表 —— 匹配顺序即优先级，别改成按 dict 顺序
+_ALIAS_SORTED: tuple[tuple[str, str], ...] = tuple(
+    sorted(_TYPE_ALIASES.items(), key=lambda kv: -len(kv[0]))
+)
 
 # 每类公司 → 该看的核心指标清单（决策时盯这几个数）
 _CATEGORY_METRICS = {
@@ -64,18 +131,70 @@ _CATEGORY_METRICS = {
 }
 
 
+def split_note(raw: str) -> tuple[str, str]:
+    """把「类别 + 后缀注解」拆成两段：`("周期型（高股息现金牛）") → ("周期型", "高股息现金牛")`。
+
+    认三种注解写法（LLM 历史输出里都出现过）：
+
+    | 输入 | body | note |
+    |---|---|---|
+    | `周期型（高股息现金牛）` | 周期型 | 高股息现金牛 |
+    | `稳健增长型 · 收息` | 稳健增长型 | 收息 |
+    | `周期型（煤炭）· 高股息` | 周期型 | 煤炭 · 高股息 |
+    | `周期型` | 周期型 | （空） |
+
+    先剥 `·` 再剥括号 —— 反过来的话第三种输入会只剥到括号那段。
+    解析不出注解时 note 返回空串（**不编造**）。
+    """
+    s = (raw or "").strip()
+    dot_note = paren_note = ""
+
+    m = _NOTE_DOT_RE.match(s)
+    if m:
+        s, dot_note = m.group("body").strip(), m.group("note").strip()
+
+    m = _NOTE_PAREN_RE.match(s)
+    if m:
+        s, paren_note = m.group("body").strip(), m.group("note").strip()
+
+    # 注解顺序按阅读顺序：括号里的限定词在前，`·` 之后的补充在后
+    notes = [n for n in (paren_note, dot_note) if n]
+    return s, " · ".join(notes)
+
+
+def normalize(lynch_type: str) -> str:
+    """任意写法 → `CANONICAL_TYPES` 之一；**识别不出返回空串**（不猜、不硬套）。
+
+    专治 LLM 的自由输出与历史存量数据：`稳健成长型` / `稳健增长型` / `稳定成长`
+    统一成 `稳健成长`，`资产隐蔽` 统一成 `资产富余`，后缀注解先由 `split_note` 剥掉。
+
+    调用方拿到空串时**必须**决定怎么办（显示原文 / 跳过回写），
+    别把空串当「稳健成长」用 —— 那正是静默错数。
+    """
+    body, _ = split_note(lynch_type)
+    if not body:
+        return ""
+    for kw, cat in _ALIAS_SORTED:
+        if kw in body:
+            return cat
+    return ""
+
+
 def classify(lynch_type: str) -> str:
     """从 lynch_type 字符串识别林奇类别，返回标准类别名；识别不出返回原文。
 
     e.g. "周期型（煤炭）" → "周期型"；"快速成长" → "快速成长"；"稳健成长" → "稳健成长"。
+
+    ⚠️ 返回的是 `_CATEGORY_METRICS` 的**键名**，不是 `CANONICAL_TYPES` 的值
+    （两者只差「资产隐蔽 / 资产富余」一处，见 `_TYPE_TO_METRICS_KEY`）。
+    要展示用的规范值请用 `normalize()`。
     """
     if not lynch_type:
         return ""
-    # 长关键词优先，避免「稳健成长」被「成长」误匹配成「快速成长」
-    for kw, cat in sorted(_CATEGORY_KEYWORDS.items(), key=lambda x: -len(x[0])):
-        if kw in lynch_type:
-            return cat
-    return lynch_type
+    cat = normalize(lynch_type)
+    if not cat:
+        return lynch_type          # 识别不出 → 保留原文（诚实，且调用方看得出没归成类）
+    return _TYPE_TO_METRICS_KEY.get(cat, cat)
 
 
 def metrics_for(lynch_type: str) -> list[str]:

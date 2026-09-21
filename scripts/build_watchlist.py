@@ -78,10 +78,14 @@ def _pe_color(pe_pct):
 def _data_fingerprint(code: str) -> str:
     """该标的的行数据指纹 = raw parquet 最大 mtime **+ 池子里该标的的展示字段**。
 
-    ⚠️ 后半截不能省。行数据里有 `industry` / `lynch` / `color` 三项，它们来自
-    `watchlist.json`（见 `collect()` 里的 `meta.get(...)`），跟 raw parquet 毫无关系。
+    ⚠️ 后半截不能省。行数据里有 `industry` / `lynch` / `lynch_note` / `color` 四项，
+    它们来自 `watchlist.json`（见 `collect()` 里的 `meta.get(...)`），跟 raw parquet 毫无关系。
     2026-09-18 实测踩到：把全池 Lynch 对齐成报告口径（只改了 json，没动 raw）后重建
     对比表，11 只**全部命中缓存**、表里还是旧的「稳健增长型 · 收息」—— 改了等于没改。
+
+    ⚠️ 新增展示字段时必须同步加进下面这个元组。2026-09-18 又踩了一次同类：
+    引入 `lynch_note`（注解从分类字符串里拆出来）后忘了加，注解改了缓存不会失效 ——
+    这类「字段加了、指纹没加」是**静默**的，界面上看不出来，只能靠这张清单自觉。
 
     只取**该标的自己**的字段（不是整个 json 的 mtime），所以改一只不会让全池重算
     （全池重算约 2.6 分钟，代价不小）。
@@ -89,7 +93,7 @@ def _data_fingerprint(code: str) -> str:
     d = RAW_DIR / code
     mtime = max((f.stat().st_mtime for f in d.glob("*.parquet")), default=0.0) if d.is_dir() else 0.0
     s = wl.get(code, include_removed=True) or {}
-    meta = json.dumps([s.get(k) for k in ("name", "industry", "lynch", "color")],
+    meta = json.dumps([s.get(k) for k in ("name", "industry", "lynch", "lynch_note", "color")],
                       ensure_ascii=False)
     return f"{mtime:.6f}|{hashlib.md5(meta.encode('utf-8')).hexdigest()[:10]}"
 
@@ -131,6 +135,7 @@ def collect(code: str) -> dict | None:
         "name": meta.get("name") or real.get("company_name") or code,
         "industry": meta.get("industry", ""),
         "lynch": meta.get("lynch", ""),
+        "lynch_note": meta.get("lynch_note", ""),
         "color": meta.get("color", "#868e96"),
         "quote_date": quote_date,
         "year": narr.get("latest_year", "—"),
@@ -256,7 +261,11 @@ def _render_rows(rows: list[dict]) -> str:
             f"{_fmt(r['price'], 2)}"
             f"<div class='sub'>{r.get('quote_date') or '—'}</div>"
         )
-        ind_txt = " · ".join(x for x in (r.get("industry", ""), r.get("lynch", "")) if x)
+        # 行业 · 林奇分类 · 注解。注解（「高股息现金牛」这类）2026-09-18 起从分类字符串里
+        # 拆出来独立存 —— 不拆的话同一类别会有「稳健成长/稳健成长型/稳健增长型·收息」三种写法。
+        # 少了注解就分不出 601088 / 00883 / 600938 这三只同为「周期型」的差别。
+        ind_txt = " · ".join(x for x in (r.get("industry", ""), r.get("lynch", ""),
+                                         r.get("lynch_note", "")) if x)
 
         body.append(
             "<tr>"

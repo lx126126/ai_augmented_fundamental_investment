@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""跟踪池命令行入口：查看 / 手工入池 / **移出池** / 同步 .gitignore 白名单。
+"""跟踪池命令行入口：查看 / 手工入池 / **移出池** / Lynch 口径回填。
 
 为什么需要「移出」这一半
 ------------------------
@@ -12,11 +12,13 @@
 
 1. 首页多一张卡片、对比表多一列（页面产物要手工重建才同步）
 2. `data/raw/<code>/` 留下一份冷数据
-3. `.gitignore` 的跟踪池白名单要**手工**补一行，忘了 → 报告不进版本库
-   （`reports/**/*.html` 默认全忽略，靠 `!reports/**/<code>.html` 逐只放行）
+3. 本地 `reports/` 多一份报告产物（**不入库**，见下）
 
-本脚本补齐减法，并把「重建派生网页」和「同步白名单」一起做掉 —— 这三件事
-本来就是一体的，拆开做必然漏。
+本脚本补齐减法，并把「重建派生网页」一起做掉 —— 这两件事本来就是一体的，拆开做必然漏。
+
+⚠️ 第 3 项在 2026-09-18 之前更严重：当时 `reports/**/*.html` 默认全忽略、靠
+`!reports/**/<code>.html` 逐只拉链式放行，**忘了补白名单 → 报告静默不入库（零报错）**。
+现在 `reports/` 已整目录出库，那条漂移风险连同「同步白名单」这一步一起消掉了。
 
 移出是**软删**（`status` 置 `removed`，保留名称/行业/颜色）
 ------------------------------------------------------------------
@@ -26,9 +28,9 @@
 留一个 `status` 就能分开：移出的排除在兜底外，链路故障的照旧兜底。想彻底删用
 `watchlist_store.prune()`。
 
-Lynch 分类：报告口径是唯一真源（2026-09-18 定）
------------------------------------------------
-同一个「林奇六类」在项目里有两套实现，产出**不同的字符串**：
+Lynch 分类：报告口径是唯一真源，且值必须收成 6 个规范值（2026-09-18 两次定）
+-----------------------------------------------------------------------------
+① 同一类别原先在项目里**有两套实现、产出不同字符串**：
 
 | 来源 | 实现 | 举例（长江电力 600900） |
 |---|---|---|
@@ -37,6 +39,17 @@ Lynch 分类：报告口径是唯一真源（2026-09-18 定）
 
 同一个标的在两处显示不同归类 —— 结构性冲突，不是 600900 特有。已定：**以报告为准**
 （LLM 读了业务构成，比关键字猜行业名可靠；且报告是用户直接看的那份）。
+
+② 但「以报告为准」只解决**谁说了算**，没解决**说法不统一**：LLM 是自由输出的，
+同一天同一池子里出现了 `稳健成长` / `稳健成长型` / `稳健增长型 · 收息` 三种写法，
+对比表把这几只排在一起时，同一类别看起来像三个类别。所以再收一层：
+
+- **分类值冻结为 `src/review/lynch.py` 的 `CANONICAL_TYPES` 六个**，全仓唯一口径
+- **注解走独立字段 `lynch_note`**（`周期型` + `高股息现金牛`），不再混在分类字符串里
+- prompt 已改成「必须原样输出 6 值之一」（`src/report/llm.py`）；
+  存量缓存靠 `normalize()` 在**渲染时**兜住 —— 不重调 LLM、不花钱
+- 落库端 `watchlist_store._normalize_lynch()` 是最后一道闸，
+  认不出的值**保留原文**（界面上看得出来）而不是套个默认值
 
 落地：`build_valueline.build()` 在**真实数据**分支结束时调
 `watchlist_store.upsert_from_report()` 回写；`classify_lynch()` 降级为
@@ -102,6 +115,20 @@ def rebuild() -> bool:
 # 子命令
 # --------------------------------------------------------------------------- #
 
+def _lynch_label(s: dict) -> str:
+    """列表里显示的 Lynch 分类：`规范值 · 注解`（注解可缺，缺就只显示规范值）。
+
+    ⚠️ 这里**刻意不再做一次归一化** —— `watchlist_store` 已经保证落库的 `lynch`
+    是 6 个规范值之一，显示层再归一化一遍就会出现「json 里一个值、界面另一个值」，
+    排查时根本看不出是哪一层改的。分类值真源在 `src/review/lynch.py`。
+    """
+    lynch = (s.get("lynch") or "").strip()
+    note = (s.get("lynch_note") or "").strip()
+    if not lynch:
+        return "—"
+    return f"{lynch} · {note}" if note else lynch
+
+
 def cmd_list(_args) -> int:
     items = wl.stocks()
     if not items:
@@ -114,7 +141,7 @@ def cmd_list(_args) -> int:
         src = s.get("source") or "—"
         since = s.get("since") or "—"
         print(f"  {i:>2}. {s['code']:<11} {s.get('name', ''):<10} "
-              f"│ {s.get('industry', ''):<10} │ {s.get('lynch', '')}"
+              f"│ {s.get('industry', ''):<10} │ {_lynch_label(s)}"
               f"  {s.get('color', '')}  ({src}, {since})")
 
     gone = [s for s in wl.stocks(include_removed=True) if s.get("status") == "removed"]
@@ -134,7 +161,7 @@ def cmd_add(args) -> int:
             s = wl.get(code) or {}
             added.append(code)
             print(f"✓ 已入池：{s.get('code')} {s.get('name')}"
-                  f"（{s.get('industry')} · {s.get('lynch')}）")
+                  f"（{s.get('industry')} · {_lynch_label(s)}）")
         else:
             print(f"· 已在池中或代码非法，跳过：{code}")
     if not added:
@@ -215,20 +242,26 @@ def cmd_remove(args) -> int:
 NARRATIVE_CACHE = ROOT / "data" / "cache" / "narrative"
 
 
-def _cached_lynch(code: str) -> tuple[str, str]:
-    """从叙事缓存读该标的的报告口径 `(lynch_type, industry)`；读不到返回两个空串。"""
+def _cached_lynch(code: str) -> tuple[str, str, str]:
+    """从叙事缓存读该标的的报告口径 `(lynch_type, lynch_note, industry)`；读不到返回三个空串。
+
+    返回的 `lynch_type` 是**LLM 的自由写法**（`周期型（高股息现金牛）` 这类），
+    不需要在这里归一化 —— `wl.update_fields()` 会收成规范值、把注解拆到 `lynch_note`。
+    """
     p = NARRATIVE_CACHE / f"{wl.bare(code)}.json"
     if not p.exists():
-        return "", ""
+        return "", "", ""
     try:
         narr = (json.loads(p.read_text(encoding="utf-8")) or {}).get("narrative") or {}
-        return str(narr.get("lynch_type") or ""), str(narr.get("industry") or "")
+        return (str(narr.get("lynch_type") or ""),
+                str(narr.get("lynch_note") or ""),
+                str(narr.get("industry") or ""))
     except Exception:
-        return "", ""
+        return "", "", ""
 
 
 def cmd_sync_lynch(args) -> int:
-    """把跟踪池的 Lynch 分类对齐到报告口径（LLM 判定）。"""
+    """把跟踪池的 Lynch 分类对齐到报告口径（LLM 判定），并收成 6 个规范值。"""
     targets = args.codes or wl.codes()
     if not targets:
         print("跟踪池为空，无事可做")
@@ -243,18 +276,18 @@ def cmd_sync_lynch(args) -> int:
         if s.get("status") == "removed":
             skipped.append((wl.bare(code), "已移出（刻意移出的不因缓存回填而复活）"))
             continue
-        lynch, industry = _cached_lynch(code)
+        lynch, note, industry = _cached_lynch(code)
         if not lynch:
             skipped.append((wl.bare(code), "无叙事缓存 —— 该标的还没生成过完整报告"))
             continue
-        before = s.get("lynch", "")
-        wl.update_fields(code, lynch=lynch, industry=industry)
-        after = (wl.get(code) or {}).get("lynch", "")
+        before = _lynch_label(s)
+        wl.update_fields(code, lynch=lynch, lynch_note=note, industry=industry)
+        after = _lynch_label(wl.get(code) or {})
         rows.append((wl.bare(code), s.get("name", ""), before, after))
 
     changed = [r for r in rows if r[2] != r[3]]
     print(f"Lynch 分类对齐：处理 {len(rows)} 只，其中 {len(changed)} 只有变化"
-          f"（口径 = 报告里 LLM 判定的值）\n")
+          f"（口径 = 报告里 LLM 判定的值，已归一化为 6 个规范值）\n")
     for code, name, before, after in rows:
         mark = "✎" if before != after else " "
         print(f"  {mark} {code:<8} {name:<8} {before or '(空)':<22} → {after or '(空)'}")
