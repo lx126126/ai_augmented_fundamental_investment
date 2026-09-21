@@ -525,6 +525,18 @@ def build_template_data(code: str) -> dict:
         if operating.get("现金流归因"):
             quarter_review_facts["现金流归因"] = operating["现金流归因"]
 
+    # 「主要变动指标」候选榜：三大报表里变动最大的科目，供季度解读做异动归因。
+    # 替掉原先只讲现金流的写法 —— 那份只解析现金流量表，11 只标的里只有 2 只能抽到，
+    # 其余全部退化成一句「本期现金流归因数据未取到」。见 src/report/swing.py 模块头。
+    if quarter_review_facts:
+        try:
+            from src.report.swing import build as _build_swing
+            swing = _build_swing(raw)
+        except Exception:
+            swing = None
+        if swing:
+            quarter_review_facts["主要变动指标"] = swing
+
     # LLM 叙事层的事实摘要（数据先行，LLM 只翻译不编数）
     narrative_data = _build_narrative_data(annual, segments, valuation, company_name, code, competition)
     if business_map:

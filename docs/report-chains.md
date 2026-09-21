@@ -172,7 +172,7 @@ python scripts/update_spot_all.py --workers 4     # 8368 只 / 25.8s
 | 缓存 | 位置 | 键 | 失效条件 | 谁读 |
 |---|---|---|---|---|
 | 叙事层 | `data/cache/narrative/{code}.json` | facts-hash（**含估值与市值**） | 行情一动即失效 | `_load_cached_narrative()` |
-| 季度解读 | `data/cache/quarterly_review/{code}.json` | facts-hash + mdd-hash | 原文/财务事实变，或 >3 天 | `get_or_generate()` |
+| 季度解读 | `data/cache/quarterly_review/{code}.json` | **`schema` 版本** + facts-hash + mdd-hash | 原文/财务事实变、输出结构版本变，或 >3 天 | `get_or_generate()` |
 | 经营结构抽取 | `data/cache/operating_structure/` | 抽取逻辑版本 `_EXTRACT_VERSION` | 改抽取逻辑须递增版本号 | `mda_extract` |
 | 公告原文 | `data/cache/disclosure/`、`cninfo_org/` | 报告期 | 新报告披露 | PDF 校验 / 季报解读 |
 | 对比表行 | `data/cache/watchlist_rows.json` | **raw parquet mtime + 本标的 4 个池字段 hash** | 数据变 **或** `industry/lynch/color/name` 变 | `build_watchlist._data_fingerprint()` |
@@ -181,6 +181,17 @@ python scripts/update_spot_all.py --workers 4     # 8368 只 / 25.8s
 🔴 **最容易中的一坑**：叙事层哈希含行情，所以「只想更新价格」必须走 `--daily`；
 而 `--daily` 一旦**跳过**叙事，报告就会缺板块（这正是 §8 断点 1）。
 正确做法是 `--daily` **复用**缓存，与「哈希只看财务事实」等价，但不需要重构哈希、不废掉已有缓存。
+
+🔴 **第二坑：结构版本（`_SCHEMA`）的界线要划对**（2026-09-21）。
+改了 LLM 输出结构（如 `cashflow` → `swing`）之后，两个分支必须**反向**处理：
+
+| 分支 | 遇旧结构要怎么做 | 为什么 |
+|---|---|---|
+| 完整构建（非 `cache_only`） | **当没有缓存**，重新生成 | 不这样的话新键永远补不上，渲染端取到空串、段落静默消失 |
+| 日更（`cache_only=True`） | **照旧交出**，只打 `_schema_stale` 标记 | 拒绝返回 = 日更把全池报告的这个板块洗成占位符，要 14 次 LLM 调用才补得回来，且零报错 |
+
+**改输出键或改任一段语义就必须 `_SCHEMA` +1**，并跑一次不带 `--daily` 的构建把缓存补齐。
+过渡期的键兼容由渲染端兜（`_swing_block` 会退回旧的 `cashflow`，并在脚注写明「沿用上一版结构」）。
 
 ---
 
@@ -197,7 +208,8 @@ python scripts/update_spot_all.py --workers 4     # 8368 只 / 25.8s
 | F7 | 东财重述 | 覆盖式快照**不可回滚**，`backup.py` 以「可再生」为由不备份 `data/raw` | ⚠️ 该理由在重述场景下不成立（已知待办） |
 | F8 | `920xxx` 北交所代码 | 按首字符 9 归沪市 → 静默取不到行情（少 344 只） | `market_index.a_share_exchange()` 唯一实现 |
 | F9 🔴 | **没有季报解读缓存的标的** | 日更走 `get_quarter_review(..., cache_only=True)` —— **只读缓存，绝不生成**。没有 `data/cache/quarterly_review/{code}.json` 的标的，报告里「季度财报解读」**永远**是占位符，日更一万次也补不上（零报错） | ✅ 2026-09-18 加防线：`artifacts.audit_placeholders()` + `scripts/check_placeholders.py`，日更收尾自动体检（**只告警、不进 failed**）。**判据**：`ls data/cache/quarterly_review/` 有几只，报告里就有几只有内容。**修法**：跑一次不带 `--daily` 的构建 |
-| F10 🔴 | **占位符掩盖了渲染路径的 bug** | 内容缺失时那段代码根本不执行，于是「缺内容」把「渲染崩溃」挡住了 —— 两个问题叠在一起，只看得见前一个。一旦补齐内容，`_cashflow_block` 在 `None` 上抛 `TypeError: unsupported format string passed to NoneType` → **整份报告渲染失败、不落盘**，磁盘上留着的还是旧那份 | `_yi()` 统一兜底 None（根因：`.get(k, 0)` **只吃 key 不存在，吃不掉 key 存在但值为 None**，而 adapter 抽不到数据时写的正是显式 None） |
+| F10 🔴 | **占位符掩盖了渲染路径的 bug** | 内容缺失时那段代码根本不执行，于是「缺内容」把「渲染崩溃」挡住了 —— 两个问题叠在一起，只看得见前一个。一旦补齐内容，`_swing_block` 在 `None` 上抛 `TypeError: unsupported format string passed to NoneType` → **整份报告渲染失败、不落盘**，磁盘上留着的还是旧那份 | `_yi()` 统一兜底 None（根因：`.get(k, 0)` **只吃 key 不存在，吃不掉 key 存在但值为 None**，而 adapter 抽不到数据时写的正是显式 None） |
+| F11 🔴 | **LLM 输出结构升级** | ① 完整构建若照旧命中旧结构缓存 → 渲染端按新键取到空串，**段落静默消失**；② 反之若日更拒绝旧缓存 → 板块被洗成占位符，要 14 次 LLM 调用才补回 | `quarterly_review._SCHEMA`：完整构建**拒绝**旧结构（重新生成）、日更**容忍**旧结构（打 `_schema_stale` + 渲染端退回旧键）。见 §5 |
 
 ### F9 实测记录（2026-09-18）
 
@@ -209,7 +221,7 @@ python scripts/update_spot_all.py --workers 4     # 8368 只 / 25.8s
 | `real["quarter_review_facts"]` | ✓ 有内容（7–9 键），`if` 条件满足 —— **不是数据缺失** |
 | `DEEPSEEK_API_KEY`（`.env`） | ✓ 配着（35 字符） |
 | 巨潮原文 `data/cache/disclosure/` | 601088 / 601328 / 000651 **有** 3 份 PDF；00700 / 09992 港股无 |
-| 手动跑 `get_or_generate('601088', facts)` | ✓ **一次成功**（返回 `data_read / structure / cashflow / management / watch`，`_cached=False`） |
+| 手动跑 `get_or_generate('601088', facts)` | ✓ **一次成功**（返回 `data_read / structure / swing / management / watch`，`_cached=False`。⚠️ 2026-09-21 起 `cashflow` 段改名为 `swing`） |
 
 → **链路完好，纯粹是「从没跑过非日更构建」**。时间线佐证：有内容的 7 只，其
 `narrative` 与 `quarterly_review` 缓存的 mtime **只差几秒**（同一次构建的产物）；

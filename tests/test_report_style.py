@@ -6,8 +6,8 @@
 只是那个元素退回浏览器默认样式（16px 系统字体、正文色），
 在一堆 11.5px 的段落里突兀得像从别的板块粘过来的。
 
-真实事故（2026-09）：新增「现金流异动归因」板块时，CSS 被加到了
-`templates/valueline.html` 上，而那个文件是**构建产物** —— 下一次构建
+真实事故（2026-09）：新增「主要变动指标归因」板块（当时叫「现金流异动归因」）时，
+CSS 被加到了 `templates/valueline.html` 上，而那个文件是**构建产物** —— 下一次构建
 （写 `templates/valueline.html` + `reports/<期>/<code>.html`）把它整体覆盖，
 新规则的段落于是渲染成 16px。纯看 HTML 元素计数 / 文件大小完全发现不了。
 
@@ -97,7 +97,7 @@ def test_review_blocks_share_one_type_scale():
     assert prose, ".qr-col p 未声明 font-size"
     size = prose.group(1)
 
-    for sel in (".qr-cf-wrap p", ".op-table", ".cf-strip"):
+    for sel in (".qr-swing-wrap p", ".op-table", ".sw-table", ".cf-strip"):
         body = decl(sel)
         got = re.search(r"font-size:\s*([\d.]+)px", body)
         assert got, f"{sel} 未声明 font-size（会退回浏览器默认 16px）"

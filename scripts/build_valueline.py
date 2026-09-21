@@ -119,6 +119,7 @@ COMPANY_CODE = "601088"    # 股票代码
 NARRATIVE = None           # LLM 叙事层（真实数据时由 generate_narrative 生成）
 QUARTER_REVIEW = None      # 季度财报解读（定期报告原文 + 单季事实 → DeepSeek）
 OPERATING = None           # 经营结构：分产品/渠道/地区 收入占比·毛利率·同比 + 年度经营计划
+SWING_FACTS = None         # 主要变动指标候选榜（三大报表里变动最大的科目，来自 src/report/swing.py）
 RECONCILE_LOG = []         # 数据交叉校验覆盖记录（官方年报 PDF 修正接口错误字段）
 SANITY = None              # 业务勾稽体检结果（会计恒等式/利润勾稽/比率边界/同比异常）
 CURRENCY_NOTE = ""         # 货币口径说明（港股标的标注：财务人民币，股价/市值港元）
@@ -1247,7 +1248,7 @@ def build_quarter_review() -> str:
         f'<div class="qr-col"><div class="qr-h">经营结构解读</div>{_p("structure")}</div>'
         f'<div class="qr-col"><div class="qr-h">管理层观点与战略</div>{_p("management")}</div>'
         "</div>"
-        + _cashflow_block(r)
+        + _swing_block(r)
         + f'<div class="qr-watch-wrap"><div class="qr-h">投资者需要关注</div>{watch_block}</div>'
         f'<div class="qr-foot">{" · ".join(src_bits)}</div>'
         "</div>"
@@ -1276,21 +1277,90 @@ def _yi(v, default: str = "—") -> str:
         return default
 
 
-def _cashflow_block(review: dict) -> str:
-    """现金流异动归因：LLM 的科目级解释 + 一条口径对照条（总额 vs 剔除财务公司后）。
+def _swing_block(review: dict) -> str:
+    """主要变动指标归因：LLM 的科目级解释 + 一张「当期变动最大的科目」榜。
 
-    对照条是硬性的一部分而不是装饰：市场对「经营现金流同比 +438%」的第一反应是
-    「回款大幅改善」，而这类跳变在带财务公司的公司里十有八九来自吸收存款/缴存央行/
-    同业拆放的搬动。把两个口径并排放在一句话里，读者不必读正文就知道该信哪个。
+    为什么不再叫「现金流异动归因」：见 src/report/swing.py 模块头 —— 只讲现金流等于
+    只对带财务公司的那两家标的有效，其余标的的板块长期是「本期现金流归因数据未取到」。
+
+    现金流附注（总额 vs 剔除财务公司科目后的对照条 + 财务公司科目表）**只在经营现金流
+    自己进了榜单时才渲染**。它是硬数据，但不该在现金流没有异动的标的上白占位置。
     """
-    txt = (review.get("cashflow") or "").strip()
+    txt = (review.get("swing") or "").strip()
+    # 过渡期兜底（2026-09-21 改版当天加，全池跑过一次完整构建后即可删）：
+    # 旧结构缓存里那一段叫 `cashflow`。日更（cache_only）刻意容忍结构版本不符，
+    # 就是为了不让 14 份报告在这个窗口里被洗成占位符 —— 而容忍的代价就是这里要认旧键。
+    if not txt:
+        txt = (review.get("cashflow") or "").strip()
+    stale = bool(review.get("_schema_stale"))
+    sw = SWING_FACTS or {}
+    items = sw.get("候选") or []
+
+    rows = []
+    for i, e in enumerate(items):
+        group = e.get("分组") or ""
+        # 分组列用 rowspan 合并（同分组连续排列，见 swing.build 的 _GROUP_ORDER）
+        first = (i == 0 or items[i - 1].get("分组") != group)
+        span = sum(1 for x in items[i:] if x.get("分组") == group)
+        group_cell = (f'<td class="op-cut" rowspan="{span}">{group}</td>' if first else "")
+        rows.append(
+            "<tr>"
+            + group_cell
+            + f'<td class="op-name">{e.get("名称") or ""}</td>'
+            + f'<td class="op-num">{_yi(e.get("本期_亿元"))}</td>'
+            + f'<td class="op-num">{_yi(e.get("上期_亿元"))}</td>'
+            + f'<td class="op-num">{_op_chg(e.get("变动_亿元"))}</td>'
+            + f'<td class="op-num">{_op_yoy(e.get("同比_pct"))}</td>'
+            + "</tr>"
+        )
+    table = (
+        '<table class="op-table sw-table"><thead><tr>'
+        '<th>分组</th><th>指标</th><th>本期（亿元）</th><th>上期（亿元）</th>'
+        '<th>变动（亿元）</th><th>同比</th>'
+        f'</tr></thead><tbody>{"".join(rows)}</tbody></table>'
+    ) if rows else ""
+
+    notes = [sw.get("口径说明"), sw.get("门槛说明"), sw.get("未入榜说明")]
+    # 色阶只按数值正负染色（涨红跌绿），对「信用减值损失」「销售费用」这类反向科目，
+    # 红色意味着「变得更多」而不是「更好」。不写这句，扣非利润下滑的绿字与减值上升的
+    # 红字并排，读者会直接把颜色读成利好利空 —— 这张表不做那个判断。
+    notes = [n for n in notes if n] + ["颜色只表示变动方向（涨红跌绿），不表示利好或利空"]
+    if stale:
+        # 让「这段是上一版结构留下的」可见 —— 不写的话读者会把旧口径的内容当成本期新写的。
+        notes.append("异动归因沿用上一版结构生成，跑一次完整构建后更新")
+    foot = f'<div class="op-foot">{"；".join(notes)}。</div>'
+
+    if not txt and not table:
+        return ""
+
+    # 现金流附注：只在经营现金流入榜、且事实层确实有可展示的口径对照时出现
+    annex = _cf_annex() if sw.get("经营现金流是否入榜") else ""
+    body = f"<p>{txt}</p>" if txt else '<p style="color:var(--faint)">—</p>'
+    return (
+        '<div class="qr-swing-wrap">'
+        f'<div class="qr-h">主要变动指标归因'
+        + (f'<span class="qr-sub">　{sw.get("报告期") or ""} vs {sw.get("上期") or ""}</span>'
+           if sw.get("报告期") else "")
+        + "</div>"
+        + body + table + foot + annex
+        + "</div>"
+    )
+
+
+def _cf_annex() -> str:
+    """现金流口径核对：总额同比 + 剔除财务公司科目后的主业口径 + 财务公司科目明细。
+
+    这块是硬数据不是装饰：市场对「经营现金流同比 +438%」的第一反应是「回款大幅改善」，
+    而这类跳变在带财务公司的公司里十有八九来自吸收存款/缴存央行/同业拆放的搬动。
+    把两个口径并排放在一句话里，读者不必读正文就知道该信哪个。
+    """
     ocf = (OPERATING or {}).get("现金流归因") or {}
     yoy = ocf.get("净额同比_pct")
     adj = ocf.get("剔除财务公司科目后") or {}
-    strip = ""
     # ⚠️ 「本期净额」取不到时**整条对照条不渲染** —— 它存在的意义就是对照这个数，
     # 补 0 等于凭空断言「本期为 0」。同理下面的金额一律走 _yi（None → 「—」，不崩）。
     cur_ocf = (ocf.get("经营活动产生的现金流量净额_亿元") or {}).get("本期")
+    strip = ""
     if ocf and cur_ocf is not None:
         bits = [f'{ocf.get("期间") or ""} 经营现金流净额 {_yi(cur_ocf)} 亿元']
         if yoy is not None:
@@ -1315,15 +1385,15 @@ def _cashflow_block(review: dict) -> str:
     )
     table = (
         '<table class="op-table cf-table"><thead><tr>'
-        '<th>主要变动科目</th><th>本期（亿元）</th><th>上期（亿元）</th><th>变动（亿元）</th>'
+        '<th>现金流主要变动科目</th><th>本期（亿元）</th><th>上期（亿元）</th><th>变动（亿元）</th>'
         f'</tr></thead><tbody>{rows}</tbody></table>'
     ) if rows else ""
-    if not txt and not strip and not table:
+    if not strip and not table:
         return ""
     return (
-        '<div class="qr-cf-wrap">'
-        '<div class="qr-h">现金流异动归因</div>'
-        + (f'<p>{txt}</p>' if txt else "")
+        '<div class="cf-note">'
+        '<div class="cf-note-h">现金流口径核对<span class="cf-note-s">'
+        '财务公司（吸收存款 / 缴存央行 / 同业拆放）科目对主业景气度无指示意义</span></div>'
         + strip + table
         + "</div>"
     )
@@ -1712,7 +1782,7 @@ body {
 .op-title { font-size: 12px; font-weight: 700; color: var(--accent); display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .op-note { font-size: 10px; font-weight: 400; color: var(--faint); }
 /* 表体 11.5px = 本板块正文（.qr-col p）的字号，表头低 1px 做层级。
-   同一板块里正文与两张表（经营结构 / 现金流归因）必须共用一套字阶，
+   同一板块里正文与两张表（经营结构 / 主要变动指标）必须共用一套字阶，
    否则会出现「11.5 / 11 / 10」三种尺寸并排，看起来像三个人拼的版面。 */
 .op-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .op-table th { font-size: 10.5px; font-weight: 600; color: var(--muted); text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); background: var(--bg-soft); }
@@ -1739,11 +1809,20 @@ body {
 .qr-h { font-size: 11px; font-weight: 700; color: var(--accent); margin-bottom: 5px; }
 .qr-col p, .qr-watch-wrap p { font-size: 11.5px; line-height: 1.8; color: #33404f; }
 .qr-watch-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px dashed var(--line); }
-/* 现金流异动归因：正文字号/行高/颜色必须与「季度数据表现 / 经营结构解读」逐项相同。
+/* 主要变动指标归因：正文字号/行高/颜色必须与「季度数据表现 / 经营结构解读」逐项相同。
    漏写这段规则时，<p> 会退回浏览器默认 16px + var(--ink)，在一堆 11.5px/#33404f 的
    段落里明显像是从别的板块粘过来的——而且不报错，只有肉眼看才看得出来。 */
-.qr-cf-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
-.qr-cf-wrap p { font-size: 11.5px; line-height: 1.8; color: #33404f; }
+.qr-swing-wrap { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
+.qr-swing-wrap p { font-size: 11.5px; line-height: 1.8; color: #33404f; }
+.qr-sub { font-size: 10px; font-weight: 400; color: var(--faint); }
+/* 变动榜表体与经营结构表同为 11.5px（显式写出来而不是靠 .op-table 继承：
+   tests/test_report_style.py 对同一板块里每张表都要求显式声明字号）。 */
+.sw-table { margin-top: 7px; font-size: 11.5px; }
+/* 现金流附注：只在经营现金流自己进了变动榜时才渲染（见 build_valueline._cf_annex）。
+   用虚线而不是实线与正文分开 —— 它是主榜之外的「口径核对」，不是并列的第二个板块。 */
+.cf-note { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.cf-note-h { font-size: 11px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.cf-note-s { margin-left: 6px; font-size: 10px; font-weight: 400; color: var(--faint); }
 .cf-strip { margin-top: 4px; font-size: 11.5px; line-height: 1.8; color: var(--muted); }
 .cf-strip b { font-weight: 700; }
 .cf-strip b.up { color: var(--up); }
@@ -2259,6 +2338,7 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
         PIE_DATA = real.get("pie_data")
         SANITY = real.get("sanity")
         OPERATING = real.get("operating_structure")
+        SWING_FACTS = (real.get("quarter_review_facts") or {}).get("主要变动指标")
         BACKFILL_SRC = real.get("backfill_src") or {}
         if real["company_name"]:
             COMPANY_NAME = real["company_name"]
@@ -2305,6 +2385,9 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
     else:
         report_period = "2026Q2"
         data_src = "示例数据"
+        # 示例数据分支必须清空：这个进程可能刚渲染过一只真实标的，
+        # 留着上一只的变动榜会以「神华样例版式 + 别家科目」的样子输出去。
+        SWING_FACTS = None
 
     year_range = f"{YEARS[0]}–{YEARS[-1]}"
     quarter_range = f"{QUARTER_LABELS[0]}–{QUARTER_LABELS[-1]}"

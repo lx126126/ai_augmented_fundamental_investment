@@ -7,9 +7,12 @@
 把全池 11 只归档报告的投资逻辑 / 风险提示洗成了「待 LLM 生成」，
 而同日按需生成的长江电力是完整的 —— 文件大小、元素计数、日志，全看不出异常。
 
-两道防线：
+两条防线：
   ① 行为测试：`cache_only=True` 只读缓存、绝不联网/调模型（季度解读）；
   ② 静态断言：`build()` 的 daily 分支必须是**复用缓存**，不能退回「跳过」。
+第三条（2026-09-21 加）：结构版本（`quarterly_review._SCHEMA`）的界线要划对 ——
+**完整构建**遇旧结构必须重新生成，**日更**遇旧结构必须照旧交出（打 `_schema_stale` 标记）。
+划反了就会在改版当天把全池报告的季度解读洗成占位符。
 """
 from __future__ import annotations
 
@@ -37,10 +40,54 @@ def cache_dir(tmp_path, monkeypatch):
 def _write_cache(path: Path, facts_hash: str) -> dict:
     review = {"summary": "上次生成的解读正文", "highlights": ["一", "二"]}
     path.write_text(json.dumps({
+        # schema 必须与当前 `_SCHEMA` 一致 —— 结构版本不符的缓存一律当没有缓存，
+        # 否则改了输出键之后日更会把旧结构的缓存原样返回（段落静默消失）。
+        "schema": qr._SCHEMA,
         "facts_hash": facts_hash, "mdd_hash": "whatever",
         "review": review, "meta": {"has_mdd": True},
     }, ensure_ascii=False), encoding="utf-8")
     return review
+
+
+def test_cache_only_tolerates_old_schema_but_marks_it(cache_dir, monkeypatch):
+    """结构版本不符时，`cache_only` **仍然要交出旧内容**，只是打上 `_schema_stale`。
+
+    反过来的设计（拒绝返回）看着更"干净"，代价却极大：改一次输出结构，日更就会把全池
+    报告的季度解读洗成占位符 —— 要 14 次 LLM 调用才补得回来，而且**零报错**。
+    键的兼容由渲染端负责（`build_valueline._swing_block` 退回旧的 `cashflow`）。
+    """
+    p = cache_dir / "600519.json"
+    _write_cache(p, facts_hash="x")
+    obj = json.loads(p.read_text(encoding="utf-8"))
+    obj["schema"] = qr._SCHEMA - 1
+    p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+
+    def _boom(*a, **kw):  # pragma: no cover
+        raise AssertionError("cache_only 不该触发生成")
+
+    monkeypatch.setattr(qr, "generate", _boom)
+    monkeypatch.setattr(qr, "fetch_latest_report", _boom)
+    out = qr.get_or_generate("600519", FACTS, cache_only=True)
+    assert out is not None and out["_schema_stale"] is True
+
+
+def test_full_build_regenerates_on_old_schema(cache_dir, monkeypatch):
+    """完整构建（非 cache_only）遇到旧结构缓存必须重新生成 —— 否则新键永远补不上。"""
+    p = cache_dir / "600519.json"
+    _write_cache(p, facts_hash="x")
+    obj = json.loads(p.read_text(encoding="utf-8"))
+    obj["schema"] = qr._SCHEMA - 1
+    p.write_text(json.dumps(obj, ensure_ascii=False), encoding="utf-8")
+    qr._CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(qr, "fetch_latest_report",
+                        lambda code: {"meta": {"title": "x"}, "text": "", "error": None})
+    monkeypatch.setattr(qr, "generate",
+                        lambda facts, mdd, meta: {"swing": "新结构生成的解读"})
+
+    out = qr.get_or_generate("600519", FACTS)
+    assert out["swing"] == "新结构生成的解读"
+    assert out["_cached"] is False
 
 
 def test_cache_only_returns_last_review_even_if_hash_differs(cache_dir, monkeypatch):
