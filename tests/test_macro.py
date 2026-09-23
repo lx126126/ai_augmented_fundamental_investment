@@ -523,6 +523,11 @@ def test_render_smoke():
     html = B.render(_min_payload())
     assert "@@" not in html, "模板占位符未被完全替换"
     assert "__CSS__" not in html
+    # 🔴 产物整体不许有标记语法 / 裸 `$` —— **注释也算**：注释不渲染，但会留在
+    #    产物文件里，让「产物干净」这件事失去可断言性（实测漏过：模板注释里
+    #    写了 `**行 = 增长**`，页面看不出问题，产物里却有 4 个星号）。
+    assert "**" not in html, "看板 HTML 含标记语法（含注释）"
+    assert "$" not in html, "看板 HTML 出现裸 `$`"
     assert "滞胀" in html and "测试指标" in html
     # 当前象限那一格被高亮（其余三格不带 on）
     import re

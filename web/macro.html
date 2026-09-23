@@ -159,8 +159,10 @@ table.cal td.d { font-variant-numeric: tabular-nums; white-space: nowrap; }
         「方向」指该指标本期相对上一期的变化方向；第 2 段列出每一票，可自行复核。</span></div>
     <div class="hero-note">增长侧、通胀侧指标方向互相抵消，无法定位象限。此时不应按任一象限解读 —— 指标本身在给出矛盾信号。</div>
     <div class="clock">
-      <!-- 🔴 网格实际语义：**行 = 增长**（上排回升、下排回落）、**列 = 通胀**（左列回落、右列回升）。
-           所以行标签必须写成一句话，不能像列标签那样左右分置 —— 分置会被读成「列」，与网格相反。 -->
+      <!-- 🔴 网格实际语义：「行 = 增长」（上排回升、下排回落）、「列 = 通胀」（左列回落、右列回升）。
+           所以行标签必须写成一句话，不能像列标签那样左右分置 —— 分置会被读成「列」，与网格相反。
+           ⚠️ 注释里也不要用 Markdown 标记：注释不渲染，但会原样留在产物文件里，
+              让「产物不含标记语法」的断言失效（本段就是那次实测留下的痕迹）。 -->
       <div class="clock-axis y" style="justify-content:center">
         <span>上排：增长 ↑　·　下排：增长 ↓</span></div>
       <div class="clock-grid"><div class="q dim"><div class="qn">复苏</div><div class="qd">增长回升 · 通胀回落</div></div><div class="q dim"><div class="qn">过热</div><div class="qd">增长回升 · 通胀回升</div></div><div class="q dim"><div class="qn">衰退</div><div class="qd">增长回落 · 通胀回落</div></div><div class="q dim"><div class="qn">滞胀</div><div class="qd">增长回落 · 通胀回升</div></div></div>
