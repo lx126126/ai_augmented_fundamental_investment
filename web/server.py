@@ -324,6 +324,23 @@ def watchlist_page() -> HTMLResponse:
     return _serve_html(WEB_DIR / "watchlist.html", "python scripts/build_watchlist.py")
 
 
+@app.get("/macro", response_class=HTMLResponse)
+@app.get("/macro.html", response_class=HTMLResponse)
+@app.get("/web/macro.html", response_class=HTMLResponse)
+def macro_page() -> HTMLResponse:
+    """宏观周期看板。
+
+    三个别名与首页同理：`/macro` 是干净入口；`/macro.html` 供首页相对路径互链
+    （`web/index.html` 里的入口写的是 `macro.html`）；`/web/macro.html` 供
+    同目录页面用带前缀的路径互链。
+
+    ⚠️ 该页是**周更**产物（宏观数据多为月频，日更无意义）。
+       数据源不可用时页面依然存在（展示「数据缺失」占位），不会 404 ——
+       与报告页不同：看板的价值有一半在「口径与缺口的说明」，那部分不依赖实时数据。
+    """
+    return _serve_html(WEB_DIR / "macro.html", "python scripts/build_macro.py")
+
+
 @app.get("/query", response_class=HTMLResponse)
 @app.get("/query.html", response_class=HTMLResponse)
 def legacy_query_page() -> HTMLResponse:

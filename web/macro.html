@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f3d6e">
+<title>宏观周期看板 · 投研排雷</title>
+<style>
+:root {
+  --ink:#1a2330; --muted:#5c6b7a; --faint:#8a97a6;
+  --line:#dde3ea; --accent:#0f3d6e; --accent-2:#14508c; --bg-soft:#f5f7fa;
+  --up:#c92a2a; --down:#2f9e44; --warn:#a35b00; --warn-bg:#fff6e8; --warn-line:#f0cfa0;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  color: var(--ink); background: #e9edf1; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 640px; margin: 0 auto; padding: 18px 16px 44px; }
+a { color: var(--accent-2); text-decoration: none; }
+
+.eyebrow { font-size: 12px; color: var(--faint); letter-spacing: .04em; padding: 2px 2px 9px;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.eyebrow b { color: var(--accent); font-weight: 700; font-size: 13px; letter-spacing: .1em; }
+.eyebrow .back { font-size: 12px; }
+
+/* ---------- ① 一句话定位 ---------- */
+.hero { background: #fff; border-radius: 12px; padding: 18px 16px;
+  box-shadow: 0 3px 16px rgba(15,61,110,0.10); }
+.hero-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hero-tag { font-size: 11px; color: var(--accent); background: var(--bg-soft);
+  border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; letter-spacing: .05em; }
+.hero-quad { font-size: 30px; font-weight: 700; letter-spacing: .08em; line-height: 1.15; }
+.hero-quad.diverge { font-size: 22px; color: var(--warn); }
+.hero-def { font-size: 13px; color: var(--muted); margin-top: 3px; width: 100%; }
+.hero-basis { font-size: 12px; color: var(--faint); margin-top: 10px; line-height: 1.7;
+  font-variant-numeric: tabular-nums; padding-top: 10px; border-top: 1px dashed var(--line); }
+.hero-note { font-size: 12px; color: var(--warn); background: var(--warn-bg);
+  border: 1px solid var(--warn-line); border-radius: 8px; padding: 10px 12px;
+  margin-top: 10px; line-height: 1.7; }
+
+/* 美林时钟 2x2 */
+.clock { margin-top: 14px; }
+.clock-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.q { border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px;
+  background: var(--bg-soft); }
+.q .qn { font-size: 14px; font-weight: 600; color: var(--muted); }
+.q .qd { font-size: 11px; color: var(--faint); margin-top: 3px; }
+.q.on { background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  border-color: var(--accent); box-shadow: 0 3px 12px rgba(15,61,110,0.24); }
+.q.on .qn { color: #fff; }
+.q.on .qd { color: rgba(255,255,255,0.86); }
+/* 方向分歧：四格都不选中，整体降透明度表达「未定位」而非「渲染失败」 */
+.q.dim { opacity: .5; }
+.clock-axis { display: flex; font-size: 10px; color: var(--faint); letter-spacing: .06em; }
+.clock-axis.x { justify-content: space-between; margin-top: 6px; padding: 0 4px; }
+.clock-axis.y { justify-content: space-between; margin-bottom: 5px; padding: 0 4px; }
+
+/* 投票明细 */
+.votes { margin-top: 13px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vote-col h4 { font-size: 11px; color: var(--faint); font-weight: 600; letter-spacing: .05em;
+  margin-bottom: 6px; }
+.vote { display: flex; align-items: baseline; gap: 6px; font-size: 12px; padding: 3px 0;
+  border-bottom: 1px solid var(--bg-soft); }
+.vote:last-child { border-bottom: 0; }
+.vote .m { flex: 0 0 12px; font-weight: 700; text-align: center; }
+.vote .m.up { color: var(--up); } .vote .m.down { color: var(--down); }
+.vote .m.flat { color: var(--faint); }
+.vote .n { flex: 1; min-width: 0; color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.vote .v { font-variant-numeric: tabular-nums; color: var(--ink); font-size: 11px; }
+
+/* ---------- ②③④⑤ 指标分组 ---------- */
+.section { margin-top: 22px; }
+.section-head { margin-bottom: 10px; }
+.section-head h2 { font-size: 14px; color: var(--accent); font-weight: 700; letter-spacing: .03em; }
+.section-head p { font-size: 11px; color: var(--faint); margin-top: 4px; line-height: 1.6; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.card { background: #fff; border-radius: 10px; padding: 12px 13px 11px;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.07); display: flex; flex-direction: column; }
+.card.miss { background: #fbfbfc; border: 1px dashed var(--line); box-shadow: none; }
+.card .k { font-size: 12px; color: var(--muted); line-height: 1.35; min-height: 32px;
+  display: flex; align-items: center; }
+.card .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums;
+  margin-top: 5px; line-height: 1.1; letter-spacing: -.01em; }
+.card .v .u { font-size: 11px; font-weight: 400; color: var(--faint); margin-left: 3px;
+  letter-spacing: 0; }
+.card .v.na { font-size: 13px; font-weight: 400; color: var(--faint); }
+.card .row { display: flex; align-items: baseline; justify-content: space-between; gap: 6px;
+  margin-top: 5px; font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.card .chg { font-weight: 600; }
+.card .chg.up { color: var(--up); } .card .chg.down { color: var(--down); }
+.card .chg.flat { color: var(--faint); }
+
+.spark { display: block; width: 100%; height: 26px; margin-top: 7px; overflow: visible; }
+.spark path { fill: none; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark .base { stroke: var(--line); stroke-width: 1; stroke-dasharray: 2 3; }
+
+.rankbar { margin-top: 7px; }
+.rankbar .track { height: 4px; background: var(--bg-soft); border-radius: 2px;
+  position: relative; overflow: hidden; }
+.rankbar .track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px;
+  background: var(--accent-2); opacity: .75; }
+.rankbar .lab { font-size: 10px; color: var(--faint); margin-top: 3px;
+  display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+
+.card .stamp { font-size: 10px; color: var(--faint); margin-top: 7px; padding-top: 6px;
+  border-top: 1px solid var(--bg-soft); font-variant-numeric: tabular-nums; }
+.card .flag { font-size: 10px; color: var(--warn); background: var(--warn-bg);
+  border: 1px solid var(--warn-line); border-radius: 4px; padding: 3px 6px; margin-top: 6px;
+  line-height: 1.5; }
+
+/* ---------- 底部说明 ---------- */
+.notes { margin-top: 26px; }
+.note-block { background: #fff; border-radius: 10px; padding: 14px 15px; margin-top: 12px;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.07); }
+.note-block h3 { font-size: 13px; color: var(--accent); margin-bottom: 9px; }
+.note-block p { font-size: 11px; color: var(--muted); line-height: 1.8; }
+.gap { font-size: 11px; line-height: 1.7; padding: 8px 0; border-bottom: 1px solid var(--bg-soft); }
+.gap:last-child { border-bottom: 0; }
+.gap b { color: var(--ink); font-size: 12px; }
+.gap .r { color: var(--warn); }
+.gap .p { color: var(--faint); }
+details { margin-top: 8px; }
+details summary { font-size: 12px; color: var(--accent-2); cursor: pointer;
+  padding: 6px 0; list-style: none; }
+details summary::-webkit-details-marker { display: none; }
+details summary::before { content: "▸ "; }
+details[open] summary::before { content: "▾ "; }
+table.cal { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+table.cal th { text-align: left; color: var(--faint); font-weight: 600; padding: 6px 4px;
+  border-bottom: 1px solid var(--line); font-size: 10px; }
+table.cal td { padding: 6px 4px; border-bottom: 1px solid var(--bg-soft); color: var(--muted);
+  vertical-align: top; line-height: 1.6; }
+table.cal td.n { color: var(--ink); }
+table.cal td.d { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.foot { text-align: center; font-size: 11px; color: var(--faint); margin-top: 24px;
+  line-height: 1.9; padding: 0 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">
+    <span><b>投研排雷</b> · 宏观周期看板</span>
+    <a class="back" href="index.html">← 返回首页</a>
+  </div>
+
+  <!-- ① 一句话定位 -->
+  <div class="hero">
+    <div class="hero-top">
+      <span class="hero-tag">周期定位</span>
+      <span class="hero-quad diverge">方向分歧</span>
+      <span class="hero-def">多指标方向互相抵消</span>
+    </div>
+    <div class="hero-basis">增长侧 6 项净得 +0（持平）· 通胀侧 2 项净得 +0（持平）
+      <br><span style="color:var(--faint)">判定规则：对全部参与指标<b>等权计票</b>（未做加权），
+        「方向」指该指标本期相对上一期的变化方向；第 2 段列出每一票，可自行复核。</span></div>
+    <div class="hero-note">增长侧、通胀侧指标方向互相抵消，无法定位象限。此时不应按任一象限解读 —— 指标本身在给出矛盾信号。</div>
+    <div class="clock">
+      <!-- 🔴 网格实际语义：**行 = 增长**（上排回升、下排回落）、**列 = 通胀**（左列回落、右列回升）。
+           所以行标签必须写成一句话，不能像列标签那样左右分置 —— 分置会被读成「列」，与网格相反。 -->
+      <div class="clock-axis y" style="justify-content:center">
+        <span>上排：增长 ↑　·　下排：增长 ↓</span></div>
+      <div class="clock-grid"><div class="q dim"><div class="qn">复苏</div><div class="qd">增长回升 · 通胀回落</div></div><div class="q dim"><div class="qn">过热</div><div class="qd">增长回升 · 通胀回升</div></div><div class="q dim"><div class="qn">衰退</div><div class="qd">增长回落 · 通胀回落</div></div><div class="q dim"><div class="qn">滞胀</div><div class="qd">增长回落 · 通胀回升</div></div></div>
+      <div class="clock-axis x"><span>左列：通胀 ↓</span><span>右列：通胀 ↑</span></div>
+    </div>
+    <div class="votes"><div class="vote-col">
+      <h4>增长侧（净 +0 · 持平）</h4>
+      <div class="vote"><span class="m up">↑</span><span class="n">M1 同比</span><span class="v">4.10</span></div><div class="vote"><span class="m up">↑</span><span class="n">M1-M2 剪刀差</span><span class="v">-3.40</span></div><div class="vote"><span class="m down">↓</span><span class="n">GDP 同比</span><span class="v">4.70</span></div><div class="vote"><span class="m down">↓</span><span class="n">用电量同比</span><span class="v">4.30</span></div><div class="vote"><span class="m down">↓</span><span class="n">社零同比</span><span class="v">0.40</span></div><div class="vote"><span class="m up">↑</span><span class="n">企业景气</span><span class="v">109.50</span></div>
+    </div><div class="vote-col">
+      <h4>通胀侧（净 +0 · 持平）</h4>
+      <div class="vote"><span class="m up">↑</span><span class="n">CPI 同比</span><span class="v">0.80</span></div><div class="vote"><span class="m down">↓</span><span class="n">原油同比</span><span class="v">39.28</span></div>
+    </div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <h2>全球水位 · 利率与汇率</h2>
+      <p>别的指标告诉你「贵不贵」，利率和汇率告诉你「钱会不会走」</p>
+    </div>
+    <div class="grid"><div class="card">
+        <div class="k">中国 10Y</div>
+        <div class="v">1.68<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−0.38bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,2.1 L1.8,0.0 L3.5,3.2 L5.3,2.2 L7.1,3.0 L8.8,3.4 L10.6,2.5 L12.3,0.8 L14.1,2.4 L15.9,2.2 L17.6,1.0 L19.4,2.3 L21.2,0.4 L22.9,0.5 L24.7,6.4 L26.4,5.3 L28.2,7.0 L30.0,4.9 L31.7,4.3 L33.5,5.2 L35.3,10.3 L37.0,12.5 L38.8,11.4 L40.5,13.0 L42.3,12.6 L44.1,12.4 L45.8,13.5 L47.6,15.1 L49.4,11.7 L51.1,12.5 L52.9,16.7 L54.6,19.3 L56.4,20.9 L58.2,23.2 L59.9,24.5 L61.7,24.4 L63.5,24.1 L65.2,25.9 L67.0,25.1 L68.7,22.3 L70.5,18.4 L72.3,19.9 L74.0,22.4 L75.8,24.3 L77.6,23.3 L79.3,25.7 L81.1,25.5 L82.8,25.7 L84.6,25.1 L86.4,25.0 L88.1,25.8 L89.9,21.8 L91.7,22.2 L93.4,23.1 L95.2,23.4 L96.9,23.3 L98.7,24.9 L100.5,25.0 L102.2,24.5 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:1%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>1%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">美国 10Y</div>
+        <div class="v">4.96<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg flat">0.00bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L1.8,23.5 L3.5,21.9 L5.3,21.5 L7.1,21.9 L8.8,19.0 L10.6,18.6 L12.3,19.4 L14.1,18.6 L15.9,16.1 L17.6,17.7 L19.4,19.0 L21.2,18.2 L22.9,19.0 L24.7,16.9 L26.4,15.7 L28.2,14.0 L30.0,12.4 L31.7,13.2 L33.5,14.9 L35.3,16.5 L37.0,14.0 L38.8,13.6 L40.5,10.7 L42.3,12.8 L44.1,15.7 L45.8,15.7 L47.6,13.2 L49.4,14.9 L51.1,12.0 L52.9,12.8 L54.6,13.6 L56.4,15.7 L58.2,13.6 L59.9,12.0 L61.7,12.4 L63.5,14.9 L65.2,13.2 L67.0,11.1 L68.7,12.8 L70.5,15.3 L72.3,14.4 L74.0,14.0 L75.8,11.6 L77.6,10.7 L79.3,9.1 L81.1,9.1 L82.8,9.9 L84.6,9.5 L86.4,8.7 L88.1,7.4 L89.9,2.5 L91.7,2.1 L93.4,1.7 L95.2,0.4 L96.9,0.0 L98.7,2.9 L100.5,0.0 L102.2,2.1 L104.0,2.1" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:69%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>69%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">中美利差</div>
+        <div class="v">3.28<span class="u">pct</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.38bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L1.8,24.3 L3.5,23.2 L5.3,22.6 L7.1,22.9 L8.8,20.3 L10.6,19.8 L12.3,20.5 L14.1,19.9 L15.9,17.7 L17.6,19.1 L19.4,20.3 L21.2,19.6 L22.9,20.3 L24.7,18.5 L26.4,17.3 L28.2,15.2 L30.0,13.7 L31.7,14.3 L33.5,16.1 L35.3,17.7 L37.0,15.3 L38.8,14.4 L40.5,11.4 L42.3,13.5 L44.1,16.1 L45.8,16.1 L47.6,13.8 L49.4,15.2 L51.1,12.3 L52.9,13.5 L54.6,14.2 L56.4,15.7 L58.2,13.5 L59.9,11.7 L61.7,11.9 L63.5,14.1 L65.2,12.6 L67.0,10.6 L68.7,12.0 L70.5,14.4 L72.3,13.9 L74.0,14.0 L75.8,11.5 L77.6,10.4 L79.3,8.7 L81.1,8.8 L82.8,9.3 L84.6,8.9 L86.4,8.2 L88.1,7.0 L89.9,2.3 L91.7,2.3 L93.4,1.8 L95.2,0.6 L96.9,0.1 L98.7,2.9 L100.5,0.0 L102.2,2.0 L104.0,1.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:100%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>100%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">美债 10Y-2Y</div>
+        <div class="v">0.250<span class="u">pct</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+5.00bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,19.7 L1.8,18.1 L3.5,17.3 L5.3,14.2 L7.1,14.2 L8.8,13.4 L10.6,14.2 L12.3,11.8 L14.1,14.2 L15.9,13.4 L17.6,10.2 L19.4,8.7 L21.2,9.5 L22.9,12.6 L24.7,11.0 L26.4,12.6 L28.2,13.4 L30.0,15.0 L31.7,13.4 L33.5,15.0 L35.3,14.2 L37.0,6.3 L38.8,6.3 L40.5,4.7 L42.3,6.3 L44.1,7.9 L45.8,6.3 L47.6,7.1 L49.4,5.5 L51.1,4.7 L52.9,3.9 L54.6,3.9 L56.4,3.9 L58.2,1.6 L59.9,0.0 L61.7,0.8 L63.5,5.5 L65.2,2.4 L67.0,2.4 L68.7,5.5 L70.5,4.7 L72.3,4.7 L74.0,4.7 L75.8,11.0 L77.6,9.5 L79.3,10.2 L81.1,10.2 L82.8,7.9 L84.6,9.5 L86.4,9.5 L88.1,10.2 L89.9,11.0 L91.7,15.8 L93.4,16.5 L95.2,15.8 L96.9,20.5 L98.7,20.5 L100.5,22.1 L102.2,26.0 L104.0,22.1" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:25%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>25%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">信用利差</div>
+        <div class="v">0.206<span class="u">pct</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−1.14bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,19.6 L1.8,20.0 L3.5,19.5 L5.3,20.8 L7.1,20.7 L8.8,20.3 L10.6,21.1 L12.3,21.1 L14.1,20.4 L15.9,2.4 L17.6,20.7 L19.4,20.4 L21.2,20.6 L22.9,20.6 L24.7,18.7 L26.4,2.1 L28.2,18.6 L30.0,18.9 L31.7,18.6 L33.5,16.4 L35.3,15.1 L37.0,16.0 L38.8,0.0 L40.5,16.0 L42.3,16.5 L44.1,16.7 L45.8,17.6 L47.6,18.3 L49.4,0.9 L51.1,18.3 L52.9,18.6 L54.6,18.4 L56.4,18.9 L58.2,19.9 L59.9,2.3 L61.7,17.5 L63.5,17.0 L65.2,16.6 L67.0,16.9 L68.7,18.0 L70.5,16.7 L72.3,15.6 L74.0,14.7 L75.8,15.2 L77.6,1.5 L79.3,15.3 L81.1,15.4 L82.8,1.4 L84.6,17.1 L86.4,18.0 L88.1,17.0 L89.9,18.0 L91.7,17.7 L93.4,17.5 L95.2,18.5 L96.9,19.6 L98.7,21.2 L100.5,22.4 L102.2,24.3 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:0%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>0%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">SHIBOR 3M</div>
+        <div class="v">1.43<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg flat">0.00bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,1.8 L3.5,11.4 L5.3,13.9 L7.1,22.0 L8.8,26.0 L10.6,22.0 L12.3,18.7 L14.1,18.3 L15.9,18.3 L17.6,18.3 L19.4,18.3 L21.2,18.3 L22.9,18.3 L24.7,18.3 L26.4,25.6 L28.2,18.3 L30.0,18.3 L31.7,14.6 L33.5,18.3 L35.3,18.3 L37.0,18.3 L38.8,18.3 L40.5,18.3 L42.3,18.3 L44.1,18.3 L45.8,18.3 L47.6,18.3 L49.4,18.3 L51.1,18.3 L52.9,18.3 L54.6,18.3 L56.4,18.3 L58.2,18.3 L59.9,18.3 L61.7,18.3 L63.5,18.3 L65.2,18.3 L67.0,18.3 L68.7,18.3 L70.5,18.3 L72.3,18.3 L74.0,18.3 L75.8,18.3 L77.6,18.3 L79.3,18.3 L81.1,18.3 L82.8,18.3 L84.6,18.3 L86.4,18.3 L88.1,18.3 L89.9,18.3 L91.7,18.3 L93.4,18.3 L95.2,18.3 L96.9,18.3 L98.7,14.6 L100.5,18.3 L102.2,18.3 L104.0,18.3" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:5%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>5%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">LPR 1Y</div>
+        <div class="v">3.00<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-08-20</span><span class="chg flat">0.00bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L3.0,0.0 L5.9,0.0 L8.9,0.0 L11.9,0.0 L14.9,0.0 L17.8,0.0 L20.8,0.0 L23.8,0.0 L26.7,5.8 L29.7,5.8 L32.7,5.8 L35.7,20.2 L38.6,20.2 L41.6,20.2 L44.6,20.2 L47.5,20.2 L50.5,20.2 L53.5,20.2 L56.5,26.0 L59.4,26.0 L62.4,26.0 L65.4,26.0 L68.3,26.0 L71.3,26.0 L74.3,26.0 L77.3,26.0 L80.2,26.0 L83.2,26.0 L86.2,26.0 L89.1,26.0 L92.1,26.0 L95.1,26.0 L98.1,26.0 L101.0,26.0 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:1%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>1%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-20 · 月频 · 水位</div>
+      </div><div class="card">
+        <div class="k">LPR 5Y</div>
+        <div class="v">3.50<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-08-20</span><span class="chg flat">0.00bp</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L3.0,0.0 L5.9,0.0 L8.9,0.0 L11.9,9.3 L14.9,9.3 L17.8,9.3 L20.8,9.3 L23.8,9.3 L26.7,13.0 L29.7,13.0 L32.7,13.0 L35.7,22.3 L38.6,22.3 L41.6,22.3 L44.6,22.3 L47.5,22.3 L50.5,22.3 L53.5,22.3 L56.5,26.0 L59.4,26.0 L62.4,26.0 L65.4,26.0 L68.3,26.0 L71.3,26.0 L74.3,26.0 L77.3,26.0 L80.2,26.0 L83.2,26.0 L86.2,26.0 L89.1,26.0 L92.1,26.0 L95.1,26.0 L98.1,26.0 L101.0,26.0 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:20%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>20%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-20 · 月频 · 水位</div>
+      </div><div class="card">
+        <div class="k">USD/CNY</div>
+        <div class="v">674.68<span class="u">元/100美元</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg up">+0.01%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,1.7 L3.5,0.9 L5.3,1.4 L7.1,0.5 L8.8,2.1 L10.6,4.1 L12.3,4.8 L14.1,4.1 L15.9,7.4 L17.6,7.4 L19.4,6.4 L21.2,5.8 L22.9,7.1 L24.7,6.4 L26.4,7.5 L28.2,6.2 L30.0,7.3 L31.7,6.6 L33.5,7.8 L35.3,8.1 L37.0,8.0 L38.8,7.9 L40.5,7.1 L42.3,8.2 L44.1,8.0 L45.8,7.6 L47.6,8.4 L49.4,7.8 L51.1,8.5 L52.9,8.3 L54.6,8.7 L56.4,8.9 L58.2,7.6 L59.9,9.7 L61.7,11.6 L63.5,11.2 L65.2,10.2 L67.0,9.8 L68.7,10.7 L70.5,10.3 L72.3,11.4 L74.0,10.7 L75.8,11.5 L77.6,10.7 L79.3,11.6 L81.1,12.4 L82.8,12.1 L84.6,11.7 L86.4,13.2 L88.1,13.3 L89.9,14.3 L91.7,16.1 L93.4,17.3 L95.2,19.0 L96.9,21.0 L98.7,23.4 L100.5,24.8 L102.2,26.0 L104.0,25.6" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:1%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>1%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">USD/JPY</div>
+        <div class="v">157.81<span class="u">日元/美元</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg up">+0.11%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,3.6 L1.8,6.5 L3.5,6.3 L5.3,5.1 L7.1,4.7 L8.8,4.2 L10.6,4.6 L12.3,5.2 L14.1,4.3 L15.9,4.8 L17.6,4.5 L19.4,4.3 L21.2,3.9 L22.9,3.9 L24.7,1.9 L26.4,2.1 L28.2,0.3 L30.0,0.4 L31.7,0.2 L33.5,0.0 L35.3,0.5 L37.0,8.7 L38.8,15.8 L40.5,16.9 L42.3,15.9 L44.1,16.4 L45.8,14.7 L47.6,15.6 L49.4,12.4 L51.1,12.3 L52.9,11.9 L54.6,11.4 L56.4,11.8 L58.2,11.5 L59.9,11.5 L61.7,13.7 L63.5,12.4 L65.2,12.5 L67.0,12.2 L68.7,11.7 L70.5,12.0 L72.3,11.6 L74.0,10.0 L75.8,10.3 L77.6,9.3 L79.3,12.3 L81.1,18.9 L82.8,18.5 L84.6,24.4 L86.4,25.3 L88.1,25.7 L89.9,23.9 L91.7,26.0 L93.4,24.2 L95.2,22.7 L96.9,21.4 L98.7,21.0 L100.5,18.4 L102.2,17.6 L104.0,17.1" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:51%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>51%</span></div></div>
+        <div class="flag">日元急升是全球套息交易去杠杆的经典信号；本值由两组中间价折算，非直接报价</div>
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 水位</div>
+      </div><div class="card">
+        <div class="k">EUR/CNY</div>
+        <div class="v">769.35<span class="u">元/100欧元</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg down">−0.16%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,20.4 L1.8,17.1 L3.5,15.8 L5.3,15.2 L7.1,17.0 L8.8,16.0 L10.6,15.8 L12.3,19.9 L14.1,20.3 L15.9,18.7 L17.6,16.0 L19.4,16.8 L21.2,17.6 L22.9,19.6 L24.7,20.6 L26.4,19.9 L28.2,22.0 L30.0,21.6 L31.7,23.6 L33.5,22.8 L35.3,17.1 L37.0,13.5 L38.8,11.1 L40.5,12.1 L42.3,11.2 L44.1,9.4 L45.8,11.1 L47.6,9.7 L49.4,9.9 L51.1,10.7 L52.9,11.8 L54.6,11.7 L56.4,8.2 L58.2,7.0 L59.9,7.6 L61.7,1.2 L63.5,0.0 L65.2,0.6 L67.0,1.5 L68.7,1.3 L70.5,2.2 L72.3,2.9 L74.0,7.4 L75.8,6.6 L77.6,8.4 L79.3,9.2 L81.1,6.7 L82.8,7.5 L84.6,6.4 L86.4,6.7 L88.1,6.1 L89.9,7.1 L91.7,10.0 L93.4,14.4 L95.2,15.1 L96.9,20.5 L98.7,21.8 L100.5,22.6 L102.2,24.4 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:0%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>0%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 水位</div>
+      </div></div>
+  </div><div class="section">
+    <div class="section-head">
+      <h2>估值与位置 · A 股贵不贵</h2>
+      <p>绝对水平没有意义，一律看历史分位</p>
+    </div>
+    <div class="grid"><div class="card">
+        <div class="k">全A PE中位</div>
+        <div class="v">38.20<span class="u">倍</span></div>
+        <div class="row"><span>上期 2026-08-31</span><span class="chg up">+0.82%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,17.4 L1.8,12.3 L3.5,11.5 L5.3,16.9 L7.1,15.5 L8.8,18.8 L10.6,25.6 L12.3,19.5 L14.1,16.0 L15.9,15.6 L17.6,17.2 L19.4,21.0 L21.2,19.0 L22.9,16.7 L24.7,19.0 L26.4,15.1 L28.2,12.7 L30.0,14.4 L31.7,15.6 L33.5,14.8 L35.3,13.8 L37.0,14.3 L38.8,15.8 L40.5,16.0 L42.3,16.3 L44.1,14.8 L45.8,16.2 L47.6,24.5 L49.4,22.1 L51.1,20.9 L52.9,19.4 L54.6,20.6 L56.4,23.7 L58.2,23.8 L59.9,26.0 L61.7,22.3 L63.5,16.9 L65.2,16.2 L67.0,16.7 L68.7,16.4 L70.5,13.1 L72.3,13.8 L74.0,13.8 L75.8,12.2 L77.6,10.5 L79.3,8.6 L81.1,4.4 L82.8,3.8 L84.6,5.8 L86.4,6.5 L88.1,5.6 L89.9,1.6 L91.7,0.0 L93.4,5.0 L95.2,1.1 L96.9,3.6 L98.7,7.5 L100.5,10.7 L102.2,9.3 L104.0,8.9" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:70%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>70%</span></div></div>
+        <div class="flag">分位取接口自带的近 10 年分位（窗口长于本序列）</div>
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">全A PE均值</div>
+        <div class="v">60.52<span class="u">倍</span></div>
+        <div class="row"><span>上期 2026-08-31</span><span class="chg up">+0.58%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,19.3 L1.8,14.9 L3.5,15.1 L5.3,20.0 L7.1,18.5 L8.8,21.0 L10.6,26.0 L12.3,20.7 L14.1,17.2 L15.9,16.1 L17.6,17.9 L19.4,20.7 L21.2,20.7 L22.9,18.9 L24.7,20.2 L26.4,17.3 L28.2,15.8 L30.0,16.8 L31.7,16.6 L33.5,16.6 L35.3,16.1 L37.0,16.3 L38.8,16.8 L40.5,17.5 L42.3,16.3 L44.1,15.1 L45.8,16.5 L47.6,24.4 L49.4,21.8 L51.1,19.8 L52.9,18.2 L54.6,19.2 L56.4,22.2 L58.2,22.1 L59.9,24.8 L61.7,20.9 L63.5,14.9 L65.2,14.3 L67.0,15.2 L68.7,15.0 L70.5,11.6 L72.3,11.7 L74.0,12.1 L75.8,10.9 L77.6,9.2 L79.3,6.6 L81.1,4.1 L82.8,3.3 L84.6,5.1 L86.4,6.2 L88.1,4.5 L89.9,1.7 L91.7,0.0 L93.4,3.4 L95.2,0.2 L96.9,0.8 L98.7,2.2 L100.5,7.4 L102.2,5.3 L104.0,5.0" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:70%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>70%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">全A PB中位</div>
+        <div class="v">2.77<span class="u">倍</span></div>
+        <div class="row"><span>上期 2026-08-31</span><span class="chg up">+2.21%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,11.5 L1.8,5.8 L3.5,4.8 L5.3,9.9 L7.1,8.7 L8.8,11.6 L10.6,19.8 L12.3,15.7 L14.1,12.1 L15.9,10.4 L17.6,13.0 L19.4,17.6 L21.2,16.4 L22.9,13.9 L24.7,16.1 L26.4,12.5 L28.2,10.9 L30.0,12.1 L31.7,14.5 L33.5,13.5 L35.3,12.5 L37.0,12.1 L38.8,14.9 L40.5,15.1 L42.3,16.1 L44.1,13.9 L45.8,14.0 L47.6,23.6 L49.4,22.1 L51.1,20.5 L52.9,21.4 L54.6,21.7 L56.4,24.3 L58.2,24.1 L59.9,26.0 L61.7,19.0 L63.5,16.8 L65.2,14.9 L67.0,17.4 L68.7,17.8 L70.5,15.1 L72.3,15.1 L74.0,16.2 L75.8,13.9 L77.6,10.8 L79.3,8.7 L81.1,5.5 L82.8,5.5 L84.6,5.6 L86.4,6.3 L88.1,5.8 L89.9,2.1 L91.7,0.0 L93.4,6.7 L95.2,4.1 L96.9,6.7 L98.7,12.0 L100.5,13.9 L102.2,10.8 L104.0,9.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:63%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>63%</span></div></div>
+        <div class="flag">分位取接口自带的近 10 年分位</div>
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">沪深300 PE</div>
+        <div class="v">14.75<span class="u">倍</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.14%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 20 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,18.7 L5.5,14.0 L10.9,15.1 L16.4,9.4 L21.9,0.0 L27.4,8.3 L32.8,8.8 L38.3,8.8 L43.8,8.8 L49.3,10.9 L54.7,7.8 L60.2,10.4 L65.7,15.6 L71.2,19.2 L76.6,25.0 L82.1,22.9 L87.6,26.0 L93.1,21.3 L98.5,16.1 L104.0,15.1" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:50%"></i></div><div class="lab"><span>本序列窗口内分位（仅 20 个观测）</span><span>50%</span></div></div>
+        <div class="flag">中证官方源更新节奏慢，请看数据日期</div>
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">沪深300 股息率</div>
+        <div class="v">2.60<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−0.01pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 20 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,23.8 L5.5,26.0 L10.9,26.0 L16.4,19.5 L21.9,19.5 L27.4,13.0 L32.8,13.0 L38.3,13.0 L43.8,13.0 L49.3,10.8 L54.7,13.0 L60.2,10.8 L65.7,6.5 L71.2,4.3 L76.6,0.0 L82.1,2.2 L87.6,0.0 L93.1,2.2 L98.5,6.5 L104.0,8.7" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:65%"></i></div><div class="lab"><span>本序列窗口内分位（仅 20 个观测）</span><span>65%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">上交所整体PE</div>
+        <div class="v">17.47<span class="u">倍</span></div>
+        <div class="row"><span>单点快照 · 无历史序列</span></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">ERP 中位法</div>
+        <div class="v">0.94<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-08-31</span><span class="chg down">−0.01pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,25.0 L1.8,23.9 L3.5,25.3 L5.3,21.1 L7.1,22.8 L8.8,20.5 L10.6,25.2 L12.3,25.0 L14.1,19.7 L15.9,21.7 L17.6,18.4 L19.4,10.5 L21.2,17.0 L22.9,21.8 L24.7,17.7 L26.4,15.4 L28.2,16.1 L30.0,22.1 L31.7,19.0 L33.5,23.8 L35.3,26.0 L37.0,23.9 L38.8,21.7 L40.5,21.0 L42.3,21.4 L44.1,21.1 L45.8,18.2 L47.6,19.9 L49.4,19.6 L51.1,20.7 L52.9,18.0 L54.6,6.1 L56.4,8.0 L58.2,11.4 L59.9,9.0 L61.7,2.9 L63.5,0.0 L65.2,6.5 L67.0,11.1 L68.7,10.2 L70.5,4.5 L72.3,4.5 L74.0,9.0 L75.8,9.2 L77.6,6.4 L79.3,8.7 L81.1,9.5 L82.8,11.8 L84.6,17.6 L86.4,15.2 L88.1,16.0 L89.9,17.8 L91.7,18.8 L93.4,15.7 L95.2,17.0 L96.9,15.1 L98.7,12.9 L100.5,10.3 L102.2,11.0 L104.0,11.1" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:91%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>91%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">ERP 沪深300</div>
+        <div class="v">5.10<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−0.01pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 20 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,7.8 L5.5,13.8 L10.9,12.3 L16.4,17.3 L21.9,26.0 L27.4,18.1 L32.8,16.8 L38.3,16.9 L43.8,16.8 L49.3,14.9 L54.7,18.1 L60.2,15.3 L65.7,11.2 L71.2,7.3 L76.6,1.1 L82.1,3.2 L87.6,0.0 L93.1,4.4 L98.5,9.8 L104.0,10.5" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:65%"></i></div><div class="lab"><span>本序列窗口内分位（仅 20 个观测）</span><span>65%</span></div></div>
+        <div class="flag">受中证官方源滞后影响</div>
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 估值</div>
+      </div><div class="card">
+        <div class="k">巴菲特指标</div>
+        <div class="v">82.25<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-03</span><span class="chg up">+6.20pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 16 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,19.7 L6.9,17.9 L13.9,13.9 L20.8,16.1 L27.7,19.1 L34.7,21.9 L41.6,22.8 L48.5,26.0 L55.5,18.5 L62.4,18.4 L69.3,18.2 L76.3,16.4 L83.2,6.3 L90.1,5.1 L97.1,6.0 L104.0,0.0" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:99%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>99%</span></div></div>
+        <div class="flag">🔴 跨市场不可比：各国融资结构不同，本指标只与自身历史比较</div>
+        <div class="stamp">数据日期 2026-06 · 季频 · 估值</div>
+      </div></div>
+  </div><div class="section">
+    <div class="section-head">
+      <h2>周期与增长 · 中国基本面</h2>
+      <p>领先指标（M1、社融）看方向，滞后指标（GDP）只作确认</p>
+    </div>
+    <div class="grid"><div class="card">
+        <div class="k">M1 同比</div>
+        <div class="v">4.10<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.10pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,9.1 L3.0,9.4 L5.9,10.5 L8.9,10.5 L11.9,2.3 L14.9,10.7 L17.8,10.9 L20.8,15.3 L23.8,20.3 L26.7,21.7 L29.7,24.6 L32.7,25.8 L35.7,26.0 L38.6,23.7 L41.6,19.4 L44.6,15.3 L47.5,12.1 L50.5,12.6 L53.5,10.0 L56.5,10.2 L59.4,8.7 L62.4,4.6 L65.4,2.8 L68.3,2.1 L71.3,0.0 L74.3,1.8 L77.3,4.1 L80.2,6.1 L83.2,4.1 L86.2,2.3 L89.1,3.7 L92.1,3.9 L95.1,3.0 L98.1,5.7 L101.0,5.7 L104.0,5.5" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:25%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>25%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">M2 同比</div>
+        <div class="v">7.50<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg down">−0.20pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L3.0,0.0 L5.9,1.9 L8.9,3.8 L11.9,10.1 L14.9,10.1 L17.8,12.7 L20.8,19.7 L23.8,20.9 L26.7,26.0 L29.7,25.4 L32.7,25.4 L35.7,22.2 L38.6,17.8 L41.6,20.3 L44.6,19.0 L47.5,20.9 L50.5,20.9 L53.5,20.9 L56.5,14.6 L59.4,15.2 L62.4,12.7 L65.4,9.5 L68.3,9.5 L71.3,12.0 L74.3,13.3 L77.3,14.6 L80.2,11.4 L83.2,8.2 L86.2,8.2 L89.1,11.4 L92.1,10.8 L95.1,10.8 L98.1,14.6 L101.0,16.5 L104.0,17.8" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:6%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>6%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">M1-M2 剪刀差</div>
+        <div class="v">-3.40<span class="u">pct</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.30pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,14.0 L3.0,14.4 L5.9,15.0 L8.9,14.4 L11.9,3.2 L14.9,12.6 L17.8,12.0 L20.8,14.8 L23.8,20.0 L26.7,20.0 L29.7,23.4 L32.7,24.8 L35.7,26.0 L38.6,24.8 L41.6,19.2 L44.6,15.0 L47.5,10.8 L50.5,11.4 L53.5,8.4 L56.5,10.6 L59.4,8.8 L62.4,5.0 L65.4,4.0 L68.3,3.2 L71.3,0.0 L74.3,1.6 L77.3,3.8 L80.2,7.0 L83.2,5.8 L86.2,3.8 L89.1,4.4 L92.1,4.8 L95.1,3.8 L98.1,5.6 L101.0,5.0 L104.0,4.4" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:61%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>61%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">GDP 同比</div>
+        <div class="v">4.70<span class="u">%</span></div>
+        <div class="row"><span>上期 2026Q1</span><span class="chg down">−0.30pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 16 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,25.0 L6.9,26.0 L13.9,10.0 L20.8,0.0 L27.7,3.0 L34.7,3.0 L41.6,4.0 L48.5,7.0 L55.5,9.0 L62.4,7.0 L69.3,3.0 L76.3,4.0 L83.2,5.0 L90.1,7.0 L97.1,7.0 L104.0,10.0" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:11%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>11%</span></div></div>
+        <div class="flag">季度滞后指标</div>
+        <div class="stamp">数据日期 2026Q2 · 季频 · 增长</div>
+      </div><div class="card">
+        <div class="k">用电量同比</div>
+        <div class="v">4.30<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg down">−0.40pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,16.1 L3.0,15.5 L5.9,16.1 L8.9,14.5 L11.9,13.9 L14.9,12.6 L17.8,11.5 L20.8,0.0 L23.8,3.2 L26.7,5.4 L29.7,6.4 L32.7,7.8 L35.7,8.8 L38.6,8.3 L41.6,8.3 L44.6,9.1 L47.5,10.5 L50.5,11.3 L53.5,26.0 L56.5,22.8 L59.4,21.2 L62.4,20.4 L65.4,19.6 L68.3,17.4 L71.3,17.2 L74.3,17.2 L77.3,15.8 L80.2,15.5 L83.2,16.1 L86.2,13.1 L89.1,15.5 L92.1,15.0 L95.1,14.2 L98.1,15.3 L101.0,16.9 L104.0,18.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:25%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>25%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">社零同比</div>
+        <div class="v">0.40<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg down">−0.20pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,10.7 L3.0,0.0 L5.9,7.8 L8.9,20.9 L11.9,21.8 L14.9,18.9 L17.8,17.7 L20.8,14.8 L23.8,11.4 L26.7,15.1 L29.7,20.9 L32.7,22.0 L35.7,20.1 L38.6,22.4 L41.6,21.5 L44.6,22.3 L47.5,20.8 L50.5,18.6 L53.5,21.1 L56.5,20.1 L59.4,17.1 L62.4,18.2 L65.4,16.4 L68.3,18.6 L71.3,20.1 L74.3,20.5 L77.3,21.1 L80.2,21.2 L83.2,23.4 L86.2,23.9 L89.1,22.9 L92.1,24.9 L95.1,26.0 L98.1,23.8 L101.0,24.4 L104.0,24.6" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:7%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>7%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">企业景气</div>
+        <div class="v">109.5<span class="u"></span></div>
+        <div class="row"><span>上期 2026Q1</span><span class="chg up">+0.20pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 16 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,21.8 L6.9,26.0 L13.9,4.2 L20.8,8.8 L27.7,2.2 L34.7,1.2 L41.6,1.0 L48.5,4.9 L55.5,3.4 L62.4,2.9 L69.3,2.5 L76.3,2.5 L83.2,1.5 L90.1,2.7 L97.1,0.5 L104.0,0.0" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:27%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>27%</span></div></div>
+        <div class="flag">该接口的「企业家信心指数」系列自 2024 起已停更，仅「企业景气指数」仍在更新</div>
+        <div class="stamp">数据日期 2026Q2 · 季频 · 增长</div>
+      </div><div class="card">
+        <div class="k">社融 12M 合计</div>
+        <div class="v">347,103<span class="u">亿元</span></div>
+        <div class="row"><span>上期 2026-03</span><span class="chg down">−1.52%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,16.7 L3.0,20.8 L5.9,21.9 L8.9,19.0 L11.9,16.5 L14.9,12.5 L17.8,10.4 L20.8,7.7 L23.8,5.7 L26.7,12.8 L29.7,15.2 L32.7,20.8 L35.7,18.6 L38.6,22.6 L41.6,21.6 L44.6,22.0 L47.5,23.6 L50.5,25.5 L53.5,26.0 L56.5,22.1 L59.4,19.6 L62.4,16.4 L65.4,11.8 L68.3,6.5 L71.3,5.5 L74.3,1.6 L77.3,0.0 L80.2,2.0 L83.2,3.0 L86.2,5.6 L89.1,4.9 L92.1,7.6 L95.1,6.9 L98.1,6.3 L101.0,9.2 L104.0,11.5" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:83%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>83%</span></div></div>
+        <div class="flag">⚠️ 该数据已滞后约 5 个月 · 🔴 该接口实测滞后约 5 个月；展示为滚动 12 个月合计而非单月增量（单月季节性极强）</div>
+        <div class="stamp">数据日期 2026-04 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">CPI 同比</div>
+        <div class="v">0.80<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.30pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,16.1 L3.0,18.6 L5.9,22.3 L8.9,19.8 L11.9,26.0 L14.9,7.4 L17.8,14.9 L20.8,12.4 L23.8,12.4 L26.7,13.6 L29.7,9.9 L32.7,8.7 L35.7,11.1 L38.6,12.4 L41.6,13.6 L44.6,14.9 L47.5,9.9 L50.5,24.8 L53.5,17.3 L56.5,17.3 L59.4,17.3 L62.4,14.9 L65.4,16.1 L68.3,21.0 L71.3,19.8 L74.3,13.6 L77.3,7.4 L80.2,6.2 L83.2,13.6 L86.2,0.0 L89.1,3.7 L92.1,1.2 L95.1,1.2 L98.1,3.7 L101.0,9.9 L104.0,6.2" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:25%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>25%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">CPI 环比</div>
+        <div class="v">0.40<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.50pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,10.4 L3.0,14.3 L5.9,19.5 L8.9,11.7 L11.9,9.1 L14.9,0.0 L17.8,26.0 L20.8,11.7 L23.8,14.3 L26.7,15.6 L29.7,6.5 L32.7,7.8 L35.7,13.0 L38.6,16.9 L41.6,20.8 L44.6,13.0 L47.5,3.9 L50.5,15.6 L53.5,18.2 L56.5,11.7 L59.4,15.6 L62.4,14.3 L65.4,7.8 L68.3,13.0 L71.3,11.7 L74.3,10.4 L77.3,14.3 L80.2,10.4 L83.2,10.4 L86.2,0.0 L89.1,22.1 L92.1,9.1 L95.1,14.3 L98.1,16.9 L101.0,14.3 L104.0,7.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:74%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>74%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">调查失业率</div>
+        <div class="v">5.30<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.10pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L3.0,26.0 L5.9,26.0 L8.9,19.5 L11.9,13.0 L14.9,6.5 L17.8,13.0 L20.8,26.0 L23.8,26.0 L26.7,26.0 L29.7,13.0 L32.7,6.5 L35.7,19.5 L38.6,26.0 L41.6,26.0 L44.6,19.5 L47.5,13.0 L50.5,0.0 L53.5,13.0 L56.5,19.5 L59.4,26.0 L62.4,26.0 L65.4,13.0 L68.3,6.5 L71.3,13.0 L74.3,19.5 L77.3,19.5 L80.2,19.5 L83.2,13.0 L86.2,6.5 L89.1,0.0 L92.1,13.0 L95.1,19.5 L98.1,26.0 L101.0,13.0 L104.0,6.5" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:77%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>77%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">京沪房价同比</div>
+        <div class="v">0.35<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg flat">0.00pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L3.0,2.7 L5.9,2.4 L8.9,3.8 L11.9,6.2 L14.9,7.2 L17.8,7.5 L20.8,12.3 L23.8,15.7 L26.7,18.1 L29.7,21.2 L32.7,20.5 L35.7,23.9 L38.6,24.6 L41.6,26.0 L44.6,25.3 L47.5,25.3 L50.5,24.6 L53.5,25.0 L56.5,21.9 L59.4,19.5 L62.4,18.5 L65.4,16.4 L68.3,16.8 L71.3,14.7 L74.3,12.3 L77.3,14.7 L80.2,16.8 L83.2,18.8 L86.2,18.5 L89.1,19.5 L92.1,20.2 L95.1,21.2 L98.1,21.6 L101.0,22.6 L104.0,22.6" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:23%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>23%</span></div></div>
+        <div class="flag">🔴 该接口实测仅回传京沪两市（非 70 城），口径以「京沪」为准</div>
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">外汇储备</div>
+        <div class="v">34,383.25<span class="u">亿美元</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+0.57%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,24.9 L3.0,26.0 L5.9,20.6 L8.9,15.6 L11.9,17.0 L14.9,16.5 L17.8,15.0 L20.8,18.4 L23.8,16.0 L26.7,16.8 L29.7,14.2 L32.7,11.7 L35.7,9.6 L38.6,13.8 L41.6,13.4 L44.6,18.3 L47.5,17.8 L50.5,16.4 L53.5,15.4 L56.5,12.2 L59.4,12.0 L62.4,9.5 L65.4,11.4 L68.3,9.2 L71.3,7.9 L74.3,7.5 L77.3,7.3 L80.2,6.4 L83.2,3.3 L86.2,1.1 L89.1,7.6 L92.1,2.4 L95.1,0.0 L98.1,2.0 L101.0,1.8 L104.0,0.3" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:85%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>85%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div><div class="card">
+        <div class="k">黄金储备</div>
+        <div class="v">3,500.80<span class="u">万盎司</span></div>
+        <div class="row"><span>上期 2026-07</span><span class="chg up">+14.27%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 36 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L3.0,24.9 L5.9,24.6 L8.9,24.3 L11.9,24.3 L14.9,24.3 L17.8,23.0 L20.8,22.3 L23.8,22.0 L26.7,22.1 L29.7,21.4 L32.7,20.8 L35.7,19.9 L38.6,19.2 L41.6,19.7 L44.6,19.9 L47.5,18.4 L50.5,18.2 L53.5,16.1 L56.5,14.6 L59.4,14.8 L62.4,14.7 L65.4,14.6 L68.3,13.6 L71.3,10.6 L74.3,9.2 L77.3,7.8 L80.2,6.9 L83.2,1.8 L86.2,0.0 L89.1,4.6 L92.1,4.4 L95.1,4.8 L98.1,8.5 L101.0,8.3 L104.0,3.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:99%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>99%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-08 · 月频 · 增长</div>
+      </div></div>
+  </div><div class="section">
+    <div class="section-head">
+      <h2>市场与情绪 · 行情与风险偏好</h2>
+      <p>行情、波动率与杠杆资金</p>
+    </div>
+    <div class="grid"><div class="card">
+        <div class="k">上证指数</div>
+        <div class="v">3,952.13<span class="u">点</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.06%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,6.2 L3.5,5.1 L5.3,5.3 L7.1,9.1 L8.8,10.6 L10.6,5.7 L12.3,8.7 L14.1,14.8 L15.9,10.8 L17.6,11.7 L19.4,17.2 L21.2,26.0 L22.9,23.6 L24.7,18.5 L26.4,18.3 L28.2,17.6 L30.0,22.3 L31.7,19.0 L33.5,22.3 L35.3,21.2 L37.0,23.0 L38.8,20.9 L40.5,22.6 L42.3,21.7 L44.1,17.5 L45.8,15.8 L47.6,12.9 L49.4,10.9 L51.1,13.3 L52.9,12.4 L54.6,13.8 L56.4,13.8 L58.2,9.7 L59.9,9.1 L61.7,16.3 L63.5,15.6 L65.2,15.5 L67.0,17.2 L68.7,16.6 L70.5,14.9 L72.3,11.6 L74.0,12.0 L75.8,9.4 L77.6,9.9 L79.3,12.8 L81.1,12.7 L82.8,13.6 L84.6,13.4 L86.4,12.8 L88.1,12.0 L89.9,13.3 L91.7,16.7 L93.4,17.0 L95.2,18.5 L96.9,16.5 L98.7,17.7 L100.5,15.0 L102.2,12.1 L104.0,12.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:95%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>95%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">深证成指</div>
+        <div class="v">13,723.74<span class="u">点</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−0.05%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,5.7 L3.5,4.8 L5.3,6.4 L7.1,8.2 L8.8,10.8 L10.6,6.6 L12.3,9.8 L14.1,14.6 L15.9,11.0 L17.6,12.3 L19.4,15.0 L21.2,22.1 L22.9,23.0 L24.7,17.0 L26.4,18.9 L28.2,18.3 L30.0,21.5 L31.7,18.1 L33.5,23.9 L35.3,22.6 L37.0,26.0 L38.8,23.3 L40.5,24.5 L42.3,20.5 L44.1,18.1 L45.8,18.4 L47.6,16.6 L49.4,16.5 L51.1,17.1 L52.9,15.6 L54.6,16.8 L56.4,16.2 L58.2,13.0 L59.9,13.7 L61.7,20.5 L63.5,19.7 L65.2,18.6 L67.0,21.3 L68.7,21.8 L70.5,20.9 L72.3,19.0 L74.0,19.9 L75.8,19.3 L77.6,20.6 L79.3,23.0 L81.1,22.9 L82.8,23.9 L84.6,21.5 L86.4,22.2 L88.1,22.0 L89.9,23.0 L91.7,24.3 L93.4,25.1 L95.2,26.0 L96.9,24.4 L98.7,24.9 L100.5,22.7 L102.2,21.9 L104.0,22.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:92%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>92%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">沪深300</div>
+        <div class="v">4,544.59<span class="u">点</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.11%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,7.5 L3.5,6.0 L5.3,6.0 L7.1,8.5 L8.8,10.4 L10.6,4.2 L12.3,9.1 L14.1,13.5 L15.9,8.3 L17.6,8.8 L19.4,13.3 L21.2,22.0 L22.9,18.4 L24.7,11.2 L26.4,12.3 L28.2,11.8 L30.0,15.8 L31.7,13.1 L33.5,19.9 L35.3,18.3 L37.0,20.9 L38.8,18.9 L40.5,21.2 L42.3,18.3 L44.1,15.4 L45.8,15.7 L47.6,13.5 L49.4,13.1 L51.1,15.1 L52.9,13.7 L54.6,15.1 L56.4,15.0 L58.2,11.1 L59.9,11.9 L61.7,18.9 L63.5,18.7 L65.2,17.4 L67.0,20.2 L68.7,20.8 L70.5,18.8 L72.3,16.8 L74.0,17.9 L75.8,17.1 L77.6,17.8 L79.3,21.0 L81.1,20.8 L82.8,21.0 L84.6,19.6 L86.4,20.4 L88.1,19.7 L89.9,21.0 L91.7,22.9 L93.4,24.5 L95.2,26.0 L96.9,24.5 L98.7,25.5 L100.5,23.1 L102.2,21.4 L104.0,21.2" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:87%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>87%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">恒生指数</div>
+        <div class="v">25,087.75<span class="u">点</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.18%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L1.8,24.6 L3.5,22.1 L5.3,19.9 L7.1,20.9 L8.8,15.0 L10.6,16.4 L12.3,15.2 L14.1,14.9 L15.9,13.9 L17.6,11.0 L19.4,8.3 L21.2,12.0 L22.9,7.2 L24.7,7.3 L26.4,9.3 L28.2,6.6 L30.0,8.7 L31.7,6.7 L33.5,5.8 L35.3,1.7 L37.0,1.3 L38.8,1.0 L40.5,0.0 L42.3,1.3 L44.1,0.8 L45.8,4.0 L47.6,2.8 L49.4,0.6 L51.1,3.0 L52.9,4.7 L54.6,5.1 L56.4,7.4 L58.2,4.6 L59.9,4.5 L61.7,4.3 L63.5,2.6 L65.2,0.0 L67.0,4.1 L68.7,4.1 L70.5,3.0 L72.3,3.7 L74.0,3.5 L75.8,3.7 L77.6,5.6 L79.3,5.8 L81.1,6.6 L82.8,3.0 L84.6,5.0 L86.4,5.8 L88.1,6.1 L89.9,8.8 L91.7,10.0 L93.4,9.1 L95.2,11.2 L96.9,10.8 L98.7,11.7 L100.5,10.5 L102.2,8.0 L104.0,7.7" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:61%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>61%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">标普500</div>
+        <div class="v">7,764.64<span class="u">点</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−0.00%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,19.3 L1.8,16.1 L3.5,17.0 L5.3,17.0 L7.1,14.1 L8.8,15.9 L10.6,17.0 L12.3,13.8 L14.1,12.0 L15.9,15.3 L17.6,13.8 L19.4,12.2 L21.2,14.3 L22.9,18.4 L24.7,19.2 L26.4,15.6 L28.2,16.2 L30.0,21.0 L31.7,20.8 L33.5,20.8 L35.3,19.9 L37.0,26.0 L38.8,19.5 L40.5,16.7 L42.3,10.7 L44.1,3.4 L45.8,4.1 L47.6,4.8 L49.4,2.2 L51.1,2.5 L52.9,3.8 L54.6,2.7 L56.4,0.0 L58.2,0.7 L59.9,2.9 L61.7,5.8 L63.5,4.9 L65.2,8.5 L67.0,6.7 L68.7,7.9 L70.5,6.6 L72.3,6.6 L74.0,3.7 L75.8,4.7 L77.6,6.1 L79.3,9.0 L81.1,7.1 L82.8,2.8 L84.6,4.3 L86.4,6.8 L88.1,8.8 L89.9,11.2 L91.7,7.6 L93.4,9.6 L95.2,11.5 L96.9,13.3 L98.7,8.7 L100.5,8.0 L102.2,1.8 L104.0,1.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:100%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>100%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">WTI 原油</div>
+        <div class="v">88.89<span class="u">美元/桶</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg down">−1.08%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L1.8,25.8 L3.5,25.9 L5.3,23.4 L7.1,21.6 L8.8,23.6 L10.6,23.9 L12.3,19.3 L14.1,18.0 L15.9,18.1 L17.6,18.7 L19.4,16.6 L21.2,16.2 L22.9,14.7 L24.7,13.3 L26.4,9.2 L28.2,10.5 L30.0,16.6 L31.7,18.5 L33.5,14.7 L35.3,15.1 L37.0,13.1 L38.8,17.9 L40.5,21.3 L42.3,21.4 L44.1,19.1 L45.8,19.9 L47.6,16.3 L49.4,15.6 L51.1,16.1 L52.9,17.1 L54.6,16.8 L56.4,15.0 L58.2,14.8 L59.9,14.8 L61.7,13.5 L63.5,13.2 L65.2,14.4 L67.0,17.1 L68.7,16.6 L70.5,15.4 L72.3,15.5 L74.0,13.5 L75.8,10.4 L77.6,10.4 L79.3,9.7 L81.1,10.0 L82.8,9.0 L84.6,7.9 L86.4,6.2 L88.1,1.1 L89.9,3.9 L91.7,2.5 L93.4,0.0 L95.2,5.8 L96.9,6.3 L98.7,7.0 L100.5,9.5 L102.2,11.0 L104.0,11.6" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:83%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>83%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">原油同比</div>
+        <div class="v">39.28<span class="u">%</span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg down">−3.94pct</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,26.0 L1.8,26.0 L3.5,25.9 L5.3,23.7 L7.1,22.5 L8.8,25.6 L10.6,25.6 L12.3,21.3 L14.1,20.2 L15.9,20.5 L17.6,21.0 L19.4,18.3 L21.2,18.0 L22.9,16.7 L24.7,15.4 L26.4,11.7 L28.2,13.6 L30.0,18.4 L31.7,20.1 L33.5,16.5 L35.3,16.9 L37.0,15.8 L38.8,20.4 L40.5,23.3 L42.3,24.8 L44.1,23.7 L45.8,23.7 L47.6,18.5 L49.4,17.9 L51.1,17.5 L52.9,17.7 L54.6,17.1 L56.4,14.9 L58.2,14.8 L59.9,14.1 L61.7,12.6 L63.5,13.2 L65.2,13.9 L67.0,16.4 L68.7,15.4 L70.5,15.0 L72.3,15.6 L74.0,14.9 L75.8,12.2 L77.6,11.0 L79.3,10.8 L81.1,11.5 L82.8,10.9 L84.6,9.9 L86.4,9.3 L88.1,3.1 L89.9,5.1 L91.7,2.3 L93.4,0.0 L95.2,5.7 L96.9,7.1 L98.7,6.4 L100.5,9.6 L102.2,10.9 L104.0,12.5" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:78%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>78%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">铜金比</div>
+        <div class="v">0.156<span class="u"></span></div>
+        <div class="row"><span>上期 2026-09-22</span><span class="chg down">−0.89%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,13.0 L1.8,14.0 L3.5,12.4 L5.3,11.7 L7.1,15.4 L8.8,13.3 L10.6,11.8 L12.3,5.5 L14.1,5.1 L15.9,5.0 L17.6,3.7 L19.4,6.6 L21.2,3.4 L22.9,0.6 L24.7,4.9 L26.4,5.8 L28.2,5.9 L30.0,8.4 L31.7,7.8 L33.5,9.6 L35.3,6.1 L37.0,2.3 L38.8,1.8 L40.5,0.0 L42.3,5.4 L44.1,6.0 L45.8,15.6 L47.6,16.2 L49.4,15.5 L51.1,18.1 L52.9,12.4 L54.6,13.1 L56.4,15.0 L58.2,16.1 L59.9,23.3 L61.7,23.9 L63.5,24.7 L65.2,26.0 L67.0,23.1 L68.7,23.5 L70.5,24.0 L72.3,18.8 L74.0,16.9 L75.8,16.0 L77.6,16.5 L79.3,18.6 L81.1,16.6 L82.8,14.2 L84.6,9.2 L86.4,9.1 L88.1,15.4 L89.9,15.9 L91.7,18.8 L93.4,16.4 L95.2,15.5 L96.9,13.6 L98.7,12.0 L100.5,7.8 L102.2,4.8 L104.0,6.8" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:19%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>19%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">50ETF 波指</div>
+        <div class="v">13.99<span class="u"></span></div>
+        <div class="row"><span>上期 2026-09-18</span><span class="chg down">−1.82%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,5.8 L1.8,5.4 L3.5,3.2 L5.3,5.2 L7.1,4.7 L8.8,6.6 L10.6,7.8 L12.3,10.6 L14.1,3.1 L15.9,8.2 L17.6,9.4 L19.4,3.9 L21.2,0.6 L22.9,0.0 L24.7,7.4 L26.4,10.7 L28.2,13.5 L30.0,14.2 L31.7,14.6 L33.5,8.7 L35.3,6.9 L37.0,4.0 L38.8,9.0 L40.5,10.6 L42.3,7.6 L44.1,14.2 L45.8,14.6 L47.6,16.5 L49.4,15.5 L51.1,16.5 L52.9,17.8 L54.6,18.1 L56.4,18.6 L58.2,19.3 L59.9,18.6 L61.7,15.1 L63.5,16.5 L65.2,17.0 L67.0,18.4 L68.7,16.7 L70.5,17.3 L72.3,19.0 L74.0,20.2 L75.8,21.3 L77.6,21.3 L79.3,22.8 L81.1,21.0 L82.8,21.5 L84.6,21.1 L86.4,21.4 L88.1,21.5 L89.9,21.8 L91.7,21.0 L93.4,20.2 L95.2,21.0 L96.9,21.7 L98.7,20.5 L100.5,22.8 L102.2,25.2 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:9%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>9%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-21 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">300ETF 波指</div>
+        <div class="v">15.94<span class="u"></span></div>
+        <div class="row"><span>上期 2026-09-18</span><span class="chg down">−0.69%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,6.1 L1.8,5.7 L3.5,4.8 L5.3,13.3 L7.1,7.4 L8.8,8.7 L10.6,9.0 L12.3,10.9 L14.1,4.9 L15.9,9.7 L17.6,10.5 L19.4,6.2 L21.2,3.1 L22.9,2.2 L24.7,8.8 L26.4,13.5 L28.2,14.8 L30.0,14.3 L31.7,13.4 L33.5,6.1 L35.3,4.3 L37.0,0.0 L38.8,6.1 L40.5,10.9 L42.3,9.4 L44.1,12.6 L45.8,13.0 L47.6,15.6 L49.4,15.3 L51.1,15.4 L52.9,17.8 L54.6,18.8 L56.4,19.9 L58.2,20.2 L59.9,18.5 L61.7,13.1 L63.5,15.4 L65.2,16.4 L67.0,17.8 L68.7,12.6 L70.5,13.0 L72.3,15.3 L74.0,17.3 L75.8,19.3 L77.6,19.0 L79.3,19.9 L81.1,18.3 L82.8,19.3 L84.6,19.0 L86.4,20.4 L88.1,21.4 L89.9,21.3 L91.7,20.3 L93.4,20.5 L95.2,20.1 L96.9,20.3 L98.7,19.4 L100.5,22.9 L102.2,25.7 L104.0,26.0" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:16%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>16%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-21 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">VHSI</div>
+        <div class="v">18.24<span class="u"></span></div>
+        <div class="row"><span>单点快照 · 无历史序列</span></div>
+        
+        <div class="stamp">数据日期 2026-09-23 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">新高-新低</div>
+        <div class="v">491<span class="u">家</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg down">−34.71%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,8.8 L1.8,11.5 L3.5,9.7 L5.3,12.1 L7.1,19.4 L8.8,20.3 L10.6,17.3 L12.3,12.8 L14.1,25.9 L15.9,13.2 L17.6,12.8 L19.4,15.2 L21.2,26.0 L22.9,25.2 L24.7,16.0 L26.4,19.7 L28.2,10.0 L30.0,19.2 L31.7,10.3 L33.5,12.4 L35.3,10.1 L37.0,13.2 L38.8,6.3 L40.5,3.3 L42.3,6.1 L44.1,5.7 L45.8,6.1 L47.6,6.5 L49.4,0.0 L51.1,6.9 L52.9,2.1 L54.6,7.9 L56.4,7.8 L58.2,1.1 L59.9,5.6 L61.7,12.8 L63.5,9.6 L65.2,11.3 L67.0,13.1 L68.7,8.2 L70.5,8.2 L72.3,8.0 L74.0,6.5 L75.8,6.3 L77.6,5.1 L79.3,11.6 L81.1,12.0 L82.8,13.1 L84.6,9.6 L86.4,7.0 L88.1,10.3 L89.9,16.3 L91.7,21.8 L93.4,14.3 L95.2,21.2 L96.9,12.2 L98.7,13.5 L100.5,9.1 L102.2,6.4 L104.0,8.1" stroke="var(--up)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:67%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>67%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div><div class="card">
+        <div class="k">两融余额</div>
+        <div class="v">13,597.32<span class="u">亿元</span></div>
+        <div class="row"><span>上期 2026-09-21</span><span class="chg up">+0.07%</span></div>
+        <svg class="spark" viewBox="0 0 104 26" preserveAspectRatio="none" aria-label="近 60 期走势"><path class="base" d="M0,13 L104,13"/><path d="M0.0,0.0 L1.8,0.7 L3.5,2.4 L5.3,3.4 L7.1,4.3 L8.8,5.3 L10.6,5.4 L12.3,6.5 L14.1,8.4 L15.9,9.1 L17.6,10.0 L19.4,11.9 L21.2,17.0 L22.9,20.9 L24.7,20.7 L26.4,20.7 L28.2,21.3 L30.0,22.3 L31.7,20.5 L33.5,22.5 L35.3,24.1 L37.0,26.0 L38.8,25.3 L40.5,25.9 L42.3,25.0 L44.1,24.1 L45.8,23.4 L47.6,22.8 L49.4,22.0 L51.1,22.0 L52.9,21.4 L54.6,21.2 L56.4,21.4 L58.2,20.0 L59.9,19.7 L61.7,21.5 L63.5,21.7 L65.2,22.1 L67.0,22.4 L68.7,22.4 L70.5,22.6 L72.3,21.9 L74.0,22.7 L75.8,22.1 L77.6,22.2 L79.3,22.4 L81.1,22.7 L82.8,24.2 L84.6,23.2 L86.4,23.1 L88.1,23.4 L89.9,23.4 L91.7,24.3 L93.4,24.6 L95.2,24.6 L96.9,24.0 L98.7,23.9 L100.5,23.8 L102.2,23.1 L104.0,22.9" stroke="var(--down)"/></svg>
+        <div class="rankbar"><div class="track"><i style="width:97%"></i></div><div class="lab"><span>本序列窗口内分位</span><span>97%</span></div></div>
+        
+        <div class="stamp">数据日期 2026-09-22 · 日频 · 情绪</div>
+      </div></div>
+  </div>
+
+  <!-- 数据说明 -->
+  <div class="notes">
+    <div class="note-block">
+      <h3>数据源能力边界（本期未覆盖）</h3>
+      <p>下列指标<b>在纯 AKShare 方案下拿不到及时数据</b>，因此本期不展示 ——
+         宁可留白并说明原因，也不放一个看起来正常但已过期一年的数字。</p>
+      <div class="gap"><b>美国宏观（CPI / 失业率 / 非农 / 核心 PCE）</b><br><span class="r">现状：</span>AKShare 金十源实测停更于 2025-09，滞后约 12 个月<br><span class="p">计划：二期接入 FRED 等海外官方源</span></div><div class="gap"><b>中国 PPI / PMI</b><br><span class="r">现状：</span>同上（仅有金十源），且 AKShare 无官方源替代接口<br><span class="p">计划：二期补源；「PPI − CPI 剪刀差」因此暂缺</span></div><div class="gap"><b>美元指数 DXY</b><br><span class="r">现状：</span>AKShare 无可用接口（东财源在受限网络下被链路重置）<br><span class="p">计划：二期接外盘行情；本期用人民币汇率 + 美债利率间接观察</span></div><div class="gap"><b>美股总市值 / 美股巴菲特指标</b><br><span class="r">现状：</span>无接口 —— 只有 A 股有官方总市值序列<br><span class="p">计划：只做 A 股版，且不与美股横向比较</span></div><div class="gap"><b>VIX（美股恐慌指数）</b><br><span class="r">现状：</span>AKShare 无该接口；新浪美股源不含波动率指数<br><span class="p">计划：以 VHSI（恒指波幅）与 50ETF / 300ETF 波指替代</span></div>
+    </div>
+    <div class="note-block">
+      <h3>指标口径与数据来源</h3>
+      <p>下表逐项列出每个指标的发布频率、数据源接口、原生单位与口径说明，
+         以及<b>本次实际取到的最新数据日期</b> —— 宏观数据的发布时点差异极大，
+         不同指标的「最新」并不在同一天。</p>
+      <details>
+        <summary>展开逐项口径（47 项）</summary>
+        <table class="cal">
+          <thead><tr><th>指标</th><th>频率</th><th>数据日期</th><th>数据源</th><th>口径</th></tr></thead>
+          <tbody><tr><td class="n">中国 10 年期国债收益率</td><td>日</td><td class="d">2026-09-22</td><td>ak.bond_zh_us_rate</td><td>中债国债到期收益率，日频，单位 %</td></tr><tr><td class="n">美国 10 年期国债收益率</td><td>日</td><td class="d">2026-09-22</td><td>ak.bond_zh_us_rate</td><td>美债 10 年期收益率，日频，单位 %（全球资产定价的锚）</td></tr><tr><td class="n">中美 10 年期利差（美 − 中）</td><td>日</td><td class="d">2026-09-22</td><td>派生：ak.bond_zh_us_rate</td><td>美国 10Y − 中国 10Y，按共同交易日对齐；负值 = 中国利率更低</td></tr><tr><td class="n">美债 10Y − 2Y 利差</td><td>日</td><td class="d">2026-09-22</td><td>ak.bond_zh_us_rate</td><td>期限利差；倒挂（&lt; 0）是过去 50 年最可靠的衰退领先指标，领先 12–18 个月</td></tr><tr><td class="n">中债 AAA 银行债 10Y − 国债 10Y</td><td>日</td><td class="d">2026-09-22</td><td>ak.bond_china_yield</td><td>中债商业银行普通债收益率曲线(AAA) 10Y − 中债国债券收益率曲线 10Y；走阔 = 信用溢价上升</td></tr><tr><td class="n">3 月期 SHIBOR</td><td>日</td><td class="d">2026-09-23</td><td>ak.rate_interbank</td><td>上海银行间同业拆放利率 3 月期，日频，单位 %</td></tr><tr><td class="n">LPR 1 年期</td><td>月</td><td class="d">2026-09-20</td><td>ak.macro_china_lpr</td><td>贷款市场报价利率（全国银行间同业拆借中心），月度报价</td></tr><tr><td class="n">LPR 5 年期以上</td><td>月</td><td class="d">2026-09-20</td><td>ak.macro_china_lpr</td><td>5 年期以上 LPR，房贷利率的定价基准，月度报价</td></tr><tr><td class="n">美元兑人民币（央行中间价）</td><td>日</td><td class="d">2026-09-23</td><td>ak.currency_boc_sina(美元)</td><td>中国银行外汇牌价「央行中间价」，每 100 美元折人民币元；回传近约 400 日</td></tr><tr><td class="n">美元兑日元（由中间价折算）</td><td>日</td><td class="d">2026-09-23</td><td>派生：ak.currency_boc_sina(美元/日元)</td><td>由美元、日元的央行中间价交叉折算（美元中间价 ÷ 日元中间价 × 100）<br>日元急升是全球套息交易去杠杆的经典信号；本值由两组中间价折算，非直接报价</td></tr><tr><td class="n">欧元兑人民币（央行中间价）</td><td>日</td><td class="d">2026-09-23</td><td>ak.currency_boc_sina(欧元)</td><td>每 100 欧元折人民币元；回传近约 400 日</td></tr><tr><td class="n">全 A 市盈率中位数（TTM）</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_a_ttm_lyr</td><td>全部 A 股 PE(TTM) 的中位数（剔除亏损股的极端值影响）；接口仅回传近 1 年日频<br>分位取接口自带的近 10 年分位（窗口长于本序列）</td></tr><tr><td class="n">全 A 市盈率平均数（TTM）</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_a_ttm_lyr</td><td>平均法口径，受高价股/微利股拉高，与中位数法差异即为「口径差」的直观体现</td></tr><tr><td class="n">全 A 市净率中位数</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_a_all_pb</td><td>全部 A 股 PB 的中位数；接口仅回传近 1 年日频<br>分位取接口自带的近 10 年分位</td></tr><tr><td class="n">沪深 300 市盈率</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_zh_index_value_csindex(000300)</td><td>中证指数公司官方口径「市盈率1」（整体法，剔除亏损）；更新节奏慢于行情，以数据日期为准<br>中证官方源更新节奏慢，请看数据日期</td></tr><tr><td class="n">沪深 300 股息率</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_zh_index_value_csindex(000300)</td><td>中证指数公司官方口径「股息率1」，近 12 个月分红 / 当前市值</td></tr><tr><td class="n">上交所股票平均市盈率</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_sse_summary</td><td>上交所官方公布的股票平均市盈率（整体法）；该接口为「当日快照」，无历史序列</td></tr><tr><td class="n">股权风险溢价 ERP（中位数法）</td><td>日</td><td class="d">2026-09-22</td><td>派生：1 / 全A中位PE − 10Y国债</td><td>ERP = 1/PE − 10 年期国债收益率（A 股圈称「格雷厄姆指数」的倒数形态）；越高 = 股票相对债券越便宜</td></tr><tr><td class="n">股权风险溢价 ERP（沪深 300）</td><td>日</td><td class="d">2026-09-22</td><td>派生：1 / 沪深300PE − 10Y国债</td><td>与中位数法口径的差异来自 PE 口径本身；受中证源滞后影响<br>受中证官方源滞后影响</td></tr><tr><td class="n">巴菲特指标（A 股证券化率）</td><td>季</td><td class="d">2026-06</td><td>派生：ak.macro_china_stock_market_cap ÷ ak.macro_china_gdp</td><td>沪深两市总市值 ÷ 滚动 4 季 GDP；滚 4 季 = 今年累计 + 去年全年 − 去年同期累计<br>🔴 跨市场不可比：各国融资结构不同，本指标只与自身历史比较</td></tr><tr><td class="n">M1 同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_money_supply</td><td>狭义货币供应量同比；M1 含企业活期存款，是资金活化程度的直接体现</td></tr><tr><td class="n">M2 同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_money_supply</td><td>广义货币供应量同比</td></tr><tr><td class="n">M1 − M2 剪刀差</td><td>月</td><td class="d">2026-08</td><td>派生：ak.macro_china_money_supply</td><td>M1 同比 − M2 同比，单位百分点；为负 = 资金定期化（企业不扩产）；向零收窄 = 资金活化</td></tr><tr><td class="n">GDP 同比</td><td>季</td><td class="d">2026Q2</td><td>ak.macro_china_gdp</td><td>国内生产总值不变价同比（季度累计口径）；滞后指标，仅作确认<br>季度滞后指标</td></tr><tr><td class="n">全社会用电量同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_society_electricity</td><td>全社会用电量同比（「克强指数」核心，统计口径难修饰）</td></tr><tr><td class="n">社会消费品零售总额同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_consumer_goods_retail</td><td>当月社零同比；国内需求侧的月度同步指标</td></tr><tr><td class="n">企业景气指数</td><td>季</td><td class="d">2026Q2</td><td>ak.macro_china_enterprise_boom_index</td><td>央行 5000 户工业企业调查，&gt;100 为景气区间；季度<br>该接口的「企业家信心指数」系列自 2024 起已停更，仅「企业景气指数」仍在更新</td></tr><tr><td class="n">社会融资规模（滚动 12 个月合计）</td><td>月</td><td class="d">2026-04</td><td>ak.macro_china_shrzgm</td><td>近 12 个月社会融资规模增量合计（非单月值，滚动口径以平滑季节性）；中国信用周期的核心指标<br>🔴 该接口实测滞后约 5 个月；展示为滚动 12 个月合计而非单月增量（单月季节性极强）</td></tr><tr><td class="n">CPI 同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_cpi</td><td>居民消费价格指数同比（上年同月 = 100 换算），单位 %</td></tr><tr><td class="n">CPI 环比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_cpi</td><td>CPI 环比（上月 = 100 换算）</td></tr><tr><td class="n">城镇调查失业率</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_urban_unemployment</td><td>全国城镇调查失业率（16–24 岁等分口径为另一组数据，未纳入）</td></tr><tr><td class="n">京沪新建住宅价格同比</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_new_house_price</td><td>北京、上海两市新建商品住宅价格指数同比的均值（已由「上年同月=100」换算为 %）<br>🔴 该接口实测仅回传京沪两市（非 70 城），口径以「京沪」为准</td></tr><tr><td class="n">外汇储备</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_fx_gold</td><td>国家外汇储备余额，单位亿美元</td></tr><tr><td class="n">黄金储备</td><td>月</td><td class="d">2026-08</td><td>ak.macro_china_fx_gold</td><td>官方黄金储备，单位万盎司；央行购金是近年重要的宏观叙事</td></tr><tr><td class="n">上证指数</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_zh_index_daily(sh000001)</td><td>上证综合指数收盘价</td></tr><tr><td class="n">深证成指</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_zh_index_daily(sz399001)</td><td>深证成份指数收盘价</td></tr><tr><td class="n">沪深 300</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_zh_index_daily(sz399300)</td><td>沪深 300 指数收盘价</td></tr><tr><td class="n">恒生指数</td><td>日</td><td class="d">2026-09-22</td><td>ak.stock_hk_index_daily_sina(HSI)</td><td>恒生指数收盘价</td></tr><tr><td class="n">标普 500</td><td>日</td><td class="d">2026-09-22</td><td>ak.index_us_stock_sina(.INX)</td><td>标普 500 指数收盘价（新浪美股源）</td></tr><tr><td class="n">WTI 原油</td><td>日</td><td class="d">2026-09-23</td><td>ak.futures_foreign_hist(CL)</td><td>纽约轻质原油期货连续合约收盘价</td></tr><tr><td class="n">WTI 原油同比</td><td>日</td><td class="d">2026-09-23</td><td>派生：ak.futures_foreign_hist(CL)</td><td>WTI 原油价格与上年同期比（按日历日期对齐，容忍 ±7 天节假日错位）</td></tr><tr><td class="n">铜金比</td><td>日</td><td class="d">2026-09-23</td><td>派生：ak.futures_foreign_hist(HG) ÷ (GC)</td><td>COMEX 铜价 ÷ 金价；上行 = 市场定价「工业需求 &gt; 避险需求」，是比 PMI 更实时的景气代理</td></tr><tr><td class="n">50ETF 期权隐含波动率</td><td>日</td><td class="d">2026-09-21</td><td>ak.index_option_50etf_qvix</td><td>上证 50ETF 期权隐含波动率（中国版「恐慌指数」），日频</td></tr><tr><td class="n">300ETF 期权隐含波动率</td><td>日</td><td class="d">2026-09-21</td><td>ak.index_option_300etf_qvix</td><td>沪深 300ETF 期权隐含波动率；该接口早期数值为 NaN，仅近年有效</td></tr><tr><td class="n">恒指波幅指数</td><td>日</td><td class="d">2026-09-23</td><td>ak.stock_hk_index_spot_sina</td><td>恒生指数波幅指数（港股版恐慌指数）；该接口为快照，无历史序列</td></tr><tr><td class="n">20 日新高 − 新低家数</td><td>日</td><td class="d">2026-09-22</td><td>派生：ak.stock_a_high_low_statistics</td><td>创 20 日新高的 A 股家数 − 创 20 日新低的家数；正 = 赚钱效应扩散</td></tr><tr><td class="n">沪市融资融券余额</td><td>日</td><td class="d">2026-09-22</td><td>ak.macro_china_market_margin_sh</td><td>沪市融资融券余额合计（接口原生单位为元，已 ÷1e8 转亿元）</td></tr></tbody>
+        </table>
+      </details>
+    </div>
+    
+  </div>
+
+  <div class="foot">
+    构建于 2026-09-23 13:03 · 共 47 个指标（成功 47 / 失败 0）<br>
+    数据来源：AKShare（东财 / 新浪 / 中债 / 中证指数 / 央行等公开接口）<br>
+    本页为公开数据的结构化呈现，<b>不含任何投资建议</b>；指标方向不代表利好或利空。<br>
+    数据可能存在延迟、缺口或口径差异，据此决策的风险由使用者自行承担。
+  </div>
+
+</div>
+</body>
+</html>

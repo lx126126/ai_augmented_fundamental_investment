@@ -335,6 +335,21 @@ body {
 .stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; padding-right: 92px; }
 .stock-list .empty { text-align: center; color: var(--faint); padding: 40px 8px; font-size: 13px; }
 
+/* ---------- ② 宏观周期看板入口：搜索框下方 ---------- */
+/* 宏观是全局视角、不依赖个股搜索，所以放在报告列表**之前** ——
+   它回答的是「现在整个市场处在什么位置」，与「查某家公司」是两条并行的入口。
+   样式有意比下面的「横向对比」轻（浅色而非渐变），避免两个重卡片抢视觉焦点。 */
+.macro-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 14px; padding: 14px 18px; text-decoration: none; color: var(--accent);
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.07);
+}
+.macro-entry:active { transform: scale(0.99); }
+.macro-entry .m-title { font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+.macro-entry .m-sub { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.macro-entry .m-arrow { font-size: 22px; color: var(--faint); line-height: 1; }
+
 /* ---------- ③ 横向对比：报告列表最下面 ---------- */
 .compare {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -368,7 +383,16 @@ body {
   </div>
   <div class="facts">__FRESH__<span class="pill">已生成 __N_REPORTS__ 份报告</span></div>
 
-  <!-- ② 已生成的报告（点击 → 该标的一页报告） -->
+  <!-- ② 宏观周期看板：全局视角，与「查个股」并行 -->
+  <a class="macro-entry" href="macro.html">
+    <div>
+      <div class="m-title">宏观周期看板</div>
+      <div class="m-sub">利率 · 估值分位 · 流动性 · 周期定位 —— 看整个市场处在什么位置</div>
+    </div>
+    <span class="m-arrow">›</span>
+  </a>
+
+  <!-- ③ 已生成的报告（点击 → 该标的一页报告） -->
   <div class="section">
     <div class="section-title">
       <span>已生成的报告 <b>__N_REPORTS__</b> 只</span>
@@ -379,7 +403,7 @@ __CARDS__
     </div>
   </div>
 
-  <!-- ③ 横向对比：列表最下面 -->
+  <!-- ④ 横向对比：列表最下面 -->
   <a class="compare" href="watchlist.html">
     <div>
       <div class="c-title">横向对比</div>

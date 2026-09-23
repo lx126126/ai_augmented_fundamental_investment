@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  fqf 宏观周期看板 · 周更 · macOS launchd 配置
+
+  安装（推荐；也支持双击）：
+    open scripts/install_launchd.command
+
+  ⚠️ 与 com.fqf.daily-refresh 同理，别手敲 launchctl 装载：自动化环境
+     （agent/CI）无权向 launchd 注册作业，bootstrap / load 一律报
+     `Bootstrap failed: 5: Input/output error` —— 这一步必须由本人在图形会话里执行。
+     launchctl 的读取类命令（print/list/enable）在任何环境都正常。
+
+  查看状态 / 立即跑一次：
+    launchctl print gui/501/com.fqf.macro-refresh
+    launchctl kickstart -k gui/501/com.fqf.macro-refresh
+
+  卸载：
+    launchctl bootout gui/501/com.fqf.macro-refresh
+    rm ~/Library/LaunchAgents/com.fqf.macro-refresh.plist
+
+  时间选择：**周六 10:00**。
+    - 看板的 47 个指标里绝大多数是月频/季频，日更没有意义（同一份月度数据会被
+      重复渲染 22 次），周更最多滞后 7 天，对月频指标可接受；
+    - 避开交易时段，同时日频行情部分能拿到周五的收盘价；
+    - 周六跑不影响工作日，失败也有一整个周末可以修。
+  Weekday：1=周一 … 6=周六 … 0/7=周日。
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fqf.macro-refresh</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/lixiao/WorkBuddy/fqf/scripts/macro_refresh.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/lixiao/WorkBuddy/fqf</string>
+
+    <!-- 每周六 10:00 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Weekday</key><integer>6</integer>
+            <key>Hour</key><integer>10</integer>
+            <key>Minute</key><integer>0</integer>
+        </dict>
+    </array>
+
+    <!--
+      家用 Mac 会睡眠/关机，launchd 的定时触发会整次跳过。RunAtLoad 让它在登录时
+      也拉起来一次；脚本里用 data/logs/.last_success_macro 做**周闸门**
+      （记录 ISO 周次），本周已成功过就跳过。
+    -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/lixiao/WorkBuddy/fqf/data/logs/launchd_macro.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lixiao/WorkBuddy/fqf/data/logs/launchd_macro.err.log</string>
+
+    <!-- 批处理任务，不是常驻服务：失败不要无限重启 -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- 单次构建预算 300s（脚本内还有一层），给 20 分钟余量足够 -->
+    <key>ExitTimeOut</key>
+    <integer>1200</integer>
+</dict>
+</plist>
