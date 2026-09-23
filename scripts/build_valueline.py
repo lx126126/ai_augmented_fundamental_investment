@@ -381,7 +381,11 @@ def build_val_grid() -> str:
         if _d is None:
             price_note = "最新价"
         else:
-            price_note = f"{'收盘价' if intraday is False else '最新价'} {_d}"
+            # ⚠️ 不能写 `intraday is False`：is_intraday 从 parquet 读回来是
+            # numpy.bool_，`np.False_ is False` 判为假（类型不同）→ 这个分支是死的，
+            # 收盘价一直被印成「最新价」。2026-09-22 实测发现并修正。
+            price_note = (f"收盘价 {_d}" if (intraday is not None and not intraday)
+                          else f"最新价 {_d}")
 
     # 股息率口径 = 最近年度分红总额 ÷ 当前市值，与 PE/PB 同分母（当前市值），
     # 所以它能像 PE/PB 一样给历史分位。年度必须标出来：2026 中报分红行存在但为空，
@@ -2150,7 +2154,7 @@ TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def _reconcile(code: str) -> list[dict]:
+def _reconcile(code: str, daily: bool = False) -> list[dict]:
     """生成报告前，用官方年报 PDF 金标准交叉校验并生成修正记录。
 
     背景：东财/新浪等第三方接口同源，在「同一控制下企业合并追溯重述」等特殊情形下
@@ -2158,6 +2162,15 @@ def _reconcile(code: str) -> list[dict]:
     年报 PDF 的三张主表（资产负债表 + 利润表 + 现金流量表）对比接口值，差异 >1% 记录
     修正项（落盘 reconcile.json，由 adapter.load_raw 读 raw 后统一应用，raw 层保持接口
     原始值）。失败则降级跳过。
+
+    🔴 daily=True（日更）时**仍然读**历史修正记录，只是跳过「重新跑 PDF 校验」这一步。
+    原先调用侧写的是 `RECONCILE_LOG = [] if daily else _reconcile(code)` —— 把记录**置空**，
+    而 build() 又会无条件写回整份 HTML，于是**日更重建会把「⚠ 接口数据修正」整块擦掉**，
+    零报错、日志正常（2026-09-23 实测：全池 14 份报告一份不剩，而 data/validation/
+    下的 json 记录都还在）。数据侧的修正照旧生效（adapter 应用），丢的是**读者可见的
+    「这里被官方 PDF 覆盖过」**——正是最不该静默消失的那类声明。
+    与本文件其它日更分支同一条原则：**日更要复用缓存，不是跳过**。
+    `load_reconcile_log` 只读 json，不联网、不碰 PDF，代价可忽略。
     """
     try:
         from src.validation import reconcile_all, load_reconcile_log
@@ -2171,11 +2184,12 @@ def _reconcile(code: str) -> list[dict]:
         if annual_dates.empty:
             return []
         year = int(annual_dates.dt.year.max())  # 最新年报年份（12-31），非季度
-        result = reconcile_all(code, year)
-        n = sum(len(c) for c in result["corrections"].values())
-        if n:
-            print(f"[reconcile] {code} {year} 记录 {n} 个接口错误字段（官方PDF金标准，adapter 读 raw 时应用）")
-        # 读历史修正记录（供报告「数据校验」区展示）
+        if not daily:
+            result = reconcile_all(code, year)
+            n = sum(len(c) for c in result["corrections"].values())
+            if n:
+                print(f"[reconcile] {code} {year} 记录 {n} 个接口错误字段（官方PDF金标准，adapter 读 raw 时应用）")
+        # 读历史修正记录（供报告「数据校验」区展示）—— 日更同样要读，否则版面会被擦空
         log = load_reconcile_log(code, year)
         if log:
             print(f"[reconcile] {code} {year} 历史修正记录 {len(log)} 项（官方PDF金标准）")
@@ -2311,8 +2325,9 @@ def build(code: str = "601088", daily: bool = False, refresh_narrative: bool = F
     if _norm_code:
         code = _norm_code(code)
     # 先做数据交叉校验（官方 PDF 金标准覆盖接口错误字段）。
-    # 每日行情刷新（--daily）跳过：财务数据未变，PDF 校验/LLM 叙事无需重跑，只更新估值板块。
-    RECONCILE_LOG = ([] if daily else _reconcile(code)) if _HAS_DATA else []
+    # 每日行情刷新（--daily）跳过「重新跑 PDF 校验」，但**仍读**已落盘的修正记录：
+    # 财务数据未变、PDF 校验无需重跑；可记录若不读，日更重建会把版面那块整块擦空。
+    RECONCILE_LOG = _reconcile(code, daily=daily) if _HAS_DATA else []
     real = _load_real_data(code)
     if real:
         YEARS = real["years"]
