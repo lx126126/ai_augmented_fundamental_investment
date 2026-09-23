@@ -19,7 +19,9 @@
     launchctl bootout gui/501/com.fqf.daily-refresh
     rm ~/Library/LaunchAgents/com.fqf.daily-refresh.plist
 
-  时间选择：A 股 15:00 收盘、港股 16:00 收盘 → 取 16:30 兼顾两地。
+  时间选择：A 股 15:00 收盘、港股 16:10 收市竞价结束 → 取 16:30 兼顾两地。
+  ⚠️ 收盘前跑会拿到「昨收」并被标成「今天的收盘价」，还会把闸门写脏 → 见
+     daily_refresh.sh 里的收盘前闸门（阈值 16:15）。
   Weekday：1=周一 … 5=周五（launchd 里 0 与 7 都表示周日）。
 -->
 <plist version="1.0">
