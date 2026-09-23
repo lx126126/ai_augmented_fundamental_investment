@@ -3,8 +3,10 @@
 <!--
   fqf 每日行情刷新 · macOS launchd 配置
 
-  安装（推荐；也支持双击）：
-    open scripts/install_launchd.command
+  安装（推荐；也支持双击 —— 双击装的就是本任务，它是不带参数时的默认值）：
+    bash ~/WorkBuddy/fqf/scripts/install_launchd.command
+    # 装宏观看板周更则要显式给标签：
+    #   bash ~/WorkBuddy/fqf/scripts/install_launchd.command com.fqf.macro-refresh
 
   ⚠️ 别手敲 launchctl 装载：自动化环境（agent/CI）无权向 launchd 注册作业，
      bootstrap / load 一律报 `Bootstrap failed: 5: Input/output error` —— 这一步

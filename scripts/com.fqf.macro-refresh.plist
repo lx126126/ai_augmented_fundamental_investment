@@ -3,8 +3,8 @@
 <!--
   fqf 宏观周期看板 · 周更 · macOS launchd 配置
 
-  安装（推荐；也支持双击）：
-    open scripts/install_launchd.command
+  安装 —— 🔴 必须带任务标签，别直接双击安装脚本（那装的是**日更**，不是本任务）：
+    bash ~/WorkBuddy/fqf/scripts/install_launchd.command com.fqf.macro-refresh
 
   ⚠️ 与 com.fqf.daily-refresh 同理，别手敲 launchctl 装载：自动化环境
      （agent/CI）无权向 launchd 注册作业，bootstrap / load 一律报
