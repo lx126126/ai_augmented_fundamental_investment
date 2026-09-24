@@ -22,7 +22,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from .fetcher import fetch_quote, fetch_rating, fetch_valuation
+from .fetcher import (
+    SNAPSHOT_TIMEOUT_S,
+    call_with_timeout,
+    fetch_quote,
+    fetch_rating,
+    fetch_valuation,
+)
 
 DATA_ROOT = Path(__file__).resolve().parent.parent.parent / "data"
 MARKET_DIR = DATA_ROOT / "market"
@@ -76,17 +82,47 @@ def _append_snapshot(path: Path, df: pd.DataFrame) -> None:
     df.to_parquet(path, index=False)
 
 
+def _fetch_guarded(code: str, what: str, fn, **kwargs):
+    """带墙钟超时的取数：超时或异常一律返回 None，并把原因**打出来**（不静默塌缩）。
+
+    🔴 为什么必须有（2026-09-24 补，代价是一整天的数据）
+    ---------------------------------------------------
+    本模块三个接口里有**两个走 akshare 且没有 timeout 参数**（百度估值 / 东财盈利预测）
+    —— akshare 内部把 timeout 传成 `None` = **无限等待**。挂死时的表现是
+    「既不返回也不报错」，于是：
+
+      16:30 日更启动 → 卡在 `[601088] 行情快照` → 进程挂住 **17 小时**不退出
+      → launchd 认为作业仍在 `running` → **此后每天的 16:30 定时触发都不会再拉起新实例**
+      → 数据静默停在 09-22，页面上看不出任何异常，日志也不报错。
+
+    也就是说：**一次挂死的代价不是「当天少刷一次」，而是「自动更新从此彻底停摆」**。
+    这正是它必须有两层保护的原因 —— 本函数的单次墙钟超时，
+    加上 `scripts/daily_refresh.py` 的整批预算兜底。
+
+    留痕而不是静默 `except: return None`：否则日志里只有 `quote=False`，
+    分不清是超时、限流还是接口改版（本项目已被这一类塌缩坑过多次）。
+    """
+    try:
+        return call_with_timeout(fn, SNAPSHOT_TIMEOUT_S, code, **kwargs)
+    except TimeoutError as e:
+        print(f"[market] {code} {what}超时：{e}")
+        return None
+    except Exception as e:  # noqa: BLE001 - 单张表失败不该拖垮整只标的
+        print(f"[market] {code} {what}异常：{type(e).__name__}: {e}")
+        return None
+
+
 def snapshot_quote(code: str, market: str | None = None) -> pd.DataFrame | None:
     """拉腾讯行情单行快照，追加历史 + 覆盖报告用最新表。
 
     market：可选交易所前缀（港股传 "hk"）。返回带 report_date 的单行 DataFrame
     （用于历史快照），或 None（拉取失败）。
     """
-    q = fetch_quote(code, market=market)
+    q = _fetch_guarded(code, "行情", fetch_quote, market=market)
     if q is None or q.empty:
         print(f"[market] {code} 行情首拉为空，{_QUOTE_RETRY_DELAY}s 后重试一次")
         time.sleep(_QUOTE_RETRY_DELAY)
-        q = fetch_quote(code, market=market)
+        q = _fetch_guarded(code, "行情", fetch_quote, market=market)
     if q is None or q.empty:
         print(f"[market] {code} 行情重试后仍为空，放弃（报告将沿用上一次快照）")
         return None
@@ -116,7 +152,7 @@ def snapshot_valuation(code: str) -> pd.DataFrame | None:
     """
     if not _is_a_share(code):
         return None
-    val = fetch_valuation(code)
+    val = _fetch_guarded(code, "估值", fetch_valuation)
     if val is None or val.empty:
         return None
 
@@ -137,7 +173,7 @@ def snapshot_rating(code: str) -> pd.DataFrame | None:
     """
     if not _is_a_share(code):
         return None
-    r = fetch_rating(code)
+    r = _fetch_guarded(code, "评级", fetch_rating)
     if r is None or r.empty:
         return None
     raw_path = RAW_DIR / code / "rating.parquet"

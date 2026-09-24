@@ -41,10 +41,27 @@ webserver」那一整套（需 3~4GB 常驻内存）。而本场景的负载是�
 行情一变哈希即变，缓存自动失效 → 会重新调用 LLM（烧 token）。
 `--daily` 会跳过 PDF 校验与 LLM，只重刷估值/市场板块。**每日刷新一律用 --daily。**
 
+🔴 为什么整个脚本必须有「墙钟预算」（2026-09-24 补）
+---------------------------------------------------
+2026-09-23 16:30 那次日更**挂住了 17 小时**（某次 akshare 调用被链路静默挂死，
+进度条停在第 1/6 不动）。真正致命的不是「当天没刷成」，而是：
+
+    launchd 认为作业仍在 running → **此后每天的 16:30 都不会再拉起新实例**
+    → 自动更新从此彻底停摆，而页面上、日志里**零报错**（数据只是安静地停在 09-22）。
+
+所以保护分两层，缺一层都还会复发：
+
+    ① `market_snapshot._fetch_guarded`  —— 单次调用 30s 墙钟超时
+    ② 本脚本 `--budget`（默认 1800s）  —— 整批预算兜底，超出即停并记为失败
+
+⚠️ 恰因为「挂死会让 launchd 不再拉起新实例」，**脚本内自带的 watchdog 是无效的**
+   （作业根本没机会启动，那段代码不会被执行）—— 防线只能放在**单次调用**与**整批**两层。
+
 用法
 ----
     python scripts/daily_refresh.py                  # 跟踪池全部标的
     python scripts/daily_refresh.py --codes 600938,00883
+    python scripts/daily_refresh.py --budget 600     # 整批预算 10 分钟（默认 1800s）
     python scripts/daily_refresh.py --dry-run        # 只列计划，不拉数
     python scripts/daily_refresh.py --no-build       # 只拉行情，不重刷报告
     python scripts/daily_refresh.py --no-web         # 不刷手机网页版首页
@@ -55,6 +72,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -65,6 +83,18 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(SCRIPTS))
 
 RAW_DIR = ROOT / "data" / "raw"
+
+#: 整批墙钟预算（秒）。超过后停止拉取剩余标的，并**记为失败**（不写闸门）。
+#:
+#: 🔴 为什么需要第二层预算（第一层是 `market_snapshot._fetch_guarded` 的单次 30s 超时）
+#: --------------------------------------------------------------------------------
+#: 2026-09-23 16:30 实测事故：某次 akshare 调用被链路静默挂死，日更进程挂住 **17 小时**
+#: 不结束。真正的代价不是「当天少刷一次」——而是 launchd 认为作业仍在 `running`,
+#: **此后每天的定时触发都不会再拉起新实例**，自动更新从此彻底停摆而**零报错**。
+#: 单次超时能挡住绝大多数挂死；但「N 只标的 × 每只最多 2 次重试 × 30s」最坏仍可累积，
+#: 所以整批再加一道预算兜底：**宁可少刷几只并把原因写进日志，也不要一个永不结束的定时任务。**
+#: 正常耗时参照：12 只标的实测约 6 分钟（09-11:56 → 09:17:47）。
+_DEFAULT_BUDGET_S = 1800.0
 
 
 def _is_hk(code: str) -> bool:
@@ -102,14 +132,18 @@ def load_codes() -> list[str]:
 
 def _parse_args(argv: list[str]) -> dict:
     codes = None
+    budget = _DEFAULT_BUDGET_S
     for i, a in enumerate(argv):
         if a == "--codes" and i + 1 < len(argv):
             codes = [c.strip() for c in argv[i + 1].split(",") if c.strip()]
+        if a == "--budget" and i + 1 < len(argv):
+            budget = float(argv[i + 1])
     return {
         "dry_run": "--dry-run" in argv,
         "do_build": "--no-build" not in argv,
         "do_web": "--no-web" not in argv,
         "codes": codes,
+        "budget": budget,
     }
 
 
@@ -206,10 +240,23 @@ def main() -> int:
             print(f"⚠️ 导入报告层失败，将跳过重刷报告：{e}")
 
     failed: list[str] = []
-    for code in codes:
+    t0 = time.monotonic()
+    for i, code in enumerate(codes):
         st = _store_code(code)
         hk = _is_hk(st)
-        print(f"\n{'=' * 56}\n[{st}] 行情快照（{'港股' if hk else 'A 股'}）")
+        elapsed = time.monotonic() - t0
+        # 整批预算兜底：见 _DEFAULT_BUDGET_S 的说明（一次挂死 = 自动更新从此停摆）。
+        # 0 或负数 = 不设限（排查时用）。
+        if opt["budget"] > 0 and elapsed > opt["budget"]:
+            rest = len(codes) - i
+            print(f"\n⏱ 已达整批预算 {opt['budget']:g}s（已用 {elapsed:.0f}s）"
+                  f"→ 停止本轮，剩余 {rest} 只未刷")
+            print("   补当日收盘：python scripts/backfill_snapshot.py --auto")
+            print("   或重跑：    bash scripts/daily_refresh.sh --force")
+            failed.append(f"预算超时（{rest} 只未刷）")
+            break
+        print(f"\n{'=' * 56}\n[{st}] 行情快照（{'港股' if hk else 'A 股'}）"
+              f"  · 已用 {elapsed:.0f}s")
 
         try:
             r = snapshot_all(st, market="hk" if hk else None)

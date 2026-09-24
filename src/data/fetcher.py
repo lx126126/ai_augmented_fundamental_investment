@@ -427,22 +427,30 @@ _KLINE_COL_MAP = {
 }
 
 _KLINE_TIMEOUT_S = 25  # 单源墙钟超时
+#: 行情快照类单接口的墙钟上限（秒）。
+#: 取值依据：正常请求实测都在 2s 内（腾讯行情批量 7 只 0.26s、百度估值数秒），
+#: 而本函数要挡的是 akshare 侧「timeout 默认 None = 永远不返回」的挂死。
+SNAPSHOT_TIMEOUT_S = 30
 _TIMEOUT = object()    # 超时哨兵
 
 
-def _call_with_timeout(fn, timeout_s: float, *args):
-    """在守护线程里调用 fn，超时即放弃。
+def _call_with_timeout(fn, timeout_s: float, *args, **kwargs):
+    """在守护线程里调用 fn，超时即放弃（返回 `_TIMEOUT` 哨兵）。
 
     为什么必须有超时保护：akshare 的 stock_zh_a_hist 的 timeout 参数默认 None
     = **无限等待**，而实测某些网络环境下该接口的连接会被链路静默挂死
     （既不返回也不报错）。没有保护时整条数据管道会永久卡住——实测卡死 9 分钟
     无任何输出，最后靠人工中断才发现。用守护线程是为了超时后不影响进程退出。
+
+    ⚠️ `**kwargs` 是补上的（2026-09-24）：`src/macro/source.py::timeout()` 一直以
+       `_call_with_timeout(fn, seconds, *args, **kwargs)` 调用本函数，而此前签名不收
+       kwargs —— 只因被装饰的 fetch 恰好都是零参数才没炸。加了 kwargs 才算真兼容。
     """
     box: dict = {}
 
     def _run():
         try:
-            box["v"] = fn(*args)
+            box["v"] = fn(*args, **kwargs)
         except BaseException as exc:  # noqa: BLE001 - 需要把异常带回主线程
             box["e"] = exc
 
@@ -454,6 +462,20 @@ def _call_with_timeout(fn, timeout_s: float, *args):
     if "e" in box:
         raise box["e"]
     return box.get("v")
+
+
+def call_with_timeout(fn, timeout_s: float, *args, **kwargs):
+    """公开版墙钟超时：超时**抛 `TimeoutError`**（而不是返回哨兵）。
+
+    与 `_call_with_timeout` 的分工：内部链路用哨兵做多源回退（超时 → 换下一个源），
+    而「只有一个源、超时只能记为失败」的调用点（如 `market_snapshot` 的三张行情表）
+    用本函数，让超时与其它异常同路：调用方一个 `try/except` 就能兜住并留痕。
+    """
+    result = _call_with_timeout(fn, timeout_s, *args, **kwargs)
+    if result is _TIMEOUT:
+        name = getattr(fn, "__name__", str(fn))
+        raise TimeoutError(f"{name} 超过 {timeout_s:g}s 未返回（接口挂死）")
+    return result
 
 
 def _kline_source_em(sym: str, start: str, end: str):
@@ -672,15 +694,41 @@ def fetch_hk_valuation(code: str, period: str = "近十年") -> pd.DataFrame | N
     return df
 
 
+#: 全市场盈利预测表的进程内缓存（见 `_profit_forecast_all`）。
+_forecast_all_cache: pd.DataFrame | None = None
+
+
+def _profit_forecast_all() -> pd.DataFrame | None:
+    """拉「全市场」盈利预测 + 机构评级表（进程内只拉一次）。
+
+    为什么必须缓存：`fetch_rating` 是**每只标的调一次**，而它每次都拉同一份全市场表
+    —— 日更 12 只标的 = 12 次全量请求。既白等几十秒，又把「接口挂死」的概率乘以 N。
+
+    🔴 为什么必须加墙钟超时：该接口没有 timeout 参数（akshare 内部默认 None = 无限等待）。
+    实测事故（2026-09-23 16:30）：日更卡在这一段，进度条停在第 1/6 不动，进程挂住
+    **17 小时**不结束；而 launchd 认为作业仍在 running → **次日的定时刷新再也不会被拉起**，
+    数据静默停在 09-22。症状是「用户只说了一句：报告里的收盘价还是 0922」。
+    """
+    global _forecast_all_cache
+    if _forecast_all_cache is not None:
+        return _forecast_all_cache
+    df = call_with_timeout(ak.stock_profit_forecast_em, _SNAPSHOT_TIMEOUT_S)
+    if df is not None and not df.empty:
+        _forecast_all_cache = df
+    return df
+
+
 def fetch_rating(code: str) -> pd.DataFrame | None:
     """东财盈利预测 + 机构评级（近6个月买入/增持/中性/减持/卖出）。
 
-    数据源 stock_profit_forecast_em（全市场），筛出单只股票后标准化列名。
+    数据源 stock_profit_forecast_em（全市场，进程内缓存），筛出单只股票后标准化列名。
     返回单行 DataFrame：rating_* 评级分布 + eps_{year} 未来3年预测每股收益。
     """
     try:
-        df = ak.stock_profit_forecast_em()
-    except Exception:
+        df = _profit_forecast_all()
+    except Exception as e:
+        # 不静默吞：否则日志里只有 rating=False，分不清是超时、限流还是接口改版。
+        print(f"[fetch] {code} 盈利预测/评级拉取失败：{type(e).__name__}: {e}")
         return None
     if df is None or df.empty:
         return None
