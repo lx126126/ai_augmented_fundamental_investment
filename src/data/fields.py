@@ -77,8 +77,35 @@ PROFIT_SHEET_MAP = {
     "FINANCE_EXPENSE": "finance_expense",         # 财务费用（总额，利润表瀑布图构成）
     "FE_INTEREST_EXPENSE": "interest_expense",    # 财务费用-利息费用（长期利息近似）
     "INVEST_INCOME": "invest_income",             # 投资收益（利润表瀑布图构成）
-    "ASSET_IMPAIRMENT_LOSS": "asset_impairment_loss",   # 资产减值损失（营业总成本构成）
-    "CREDIT_IMPAIRMENT_LOSS": "credit_impairment_loss", # 信用减值损失（营业总成本构成）
+    "ASSET_IMPAIRMENT_LOSS": "asset_impairment_loss",   # 资产减值损失（旧准则字段）
+    "CREDIT_IMPAIRMENT_LOSS": "credit_impairment_loss", # 信用减值损失（旧准则字段）
+}
+
+# ---------------------------------------------------------------------------
+# 2b. 减值科目的「新旧准则双字段」——**不能直接加进 PROFIT_SHEET_MAP**
+# ---------------------------------------------------------------------------
+# 东财在 2018 年新金融工具准则（CAS22/23/24）实施后换了字段后缀，两边的时间区间互补：
+#
+#   *_LOSS   2006-06-30 ~ 2018-03-31 填，**正数 = 损失**（旧准则，减值列在「营业总成本」项下）
+#   *_INCOME 2018-06-30 起        填，**负数 = 损失**（新准则，报表格式「损失以"-"号填列」）
+#
+# 实测（600887，2026-09-24）：`ASSET_IMPAIRMENT_LOSS` 48 期止于 2018-03-31，
+# 之后 33 期全空；同一份数据的 `ASSET_IMPAIRMENT_INCOME` 2018-06-30 起 33 期有值。
+# `CREDIT_IMPAIRMENT_LOSS` 更极端 —— **从来没填过**（信用减值损失是新准则才有的科目），
+# 所以只映射 LOSS 版时它 100% 为空。
+#
+# 🔴 两个字段**必须同时处理符号**：不取负直接拼，同一条时间序列会在 2018 年中途反向
+# （伊利 2018Q1 = +0.18、2018Q2 = -0.40，读起来像「由损失转收益」）。归一方向取
+# 「**正数 = 损失**」—— 与旧字段一致，也与营业成本/费用类科目「越大越花钱」的读法一致。
+#
+# 🔴 为什么不能把 `*_INCOME` 也写进 PROFIT_SHEET_MAP：`fetcher._remap` 是
+# `df[cols].rename(columns=cols)`，两个键映射到同一个标准名会产出**两列同名列**，
+# 后一列静默覆盖前一列 —— 不报错，只是 2018 年后仍然全空。合并只能走代码，见
+# `fetcher._merge_impairment`。
+IMPAIRMENT_FIELDS: dict[str, tuple[str, str]] = {
+    # 标准字段名: (旧准则字段, 新准则字段)
+    "asset_impairment_loss": ("ASSET_IMPAIRMENT_LOSS", "ASSET_IMPAIRMENT_INCOME"),
+    "credit_impairment_loss": ("CREDIT_IMPAIRMENT_LOSS", "CREDIT_IMPAIRMENT_INCOME"),
 }
 
 # ---------------------------------------------------------------------------

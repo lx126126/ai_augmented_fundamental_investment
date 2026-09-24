@@ -82,8 +82,10 @@ def test_full_build_regenerates_on_old_schema(cache_dir, monkeypatch):
 
     monkeypatch.setattr(qr, "fetch_latest_report",
                         lambda code: {"meta": {"title": "x"}, "text": "", "error": None})
+    # 桩函数必须跟上 `generate` 的签名：多了一个「变动原因说明」入参
+    # （从 `_build_prompt` 起新增，见 `_SCHEMA = 3` 的说明）
     monkeypatch.setattr(qr, "generate",
-                        lambda facts, mdd, meta: {"swing": "新结构生成的解读"})
+                        lambda facts, mdd, meta, reasons="": {"swing": "新结构生成的解读"})
 
     out = qr.get_or_generate("600519", FACTS)
     assert out["swing"] == "新结构生成的解读"

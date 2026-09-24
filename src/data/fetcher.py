@@ -63,6 +63,7 @@ import pandas as pd
 from .fields import (
     FINANCIAL_INDICATOR_MAP,
     PROFIT_SHEET_MAP,
+    IMPAIRMENT_FIELDS,
     BALANCE_SHEET_MAP,
     CASH_FLOW_MAP,
     DIVIDEND_MAP,
@@ -99,6 +100,25 @@ def _remap(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
     return df[list(cols.keys())].rename(columns=cols)
 
 
+def _merge_impairment(df: pd.DataFrame, raw: pd.DataFrame) -> pd.DataFrame:
+    """把新准则减值字段（`*_INCOME`）并入标准列，符号统一为「**正数 = 损失**」。
+
+    背景与实测区间见 `fields.IMPAIRMENT_FIELDS`。三条约束：
+
+    - **只回填标准列为空的期**：新旧字段时间区间互补（实测断点 2018Q1/Q2），
+      已由旧字段填上的期不动，避免用两个来源互相覆盖；
+    - **必须取负**：新准则报表「损失以"-"号填列」（伊利 2026H1 资产减值
+      −2,455,875,173.02），而标准列的约定是正数 = 损失（旧准则口径）；
+    - **不做符号猜测**：缺列就跳过，绝不用「本期 - 上期」之类反推一个数出来。
+    """
+    for std, (_old_col, new_col) in IMPAIRMENT_FIELDS.items():
+        if std not in df.columns or new_col not in raw.columns:
+            continue
+        new_v = pd.to_numeric(raw[new_col], errors="coerce")
+        df[std] = df[std].where(df[std].notna(), -new_v)
+    return df
+
+
 def _bare_code(code: str) -> str:
     """剥市场后缀 → 纯数字代码（A 股 6 位，港股 5 位）。
 
@@ -127,9 +147,14 @@ def fetch_financial_indicator(code: str, start_year: str = "2005") -> pd.DataFra
 
 @retry()
 def fetch_profit_sheet(code: str) -> pd.DataFrame:
-    """利润表（绝对额）：营业收入/净利润等。"""
+    """利润表（绝对额）：营业收入/净利润等。
+
+    ⚠️ 减值两列走 `_merge_impairment` 合并新旧准则字段 —— 只映射 `*_LOSS` 的话
+    2018Q2 起整列为空（见 `fields.IMPAIRMENT_FIELDS`）。
+    """
     raw = ak.stock_profit_sheet_by_report_em(symbol=_em_symbol(code))
     df = _remap(raw, PROFIT_SHEET_MAP).copy()
+    df = _merge_impairment(df, raw)
     df["report_date"] = pd.to_datetime(df["report_date"]).astype("datetime64[us]")
     df["symbol"] = code.zfill(6)
     return df

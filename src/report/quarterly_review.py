@@ -11,12 +11,18 @@
    原先那一段固定讲现金流，而现金流科目级明细能不能抽到完全取决于该标的 PDF 的版式 ——
    实测跟踪池 11 只里只有 2 只抽到，其余只能写「本期现金流归因数据未取到」。
    每个标的的变化点本来就不一样，让榜单决定讲什么，而不是让模板决定。
+3. **归因的成因必须来自报告原文的「变动原因说明」**（`extract_swing_reasons_text`）。
+   候选榜只告诉你「哪个科目动了」，不含「为什么动」—— 让模型自己从数字推成因，
+   它会稳定地写「只能从数据侧观察，无法判断成因」，或者更糟：编一个听起来合理的原因。
+   报告原文里那张法定表格已经逐科目写明了原因，取到就该用，取不到就该明说没取到。
+   ⚠️ 这张表**在 MDD 章节之内但在字数上限之外**，必须单独抽，不能指望 MDD 摘录顺带覆盖。
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 _CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "cache" / "quarterly_review"
@@ -27,13 +33,121 @@ _DISCLOSURE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "cach
 # 缓存会被原样返回，而渲染端按新键取值 —— 结果是段落**静默消失**，不报错、日志也正常。
 # v1：data_read / structure / cashflow / management / watch
 # v2：cashflow → swing（「现金流异动归因」改成「主要变动指标归因」）
-_SCHEMA = 2
+# v3：swing 段的输入新增「各科目变动原因说明」原文（`_SWING_*` 那一段）——
+#     prompt 语义变了：成因从「模型从数据侧推」改成「优先引用报告原文」，
+#     同一份 facts 在新旧 prompt 下会产出不同的话术，必须让完整构建重新生成。
+_SCHEMA = 3
 
 # 管理层讨论与分析的起始 / 结束关键词。半年报与年报用「管理层讨论与分析」，
 # 部分公司用「经营情况讨论与分析」；结束标志统一取「重要事项」（半年报/年报都有）。
 _MDD_START_KW = ("管理层讨论与分析", "经营情况讨论与分析")
 _MDD_END_KW = "重要事项"
 _MDD_MAX_CHARS = 9000
+
+# --------------------------------------------------------------------------- #
+# 各科目「变动原因说明」——异动归因的**原始依据**
+# --------------------------------------------------------------------------- #
+# 🔴 为什么必须单独抽一段，而不是指望 `_MDD_MAX_CHARS` 里的 MDD 摘录顺带覆盖：
+# 这张表**在 MDD 章节之内，但远在字数上限之外**。实测 600887 2026 半年报：
+# MDD 是第 3–34 页（≈3 万字），而「财务报表相关科目变动分析表」在第 **17** 页 ——
+# 9000 字符只读到第 7–8 页，于是「变动原因说明」**永远进不了 prompt**。
+# 现象不是报错，而是 LLM 稳定地写出「报告原文未给出具体归因，只能从数据侧观察，
+# 无法判断成因」—— 看起来像模型能力问题，实际是输入根本没给。
+#
+# 这一段的价值密度也远高于 MDD 前段（那里是「核心竞争力」「行业情况」的模板化文字）：
+# 它是**逐科目的原因说明**，直接对应 `swing` 候选榜里的科目名。
+_SWING_START_KW = "财务报表相关科目变动分析表"
+# 该小节的结束标志：下一个 (四) 小节标题，或下一大节（个别标的省略前者）
+_SWING_END_KW = ("投资状况分析", "投资情况分析", "五、")
+_SWING_MAX_CHARS = 5000
+# 纯数字/百分数行（PDF 抽出来的表格单元格）。留在 prompt 里只是烧 token ——
+# 这些金额在 `主要变动指标` 的 facts 里已经有了，且带着更严格的口径标注。
+_NUM_LINE_RE = re.compile(r"^[\d,\.\-%()（）\s]+$")
+# 裸小节号（如单独一行的「(四)」）：切到下一小节时切点后面的编号一定会剩下来
+_BARE_SECTION_RE = re.compile(r"^[（(][一二三四五六七八九十]+[)）]\s*$")
+# PDF 分页插进表格中间的页眉页脚
+_SWING_ARTIFACT_RE = re.compile(
+    r"(有限公司|股份公司|股份有限公司)\s*\d{0,4}\s*年?\s*(半年度|年度|第?[一二三四]季度)报告")
+_SWING_PAGENO_RE = re.compile(r"^\s*\d+\s*/\s*\d+\s*$", re.M)
+# 页眉里公司名那一行**不会被上面的规则吃掉**：PDF 文本层把它单独成行
+# （「内蒙古伊利实业集团」+「股份有限公司2026 年半年度报告」分两行），
+# 正则只能删掉后一行。判据改用「在同一段里重复出现」：
+# 页眉页脚每页都印、必然重复，而真正的原因说明句只出现一次且一定带句读。
+_SWING_PUNCT_RE = re.compile(r"[：。，、；]")
+_DUP_MAX_LEN = 24
+
+
+def extract_swing_reasons_text(pdf_path: Path,
+                               max_chars: int = _SWING_MAX_CHARS) -> str:
+    """抽「报告期内主要经营情况」小节原文 —— 逐科目的「变动原因说明」。
+
+    覆盖（按定期报告法定模板，半年报/年报都有）：
+    - 「财务报表相关科目变动分析表」+ 其下三条现金流量净额变动原因说明；
+    - 「资产、负债情况分析」的科目变动表 + 「其他说明」逐条原因
+      （含商誉减值这类只在权益侧看得到的科目）。
+
+    取不到返回空串 —— 调用方据此在 prompt 里标注「未取到」，
+    由模型明说「无法判断成因」，**绝不允许它推测**（见本模块头部第 1 条铁律）。
+    """
+    try:
+        import pymupdf as fitz  # 新包名（旧名 fitz 会打 deprecation warning）
+    except Exception:
+        try:
+            import fitz
+        except Exception:
+            return ""
+    try:
+        doc = fitz.open(str(pdf_path))
+    except Exception:
+        return ""
+    try:
+        pages = [p.get_text() for p in doc]
+        if not pages:
+            return ""
+        # 同样跳过封面/目录页：目录里有章节名，从那儿起步会抽到一串省略号点
+        start = None
+        for i, t in enumerate(pages):
+            if i >= 3 and _SWING_START_KW in t:
+                start = i
+                break
+        if start is None:
+            return ""
+        end = None
+        for j in range(start + 1, len(pages)):
+            if any(kw in pages[j] for kw in _SWING_END_KW):
+                end = j
+                break
+        # 结束标志没找到（版式不认识）时只多取 2 页，而不是抽到文末
+        end = end if end is not None else min(start + 2, len(pages) - 1)
+
+        text = "\n".join(pages[start:end + 1])
+        text = re.sub(r"[ \t\u3000]+", " ", text)
+        text = _SWING_ARTIFACT_RE.sub("", text)
+        text = _SWING_PAGENO_RE.sub("", text)
+        # 起始页前面还带着上一节（「核心竞争力」等）的尾巴 → 从表名处切一刀
+        k = text.find(_SWING_START_KW)
+        if k > 0:
+            text = text[k:]
+        # 结束页同理：切在下一小节标题之前。取**最早**出现的那个关键词，
+        # 不能按 tuple 顺序 find —— 否则「五、」会盖住更靠前的「投资状况分析」，
+        # 把后面几页无关小节整段喂进去。
+        cut = min((text.find(kw, 200) for kw in _SWING_END_KW
+                   if text.find(kw, 200) != -1), default=-1)
+        if cut != -1:
+            text = text[:cut]
+
+        kept = [ln.strip() for ln in text.split("\n") if ln.strip()]
+        dup = {ln for ln, c in Counter(kept).items()
+               if c >= 2 and len(ln) <= _DUP_MAX_LEN
+               and not _SWING_PUNCT_RE.search(ln)}
+        kept = [ln for ln in kept
+                if ln not in dup
+                and not _NUM_LINE_RE.match(ln)
+                and not _BARE_SECTION_RE.match(ln)]
+        text = re.sub(r"\n{2,}", "\n", "\n".join(kept))
+        return text.strip()[:max_chars]
+    finally:
+        doc.close()
 
 
 def _hash(obj) -> str:
@@ -98,14 +212,15 @@ def extract_mdd_text(pdf_path: Path, max_chars: int = _MDD_MAX_CHARS) -> str:
 
 
 def fetch_latest_report(code: str) -> dict:
-    """抓最新一期定期报告 PDF，返回 {meta, text}；任一步失败都优雅降级。
+    """抓最新一期定期报告 PDF，返回 {meta, text, reasons}；任一步失败都优雅降级。
 
     返回 text 为空串表示「没拿到原文」，调用方据此让 LLM 明确写出「未获取到管理层表述」，
-    而不是让模型自由发挥。
+    而不是让模型自由发挥。`reasons` 是逐科目「变动原因说明」（见 `extract_swing_reasons_text`），
+    为空串时同样要在 prompt 里标注「未取到」，不得让模型推测成因。
     """
     from src.validation.cninfo import download_report_pdf, query_periodic_reports
 
-    out = {"meta": None, "text": "", "error": None}
+    out = {"meta": None, "text": "", "reasons": "", "error": None}
     try:
         reports = query_periodic_reports(code)
     except Exception as e:
@@ -127,17 +242,21 @@ def fetch_latest_report(code: str) -> dict:
         out["error"] = f"下载定期报告 PDF 失败：{e}"
         return out
     out["text"] = extract_mdd_text(pdf)
+    # 逐科目变动原因：与 MDD 摘录同源同一份 PDF，但**必须单独抽**（见 `_SWING_START_KW`）
+    out["reasons"] = extract_swing_reasons_text(pdf)
     if not out["text"]:
         out["error"] = f"{meta.get('kind', '定期报告')}未包含可抽取的「管理层讨论与分析」章节"
     return out
 
 
-def _build_prompt(facts: dict, mdd_text: str, report_meta: dict | None) -> str:
+def _build_prompt(facts: dict, mdd_text: str, report_meta: dict | None,
+                  reasons_text: str = "") -> str:
     meta_txt = ""
     if report_meta:
         meta_txt = f"{report_meta.get('title') or ''}"
     body = json.dumps(facts, ensure_ascii=False, indent=1)
     src = mdd_text.strip() if mdd_text.strip() else "（未获取到报告原文）"
+    reasons = reasons_text.strip() if reasons_text.strip() else "（未取到「变动原因说明」）"
     return f"""下面是某 A 股上市公司的最新季度财务事实，以及其定期报告原文摘录。
 
 === 季度财务事实（JSON）===
@@ -146,12 +265,15 @@ def _build_prompt(facts: dict, mdd_text: str, report_meta: dict | None) -> str:
 === 定期报告原文摘录：{meta_txt or "（无）"} ===
 {src}
 
+=== 报告原文·各科目变动原因说明（节选自「报告期内主要经营情况」）===
+{reasons}
+
 请输出以下 JSON（不要输出 JSON 之外的任何内容，全部用中文）：
 
 {{
   "data_read": "季度数据表现（110-170字）：说清单季与年初至今累计的收入/利润/毛利率/现金流同比环比、与「单季走势序列」的关系、最关键的一个变化",
   "structure": "经营结构解读（110-170字）：用「经营结构」里的产品/渠道/地区收入占比与同比，说清增长（或下滑）由哪个切面驱动、结构怎么变了；有毛利率的切面要点出高低差对整体利润率的方向；没有就只讲结构不讲毛利率",
-  "swing": "主要变动指标归因（140-200字）：「主要变动指标.候选」是当期变动最大的科目榜单，不同标的的榜单完全不同。你先判断哪两三个科目最值得解释（判断标准是「解释它，读者才看得懂这家公司这个季度发生了什么」，不是谁的变动金额最大），然后逐个给出变动金额与方向并说明成因。成因必须落在证据上：优先用报告原文的经营表述，其次用同一份事实里其它指标的相互印证（例：合同负债下降 + 销售费用上升 → 渠道投入前置、回款节奏变化），两者都没有就明说「只能从数据侧观察，无法判断成因」。经营现金流若在候选里、且「现金流归因」的总额口径与剔除财务公司口径差异悬殊，必须点出财务公司的搬动因素；若「主要变动指标.候选」为空，写「本期未取到可比的主要变动指标」，不得推测",
+  "swing": "主要变动指标归因（140-200字）：「主要变动指标.候选」是当期变动最大的科目榜单，不同标的的榜单完全不同。你先判断哪两三个科目最值得解释（判断标准是「解释它，读者才看得懂这家公司这个季度发生了什么」，不是谁的变动金额最大），然后逐个给出变动金额与方向并说明成因。成因必须落在证据上：**第一优先是上面「各科目变动原因说明」里该科目的原话**（那是报告原文，直接采用），其次用同一份事实里其它指标的相互印证（例：合同负债下降 + 销售费用上升 → 渠道投入前置、回款节奏变化），两者都没有就明说「只能从数据侧观察，无法判断成因」。经营现金流若在候选里、且「现金流归因」的总额口径与剔除财务公司口径差异悬殊，必须点出财务公司的搬动因素；若「主要变动指标.候选」为空，写「本期未取到可比的主要变动指标」，不得推测",
   "management": "管理层观点与战略（90-150字）：优先用「经营计划」的主题与要点，其次用原文中的管理层表述（对经营环境的判断、产能/渠道/价格/费用等口径）。原文与经营计划都为空时写「本期披露未包含管理层讨论章节，仅能从财务数据侧面观察」，不得推测管理层想法",
   "watch": ["投资者需要关注的点 1（25-45字，具体且可验证）", "关注点 2", "关注点 3"]
 }}
@@ -174,17 +296,26 @@ def _build_prompt(facts: dict, mdd_text: str, report_meta: dict | None) -> str:
    异动来源，不要在这里重复；
 6. 不要写「综上所述」「根据数据」「值得关注」这类套话，直接给结论；
 7. 不给投资建议、目标价、买卖点（本报告遵循完全去操作原则）；
-8. watch 给 3 条，聚焦「后续可用什么数据验证或证伪」。
+8. watch 给 3 条，聚焦「后续可用什么数据验证或证伪」；
+9. 「各科目变动原因说明」是报告原文的**逐科目**原因（现金流量三条 + 资产、负债科目的逐条
+   说明）。写 swing 段时先在这里找同名或近名的科目：
+   - 找到 → 直接采用它的原因。可压缩、可改写句式，但**不得改变事实，不得补进原文没有的
+     科目、金额或因果**；
+   - 没找到 → 才退回「用同一份事实里其它指标互相印证」，两者都没有再明说「无法判断成因」；
+   - **不得把 A 科目的原因安到 B 科目头上**（例：把「购买大额存单导致投资现金流净流出增加」
+     说成「应收款增加」）。原文说明与候选科目对不上时，宁可只讲金额与方向。
+   若该段显示「（未取到「变动原因说明」）」，说明本期原文没抽到，一律不得编造成因。
 """
 
 
-def generate(facts: dict, mdd_text: str, report_meta: dict | None) -> dict | None:
+def generate(facts: dict, mdd_text: str, report_meta: dict | None,
+             reasons_text: str = "") -> dict | None:
     """调用 DeepSeek 生成季度财报解读。失败返回 None。"""
     from src.report.llm import chat_json
 
     return chat_json(
         system="你是资深 A 股基本面分析师，只输出 JSON，不输出任何其他内容。",
-        prompt=_build_prompt(facts, mdd_text, report_meta),
+        prompt=_build_prompt(facts, mdd_text, report_meta, reasons_text),
         # 1900 而不是原来的 1600：swing 段现在要解释 2-3 个科目而不是 1 条现金流，
         # 段长上限也抬到 200 字。token 给不够时输出被截断 → JSON 解析失败 →
         # 整段解读返回 None，报告退回占位符（且日志只显示「跳过」）。
@@ -197,8 +328,10 @@ def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
                     stale_days: float = 3.0, cache_only: bool = False) -> dict | None:
     """带缓存的入口：财务事实或报告原文一变，缓存自动失效。
 
-    缓存键同时包含「财务事实哈希」与「原文哈希」——只哈希财务事实的话，
-    中报原文更新了（如更正公告）但财务数据没动时，解读会一直沿用旧原文的结论。
+    缓存键同时包含「财务事实哈希」「MDD 原文哈希」「变动原因说明哈希」——只哈希财务事实
+    的话，中报原文更新了（如更正公告）但财务数据没动时，解读会一直沿用旧原文的结论；
+    而只哈希 MDD 的话，「变动原因说明」抽取器升级后（原文拿到了）MDD 没变，
+    解读会一直沿用那句「报告原文未给出具体归因」。
 
     另外设了 stale_days：命中缓存时不再重抓巨潮（否则每次重建报告都要多打两三个
     网络请求），超过该天数才重新拉一次公告，避免新报告披露后长期不更新。
@@ -255,17 +388,27 @@ def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
 
     fetched = fetch_latest_report(code)
     mdd_text = fetched.get("text") or ""
-    payload = {"schema": _SCHEMA, "facts_hash": facts_hash, "mdd_hash": _hash(mdd_text)}
+    reasons_text = fetched.get("reasons") or ""
+    payload = {
+        "schema": _SCHEMA,
+        "facts_hash": facts_hash,
+        "mdd_hash": _hash(mdd_text),
+        # 「变动原因说明」也要进缓存键：它决定 swing 段讲的是原文还是「无法判断成因」，
+        # 只哈希 MDD 的话，抽取器升级（拿到原因了）但 MDD 没变时，解读会一直沿用
+        # 那句「报告原文未给出具体归因」。旧缓存没有这个键 → 自动失效重建，与 _SCHEMA 抬版同向。
+        "reasons_hash": _hash(reasons_text),
+    }
 
     if cached_obj and not refresh:
         if cached_obj.get("facts_hash") == payload["facts_hash"] and \
-                cached_obj.get("mdd_hash") == payload["mdd_hash"]:
+                cached_obj.get("mdd_hash") == payload["mdd_hash"] and \
+                cached_obj.get("reasons_hash") == payload["reasons_hash"]:
             review = dict(cached_obj.get("review") or {})
             review["_meta"] = cached_obj.get("meta") or {}
             review["_cached"] = True
             return review or None
 
-    review = generate(facts, mdd_text, fetched.get("meta"))
+    review = generate(facts, mdd_text, fetched.get("meta"), reasons_text)
     if not review:
         return None
 
@@ -273,6 +416,8 @@ def get_or_generate(code: str, facts: dict | None, refresh: bool = False,
     meta.update({
         "has_mdd": bool(mdd_text.strip()),
         "mdd_chars": len(mdd_text),
+        "has_reasons": bool(reasons_text.strip()),
+        "reasons_chars": len(reasons_text),
         "note": fetched.get("error"),
     })
     stored = {k: v for k, v in review.items() if not k.startswith("_")}
