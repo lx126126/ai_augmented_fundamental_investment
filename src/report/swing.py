@@ -127,8 +127,35 @@ def _yi(v) -> float | None:
     return round(f / 1e8, 2)
 
 
+def _yoy_pct(cur: float, prev: float, cur_raw=None, prev_raw=None) -> float:
+    """同比 = 变动额 ÷ |上期| → 百分比（保留 1 位小数）。
+
+    🔴 优先用**原始元值**（`cur_raw` / `prev_raw`）算，`cur` / `prev` 只作兜底。
+    原因是这两个入参来自 `_yi()`，已经 `round(_, 2)` 过（单位亿元）—— 拿舍入值
+    算比例会带进舍入误差。实测 600887 2026H1 经营活动现金流：
+
+        元值直算   9,759,147,483.18 / 2,964,215,363.27 = +229.23%  → 229.2
+        舍入后算   97.59 / 29.64                        = +229.25%  → **229.3**
+
+    0.1pct 本身是噪声，但同一份报告里另一条路径（`quarter_review_facts`
+    的「年初至今累计」）用元值算，于是**同一个指标在同一张图上并排出现
+    229.2% 与 229.3% 两个数**（图 8 的头部与变动项表就是这么撞上的）。
+    分母取 |上期| 的口径不变（见 `_judge` 的说明）。
+    """
+    c, p = cur, prev
+    if cur_raw is not None and prev_raw is not None:
+        try:
+            fc, fp = float(cur_raw), float(prev_raw)
+            if not (pd.isna(fc) or pd.isna(fp)):
+                c, p = fc, fp
+        except (TypeError, ValueError):
+            pass
+    return round((c - p) / abs(p) * 100, 1)
+
+
 def _judge(cur: float | None, prev: float | None,
-           floor: float, material: float) -> tuple[float | None, bool]:
+           floor: float, material: float,
+           cur_raw=None, prev_raw=None) -> tuple[float | None, bool]:
     """→（同比 pct 或 None，是否够格入榜）。判据见文件顶部 `_FLOOR_RATIO` 那段。
 
     🔴 分母一律取 **|上期|**，「同比」= 变动额 ÷ 上期规模：
@@ -151,7 +178,9 @@ def _judge(cur: float | None, prev: float | None,
     delta = cur - prev
     if abs(prev) <= floor:
         return None, True
-    yoy = round(delta / abs(prev) * 100, 1)
+    # ⚠️ 入榜判定的 `delta` / `floor` / `material` 一律保持**亿元**口径不动 ——
+    #    换单位会改变谁能入榜（等于悄悄换掉报告内容）。这里只提升同比的算数精度。
+    yoy = _yoy_pct(cur, prev, cur_raw, prev_raw)
     return yoy, (abs(yoy) >= _YOY_MIN_PCT or abs(delta) >= material)
 
 
@@ -216,15 +245,18 @@ def build(raw: dict) -> dict | None:
         df = tables.get(table)
         if df is None or col not in df.columns:
             continue   # 该标的没有这一列（银行无销售费用、港股现金流表只有四行）→ 静默跳过
-        cur = _yi(_pick(latest_rows.get(table), col))
-        prev = _yi(_pick(prior_rows.get(table), col))
+        cur_raw = _pick(latest_rows.get(table), col)
+        prev_raw = _pick(prior_rows.get(table), col)
+        cur = _yi(cur_raw)
+        prev = _yi(prev_raw)
         if cur is None or prev is None:
             continue   # 缺去年同期的科目一律不进榜：没有对照就没有「异动」可言
         floor = max(_FLOOR_ABS_YI, _FLOOR_RATIO * _scale(group))
         material = _MATERIAL_RATIO * _scale(group)
         if abs(cur - prev) < floor:
             continue
-        yoy, ok = _judge(cur, prev, floor, material)
+        # 元值一并传下去，只用于把同比算准（见 `_yoy_pct`）
+        yoy, ok = _judge(cur, prev, floor, material, cur_raw, prev_raw)
         if not ok:
             continue
         e = {
