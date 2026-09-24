@@ -380,6 +380,7 @@ def build_html(rows: list[dict], all_codes: list[str]) -> str:
       <span class="cap">股价日期 {newest}</span>
       <span class="cap">页面生成 {built}</span>
       <a class="back" href="index.html">← 返回跟踪池首页</a>
+      <a class="back" href="macro.html">宏观周期看板 ›</a>
     </div>
   </div>
   {legend}

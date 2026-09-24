@@ -118,6 +118,21 @@ body {
 .stock-card .stamp { font-size: 10px; color: var(--faint); margin-top: 4px; padding-right: 92px; }
 .stock-list .empty { text-align: center; color: var(--faint); padding: 40px 8px; font-size: 13px; }
 
+/* ---------- ② 宏观周期看板入口：搜索框下方 ---------- */
+/* 宏观是全局视角、不依赖个股搜索，所以放在报告列表**之前** ——
+   它回答的是「现在整个市场处在什么位置」，与「查某家公司」是两条并行的入口。
+   样式有意比下面的「横向对比」轻（浅色而非渐变），避免两个重卡片抢视觉焦点。 */
+.macro-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-top: 14px; padding: 14px 18px; text-decoration: none; color: var(--accent);
+  background: #fff; border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(15,61,110,0.07);
+}
+.macro-entry:active { transform: scale(0.99); }
+.macro-entry .m-title { font-size: 15px; font-weight: 700; letter-spacing: .3px; }
+.macro-entry .m-sub { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+.macro-entry .m-arrow { font-size: 22px; color: var(--faint); line-height: 1; }
+
 /* ---------- ③ 横向对比：报告列表最下面 ---------- */
 .compare {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -149,9 +164,18 @@ body {
     <div class="bar"><i id="barfill"></i></div>
     <div id="steptext" class="step">准备中…</div>
   </div>
-  <div class="facts"><span class="pill">数据更新于 2026-09-22 （09-23 09:27 写入）</span><span class="pill">已生成 12 份报告</span></div>
+  <div class="facts"><span class="pill">数据更新于 2026-09-23 （09-24 09:34 写入）</span><span class="pill">已生成 12 份报告</span></div>
 
-  <!-- ② 已生成的报告（点击 → 该标的一页报告） -->
+  <!-- ② 宏观周期看板：全局视角，与「查个股」并行 -->
+  <a class="macro-entry" href="macro.html">
+    <div>
+      <div class="m-title">宏观周期看板</div>
+      <div class="m-sub">利率 · 估值分位 · 流动性 · 周期定位 —— 看整个市场处在什么位置</div>
+    </div>
+    <span class="m-arrow">›</span>
+  </a>
+
+  <!-- ③ 已生成的报告（点击 → 该标的一页报告） -->
   <div class="section">
     <div class="section-title">
       <span>已生成的报告 <b>12</b> 只</span>
@@ -162,8 +186,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/601088.html">
           <div class="row1"><span class="name">中国神华</span><span class="code">601088</span></div>
           <div class="row2"><span class="dot" style="background:#378ADD"></span><span class="ind">煤炭开采 · 周期型</span></div>
-          <div class="px"><span class="p">47.51</span><span class="chg" style="color:#c92a2a">+1.52%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 6 个交易日</div>
+          <div class="px"><span class="p">47.21</span><span class="chg" style="color:#2f9e44">-0.63%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 7 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="601088"></button>
       </div>
@@ -171,8 +195,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/600519.html">
           <div class="row1"><span class="name">贵州茅台</span><span class="code">600519</span></div>
           <div class="row2"><span class="dot" style="background:#E24B4A"></span><span class="ind">白酒Ⅱ · 稳健成长</span></div>
-          <div class="px"><span class="p">1253.80</span><span class="chg" style="color:#c92a2a">+0.10%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 6 个交易日</div>
+          <div class="px"><span class="p">1251.24</span><span class="chg" style="color:#2f9e44">-0.20%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 7 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="600519"></button>
       </div>
@@ -180,8 +204,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/000651.html">
           <div class="row1"><span class="name">格力电器</span><span class="code">000651</span></div>
           <div class="row2"><span class="dot" style="background:#BA7517"></span><span class="ind">白色家电 · 缓慢增长</span></div>
-          <div class="px"><span class="p">38.18</span><span class="chg" style="color:#c92a2a">+0.47%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 5 个交易日</div>
+          <div class="px"><span class="p">38.36</span><span class="chg" style="color:#c92a2a">+0.47%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 6 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="000651"></button>
       </div>
@@ -189,8 +213,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/601328.html">
           <div class="row1"><span class="name">交通银行</span><span class="code">601328</span></div>
           <div class="row2"><span class="dot" style="background:#888780"></span><span class="ind">银行Ⅱ · 缓慢增长</span></div>
-          <div class="px"><span class="p">7.55</span><span class="chg" style="color:#5c6b7a">0.00%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 5 个交易日</div>
+          <div class="px"><span class="p">7.52</span><span class="chg" style="color:#2f9e44">-0.40%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 6 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="601328"></button>
       </div>
@@ -198,8 +222,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/00700.html">
           <div class="row1"><span class="name">腾讯控股</span><span class="code">00700</span></div>
           <div class="row2"><span class="dot" style="background:#00A4FF"></span><span class="ind">软件服务 · 稳健成长</span></div>
-          <div class="px"><span class="p">451.60</span><span class="chg" style="color:#c92a2a">+5.02%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 5 个交易日</div>
+          <div class="px"><span class="p">441.00</span><span class="chg" style="color:#2f9e44">-2.35%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 6 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="00700"></button>
       </div>
@@ -207,8 +231,8 @@ body {
         <a class="card-main" href="../reports/2025Q4/09992.html">
           <div class="row1"><span class="name">泡泡玛特</span><span class="code">09992</span></div>
           <div class="row2"><span class="dot" style="background:#F08BB0"></span><span class="ind">家庭电器及用品 · 快速成长</span></div>
-          <div class="px"><span class="p">154.20</span><span class="chg" style="color:#2f9e44">-0.58%</span></div>
-          <div class="stamp">2025Q4 · 2026-09-22 收盘 · 已归档 6 个交易日</div>
+          <div class="px"><span class="p">153.50</span><span class="chg" style="color:#2f9e44">-0.45%</span></div>
+          <div class="stamp">2025Q4 · 2026-09-23 收盘 · 已归档 7 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="09992"></button>
       </div>
@@ -216,8 +240,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/00883.html">
           <div class="row1"><span class="name">中国海洋石油</span><span class="code">00883</span></div>
           <div class="row2"><span class="dot" style="background:#5B8FF9"></span><span class="ind">石油及天然气 · 周期型</span></div>
-          <div class="px"><span class="p">23.68</span><span class="chg" style="color:#2f9e44">-1.09%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 4 个交易日</div>
+          <div class="px"><span class="p">23.34</span><span class="chg" style="color:#2f9e44">-1.44%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 5 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="00883"></button>
       </div>
@@ -225,8 +249,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/600036.html">
           <div class="row1"><span class="name">招商银行</span><span class="code">600036</span></div>
           <div class="row2"><span class="dot" style="background:#9A6BBF"></span><span class="ind">银行Ⅱ · 缓慢增长</span></div>
-          <div class="px"><span class="p">40.82</span><span class="chg" style="color:#2f9e44">-0.54%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 4 个交易日</div>
+          <div class="px"><span class="p">40.60</span><span class="chg" style="color:#2f9e44">-0.54%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 5 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="600036"></button>
       </div>
@@ -234,8 +258,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/600887.html">
           <div class="row1"><span class="name">伊利股份</span><span class="code">600887</span></div>
           <div class="row2"><span class="dot" style="background:#0F9B8E"></span><span class="ind">饮料乳品 · 稳健成长</span></div>
-          <div class="px"><span class="p">26.77</span><span class="chg" style="color:#c92a2a">+0.45%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 4 个交易日</div>
+          <div class="px"><span class="p">26.92</span><span class="chg" style="color:#c92a2a">+0.56%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 5 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="600887"></button>
       </div>
@@ -243,8 +267,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/600938.html">
           <div class="row1"><span class="name">中国海油</span><span class="code">600938</span></div>
           <div class="row2"><span class="dot" style="background:#D4763A"></span><span class="ind">油气开采Ⅱ · 周期型</span></div>
-          <div class="px"><span class="p">33.09</span><span class="chg" style="color:#2f9e44">-1.34%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 5 个交易日</div>
+          <div class="px"><span class="p">32.29</span><span class="chg" style="color:#2f9e44">-2.42%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 6 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="600938"></button>
       </div>
@@ -252,8 +276,8 @@ body {
         <a class="card-main" href="../reports/2026Q2/00300.html">
           <div class="row1"><span class="name">美的集团</span><span class="code">00300</span></div>
           <div class="row2"><span class="dot" style="background:#3D9A5B"></span><span class="ind">家庭电器及用品 · 稳健成长</span></div>
-          <div class="px"><span class="p">96.25</span><span class="chg" style="color:#c92a2a">+0.47%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 3 个交易日</div>
+          <div class="px"><span class="p">96.40</span><span class="chg" style="color:#c92a2a">+0.16%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 4 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="00300"></button>
       </div>
@@ -261,15 +285,15 @@ body {
         <a class="card-main" href="../reports/2026Q2/000333.html">
           <div class="row1"><span class="name">美的集团</span><span class="code">000333</span></div>
           <div class="row2"><span class="dot" style="background:#7A6FF0"></span><span class="ind">白色家电 · 稳健成长</span></div>
-          <div class="px"><span class="p">82.54</span><span class="chg" style="color:#c92a2a">+2.03%</span></div>
-          <div class="stamp">2026Q2 · 2026-09-22 收盘 · 已归档 2 个交易日</div>
+          <div class="px"><span class="p">82.47</span><span class="chg" style="color:#2f9e44">-0.08%</span></div>
+          <div class="stamp">2026Q2 · 2026-09-23 收盘 · 已归档 3 个交易日</div>
         </a>
         <button class="wk" type="button" data-code="000333"></button>
       </div>
     </div>
   </div>
 
-  <!-- ③ 横向对比：列表最下面 -->
+  <!-- ④ 横向对比：列表最下面 -->
   <a class="compare" href="watchlist.html">
     <div>
       <div class="c-title">横向对比</div>
