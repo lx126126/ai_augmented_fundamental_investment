@@ -170,15 +170,24 @@ _EXTRA_CSS = f"""
   .swt {{ background:{C['card']}; border:1px solid {C['line']}; border-radius:10px;
           padding:4px 12px; }}
   /* 第一列给 2fr：「投资活动产生的现金流量净额」14 字，1.5fr（约 103px）下只能
-     排 9 字/行、要折 3 行；加宽到约 124px 后 2 行放得下。 */
+     排 9 字/行、要折 3 行；加宽到约 124px 后 2 行放得下。
+     行距 8px → 7px：图 8 加上「同比口径注」后长宽比到了 2.86（全图上限 2.82），
+     收 5 行 × 2px = 10px CSS 把它压回去 —— 比再删一条信息划算。 */
   .swt-r {{ display:grid; grid-template-columns:2fr 1fr 1fr 0.8fr; gap:6px;
-            align-items:baseline; padding:8px 0; font-size:11px; }}
+            align-items:baseline; padding:7px 0; font-size:11px; }}
   .swt-r + .swt-r {{ border-top:1px dashed {C['line']}; }}
   .swt-h {{ padding:8px 0 5px; }}
   .swt-h .swt-k, .swt-h .swt-v {{ font-size:9.5px; font-weight:600; color:{C['faint']}; }}
   .swt-k {{ color:{C['ink']}; line-height:1.35; }}
   .swt-v {{ text-align:right; white-space:nowrap; font-weight:700; color:{C['ink']}; }}
   .swt-g {{ font-size:9px; color:{C['faint']}; display:block; font-weight:400; }}
+  /* 「同比」的口径注。只在榜上真的有「上期为负」的行时才出现（见 _swing_table）——
+     投资活动现金流今年 -27.5 亿、去年 -342.7 亿，同比 +92.0% 说的是**流出收窄 92%**，
+     不点明会被读成「投资现金流同比大增 92%」。星标与被注行在同一行内对应，
+     比在脚注里写科目名省一行 —— 14 字的科目名会把脚注挤成两行、长宽比超上限。 */
+  .swt-star {{ font-size:8px; font-weight:800; color:{C['accent']}; }}
+  .swt-n {{ font-size:9px; color:{C['faint']}; line-height:1.45; padding:5px 0 1px;
+            border-top:1px dashed {C['line']}; }}
 
   /* 现金流：**双序列分组柱**（经营现金流净额 vs 归母净利润）+ 年份下方标现金含量。
      🔴 为什么要两根柱：原先只画经营现金流净额，而图下的解读句讲的是
@@ -607,13 +616,27 @@ def _swing_table(qr: dict, per_group: dict | None = None) -> str:
     for it in picked:
         delta = _f(it.get("变动_亿元"))
         yoy = _f(it.get("同比_pct"))
+        tag = it.get("同比口径")
+        # 星标只给「上期为负」的行：那行的 `+92.0%` 需要脚注才能读对（正号是流出收窄、
+        # 不是增长）。而「由负转正 / 由正转负」四个字本身自解释，不必再挂脚注 ——
+        # 少一句就少一行，图 8 的长宽比才压得住（见 _swing_table 末尾的口径注）。
+        # 用星标而不是「在脚注里写科目名」：科目最长 14 字（投资活动产生的现金流量净额），
+        # 写进脚注会把 9px 那行挤成两行、长宽比从 2.79 涨到 2.86，超过全图上限。
+        star = '<sup class="swt-star">*</sup>' if tag == "上期为负" else ""
+        # 跨越零点时不给百分比：分母过小会算出 +8265.9% 这种失真比值。
+        # 写「由负转正」而不写「转正」—— 后者对财务费用这类科目听起来像好事，
+        # 而这张表不做利好利空判断。
+        if tag in ("由负转正", "由正转负"):
+            yoy_html = f'<span class="flat">{tag}</span>'
+        else:
+            yoy_html = bx._yoy(yoy, na="—")
         rows += (
             '<div class="swt-r">'
             f'<span class="swt-k">{bx._esc(it.get("名称"))}'
             f'<span class="swt-g">{bx._esc(it.get("分组") or "")}</span></span>'
             f'<span class="swt-v">{bx._n(it.get("本期_亿元"), 1)}</span>'
             f'<span class="swt-v">{_amt(delta)}</span>'
-            f'<span class="swt-v">{bx._yoy(yoy, na="—")}</span>'
+            f'<span class="swt-v">{yoy_html}{star}</span>'
             "</div>"
         )
     head = (
@@ -624,10 +647,18 @@ def _swing_table(qr: dict, per_group: dict | None = None) -> str:
         '<span class="swt-v">同比</span>'
         "</div>"
     )
+    # 星标脚注：只在榜上真有「上期为负」的行时才加。那种行印的是 `+92.0%`，说的是
+    # **流出收窄 92%**、不是「同比增长 92%」—— 不点明就是这一行的含义整个反掉。
+    # 「由负转正 / 由正转负」不挂脚注（四个字自解释），这也是脚注能保持一行的原因。
+    has_neg = any(it.get("同比口径") == "上期为负" for it in picked)
+    note = (
+        '<div class="swt-n">* 上期净流出：同比 = 变动额 ÷ |上期|，正号 = 流出收窄</div>'
+        if has_neg else ""
+    )
     return (
         f'<div class="sec-t">本季主要变动项 <span class="sec-s">'
         f'{bx._esc(sw.get("报告期") or "")} vs {bx._esc(sw.get("上期") or "")} · 亿元</span></div>'
-        f'<div class="swt">{head}{rows}</div>'
+        f'<div class="swt">{head}{rows}{note}</div>'
     )
 
 

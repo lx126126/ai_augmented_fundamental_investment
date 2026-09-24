@@ -138,12 +138,96 @@ def test_small_yoy_is_excluded():
     assert "管理费用" not in _names(out)
 
 
-def test_negative_prior_keeps_amount_drops_pct():
-    """上期 ≤ 0（财务费用常是净收益）时同比无经济含义 → 置空，但金额变动仍要入榜。"""
+def test_negative_prior_uses_abs_denominator():
+    """上期与本期**同号且都为负** → 同比的分母取 |上期|，而不是把百分比置空。
+
+    `cur / prev - 1` 在上期为负时给出的是**方向相反**的数字：格力 2026H1 投资活动
+    现金流从 -342.7 亿收窄到 -27.5 亿，该式给 **-92.0%**（读者读成「净额下降 92%」），
+    而事实是**流出收窄 92%**。改用 |上期| 后得 +92.0%，与「变动 +315.2 亿」同向。
+    """
+    out = build(_raw(cf_cur={"icf": -27.5 * YI}, cf_prev={"icf": -342.7 * YI}))
+    e = next(x for x in out["候选"] if x["名称"] == "投资活动产生的现金流量净额")
+    assert e["变动_亿元"] == 315.2
+    assert e["同比_pct"] == 92.0, "上期为负时应按 |上期| 给百分比，而不是留空"
+    assert e["同比口径"] == "上期为负"
+    assert out["特殊同比科目"] == ["投资活动产生的现金流量净额"]
+
+
+def test_positive_prior_formula_is_identical_to_old_one():
+    """上期为正时 |上期| ≡ 上期 → 新式与旧式 `cur/prev - 1` 逐字恒等。
+
+    这条是整次改动的安全边界：只有「上期为负」的科目允许变，其余必须一个数都不动。
+    """
+    for cur, prev, want in [(30.0, 10.0, 200.0), (9.0, 10.0, -10.0)]:
+        out = build(_raw(cur={"sell_expense": cur * YI},
+                         prev={"sell_expense": prev * YI}))
+        e = next(x for x in out["候选"] if x["名称"] == "销售费用")
+        assert e["同比_pct"] == want
+        assert "同比口径" not in e, "上期为正的行不该被打上特殊口径标记"
+
+
+def test_yoy_sign_always_matches_delta_sign():
+    """同号时，同比的符号必须与同一行「变动」列同向 —— 这是改动要保住的核心不变量。
+
+    旧式在上期为负时会违反它（变动 +315.2 却印出 -92.0%），那种自相矛盾的一行
+    比留空更糟：读者不知道该信哪一列。
+    ⚠️ 跨零的行不给百分比（见 `test_crossing_zero_drops_pct`），所以这里只覆盖同号。
+    """
+    cases = [(-27.5, -342.7), (-400.0, -342.7), (-100.0, -50.0), (30.0, 10.0), (9.0, 10.0)]
+    for cur, prev in cases:
+        out = build(_raw(cf_cur={"icf": cur * YI}, cf_prev={"icf": prev * YI}))
+        e = next(x for x in out["候选"] if x["名称"] == "投资活动产生的现金流量净额")
+        d = e["变动_亿元"]
+        y = e["同比_pct"]
+        assert y is not None, f"{prev} → {cur} 不该留空"
+        assert (d > 0) == (y > 0) or d == y == 0, \
+            f"变动 {d:+.2f} 与同比 {y:+.1f}% 符号相反"
+
+
+def test_crossing_zero_drops_pct():
+    """上期与本期**符号相反**（跨越零点）→ 不给百分比。
+
+    两个原因叠加：① 分母过小会让比值失真到不可读 —— 实测茅台 2026H1 投资活动
+    现金流 -3.10 亿 → +253.1 亿，Δ/|上期| = **+8265.9%**，这个数字没人会信，
+    还会连累读者怀疑整张表；② 跨零处「增长/下降」本就没有意义。
+    """
+    out = build(_raw(cf_cur={"icf": 253.1 * YI}, cf_prev={"icf": -3.1 * YI}))
+    e = next(x for x in out["候选"] if x["名称"] == "投资活动产生的现金流量净额")
+    assert e["变动_亿元"] == 256.2
+    assert e["同比_pct"] is None, "跨零不该给百分比（会算出 8265.9% 这种失真比值）"
+    assert e["同比口径"] == "由负转正"
+    assert "投资活动产生的现金流量净额" in out["特殊同比科目"]
+
+
+def test_crossing_zero_the_other_way():
+    """由正转负同理 —— 表述必须中性（「由正转负」而不是「转负」这种带好坏倾向的词）。"""
+    out = build(_raw(cf_cur={"icf": -50.0 * YI}, cf_prev={"icf": 100.0 * YI}))
+    e = next(x for x in out["候选"] if x["名称"] == "投资活动产生的现金流量净额")
+    assert e["同比_pct"] is None
+    assert e["同比口径"] == "由正转负"
+
+
+def test_finance_expense_net_income_base_crosses_zero():
+    """财务费用上期是净收益（负数）、本期转为净支出 → 跨越零点，不给百分比。"""
     out = build(_raw(cur={"finance_expense": 8 * YI}, prev={"finance_expense": -5 * YI}))
     e = next(x for x in out["候选"] if x["名称"] == "财务费用")
-    assert e["同比_pct"] is None
     assert e["变动_亿元"] == 13.0
+    assert e["同比_pct"] is None
+    assert e["同比口径"] == "由负转正"
+
+
+def test_tiny_negative_prior_base_still_drops_pct():
+    """上期规模**小于地板**时仍不给百分比（哪怕不跨零）。
+
+    否则会算出「本期 5 亿 / 上期 -0.5 亿 → +1100%」这种量级失真的数字 ——
+    与「上期 0.09 亿」那类小基数是同一个坑，只是符号不同。
+    """
+    out = build(_raw(cf_cur={"icf": -5 * YI}, cf_prev={"icf": -0.5 * YI}))
+    e = next(x for x in out["候选"] if x["名称"] == "投资活动产生的现金流量净额")
+    assert e["同比_pct"] is None
+    assert e["变动_亿元"] == -4.5
+    assert "同比口径" not in e
+    assert out["特殊同比科目"] == []
 
 
 def test_tiny_prior_base_drops_pct():
@@ -358,6 +442,63 @@ def test_render_does_not_crash_on_none_values():
     bv.OPERATING = None
     assert "主要变动指标归因" in html
     assert "None" not in html
+
+
+def _swing_facts(entry_extra: dict | None, neg_list: list[str]):
+    base = {
+        "报告期": "2026H1", "上期": "2025H1", "经营现金流是否入榜": False,
+        "候选": [{
+            "名称": "投资活动产生的现金流量净额", "分组": "现金流",
+            "口径": "年初至今累计", "本期_亿元": -27.52, "上期_亿元": -342.75,
+            "变动_亿元": 315.23, "同比_pct": 92.0, **(entry_extra or {}),
+        }],
+        "特殊同比科目": neg_list,
+        "口径说明": "口径", "门槛说明": "门槛", "未入榜说明": "说明",
+    }
+    return base
+
+
+def test_swing_block_notes_negative_base_caliber():
+    """上期为负的行必须在脚注里点明符号含义。
+
+    不点明的话，报告上会出现「本期 -27.5 / 上期 -342.7 / 变动 +315.2 / 同比 +92.0%」
+    这样一行 —— 读者把它读成「投资现金流同比大增 92%」，而它是**流出收窄** 92%。
+    数字没算错，但缺了这句，整行的含义就是反的。
+    """
+    bv = _bv()
+    bv.SWING_FACTS = _swing_facts({"同比口径": "上期为负"},
+                                  ["投资活动产生的现金流量净额"])
+    html = bv._swing_block({"swing": "正文"})
+    bv.SWING_FACTS = None
+    assert "+92.0%" in html
+    assert "上期为净流出" in html
+    assert "投资活动产生的现金流量净额" in html
+
+
+def test_swing_block_omits_caliber_note_when_all_positive():
+    """榜上没有特殊口径行时**不**加这句 —— 每只标的都挂一句与它无关的口径说明，
+    等于训练读者跳过脚注，真需要读的那次也不会读了。"""
+    bv = _bv()
+    bv.SWING_FACTS = _swing_facts(None, [])
+    html = bv._swing_block({"swing": "正文"})
+    bv.SWING_FACTS = None
+    assert "+92.0%" in html
+    assert "上期为净流出" not in html
+
+
+def test_swing_block_renders_crossing_zero_as_words_not_number():
+    """跨越零点在表里写成「由负转正」，不能印成 +8265.9% 那种失真比值，也不留「—」。
+
+    留空读者会以为没数据；给百分比会被那个数吓到 —— 两者都不是事实的正确形态。
+    """
+    bv = _bv()
+    bv.SWING_FACTS = _swing_facts({"同比_pct": None, "同比口径": "由负转正"},
+                                  ["投资活动产生的现金流量净额"])
+    html = bv._swing_block({"swing": "正文"})
+    bv.SWING_FACTS = None
+    assert "由负转正" in html
+    assert "跨越零点" in html
+    assert "8265" not in html
 
 
 # --------------------------------------------------------------------------- #
