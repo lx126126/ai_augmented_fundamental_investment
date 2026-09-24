@@ -207,13 +207,19 @@ _EXTRA_CSS = f"""
   /* 第一列给 2fr：「投资活动产生的现金流量净额」14 字，1.5fr（约 103px）下只能排
      9 字/行、要折 3 行；加宽到约 124px 后 2 行放得下。行距 8px → 7px 用于压长宽比。 */
   .swt-r {{ display:grid; grid-template-columns:2fr 1fr 1fr 0.8fr; gap:6px;
-            align-items:baseline; padding:6px 0; font-size:11px; }}
+            align-items:baseline; padding:4px 0; font-size:11px; }}
   .swt-r + .swt-r {{ border-top:1px dashed {C['line']}; }}
   .swt-h {{ padding:8px 0 5px; }}
   .swt-h .swt-k, .swt-h .swt-v {{ font-size:9.5px; font-weight:600; color:{C['faint']}; }}
   .swt-k {{ color:{C['ink']}; line-height:1.35; }}
   .swt-v {{ text-align:right; white-space:nowrap; font-weight:700; color:{C['ink']}; }}
   .swt-g {{ font-size:9px; color:{C['faint']}; display:block; font-weight:400; }}
+  /* 变动原因行。数据层的候选榜只给「动了多少」（本期/变动/同比三列），**不给
+     「为什么动」**—— 原因得从半年报原文里取（见 _SWING_WHY），所以它是图上
+     唯一一处「不是数据层直出」的文字。用 muted 而非 faint：它是这一行真正的
+     信息，分组标签只是口径前缀。 */
+  .swt-why {{ display:block; font-size:9px; color:{C['muted']}; font-weight:400;
+             line-height:1.32; margin-top:1px; }}
   /* 「同比」的口径注：只在榜上真的有「上期为负」的行时才出现。
      那种行印的是 `-76.4%`，说的是**流出扩大 76.4%**、不是「下降 76.4%」——
      不点明就是这一行的含义整个反掉。星标与被注行在同一行内对应，
@@ -232,7 +238,7 @@ _EXTRA_CSS = f"""
   .cash-g {{ flex:0 0 68px; display:flex; flex-direction:column;
              justify-content:flex-end; align-items:center; }}
   .cash-bars {{ display:flex; gap:5px; align-items:flex-end; justify-content:center;
-                height:78px; width:100%; }}
+                height:62px; width:100%; }}
   .cash-b {{ width:26px; border-radius:3px 3px 0 0; background:{C['accent']};
              position:relative; min-height:2px; }}
   .cash-b.np {{ background:{C['accent3']}; }}
@@ -603,7 +609,32 @@ def slide_profit(d) -> str:
     return bx._slide(4, "它有多能赚", "盈利能力与财务质量", body, foot)
 
 
-def _swing_table(qr: dict, per_group: dict | None = None) -> str:
+# --------------------------------------------------------------------------- #
+# 本季主要变动项的「变动原因」
+# --------------------------------------------------------------------------- #
+# 🔴 这是全图唯一「不由数据层直出」的文字，所以每一条的出处都必须指得出来：
+#    · 前三条 = 2026 半年报「第三节 管理层讨论与分析 → 四、报告期内主要经营情况 →
+#      (一)主营业务分析 → 1、财务报表相关科目变动分析表」下面紧随的三句
+#      「…活动产生的现金流量净额变动原因说明」，压缩自原文、未改口径；
+#    · 「扣非归母净利润」= 附注七(73)「资产减值损失」其他说明（原文：本期计提澳优乳业
+#      商誉减值损失以及存货减值损失增加所致）＋ 附注七(27) 商誉减值明细表
+#      （影响合并报表的商誉减值 154,654.49 万元 → 15.5 亿）；
+#    · 「营业成本」半年报**没给原因**，是从同一张变动分析表的两个数直算
+#      （营业成本 +3.51% vs 营业收入 +4.13%）—— 属数据侧推断，不是原文。
+# ⚠️ 别顺手把「资产减值损失」自己也加成一行：raw 层该字段 2018Q2 起全空
+#    （见发布说明「附二」），在榜上塞一行等于凭空造一个数据层给不出的数。
+#    它只作为原因文字出现，不占表格行。
+_SWING_WHY: dict[str, str] = {
+    "扣非归母净利润": "计提资产减值 24.6 亿（上期 3.4 亿），含澳优商誉减值 15.5 亿",
+    "营业成本": "成本同比 +3.5%，低于收入 +4.1%",
+    "经营活动产生的现金流量净额": "销售商品收现增加、购买商品付现减少",
+    "投资活动产生的现金流量净额": "购买与赎回大额存单、定期存款的净流出增加",
+    "筹资活动产生的现金流量净额": "支付的股利减少、借款净增加额增加",
+}
+
+
+def _swing_table(qr: dict, per_group: dict | None = None,
+                 reasons: dict | None = None) -> str:
     """本季「主要变动项」表（来自 src/report/swing.py 的候选榜）。
 
     ⚠️ 不能简单地 `cand[:N]`：候选榜是**按分组配额**排的（损益 → 现金流 →
@@ -611,6 +642,10 @@ def _swing_table(qr: dict, per_group: dict | None = None) -> str:
     现金流科目挡在榜外 —— 而图 8 的主题正是现金流。`per_group` 指定每组取几条。
 
     口径：损益与现金流组为年初至今累计、资产负债组为季末时点。
+
+    `reasons` 是「科目名 → 变动原因」，值必须是**半年报原文**（见 `_SWING_WHY`）。
+    数据层的候选榜只回答「动了多少」，不回答「为什么动」—— 读者看到「扣非 -14.2 亿」
+    必然要问一句为什么，所以这一列不能空着。没有配到原因的科目只印分组标签。
     """
     sw = qr.get("主要变动指标") or {}
     cand = sw.get("候选") or []
@@ -625,8 +660,10 @@ def _swing_table(qr: dict, per_group: dict | None = None) -> str:
     if not picked:
         return ""
 
+    reasons = reasons or {}
     rows = ""
     for it in picked:
+        name = it.get("名称") or ""
         delta = _f(it.get("变动_亿元"))
         yoy = _f(it.get("同比_pct"))
         tag = it.get("同比口径")
@@ -637,10 +674,15 @@ def _swing_table(qr: dict, per_group: dict | None = None) -> str:
             yoy_html = f'<span class="flat">{tag}</span>'
         else:
             yoy_html = bx._yoy(yoy, na="—")
+        why = reasons.get(name)
+        group = bx._esc(it.get("分组") or "")
+        if why:
+            sub_html = f'<span class="swt-why">{group} · {bx._esc(why)}</span>'
+        else:
+            sub_html = f'<span class="swt-g">{group}</span>'
         rows += (
             '<div class="swt-r">'
-            f'<span class="swt-k">{bx._esc(it.get("名称"))}'
-            f'<span class="swt-g">{bx._esc(it.get("分组") or "")}</span></span>'
+            f'<span class="swt-k">{bx._esc(name)}{sub_html}</span>'
             f'<span class="swt-v">{bx._n(it.get("本期_亿元"), 1)}</span>'
             f'<span class="swt-v">{_amt(delta)}</span>'
             f'<span class="swt-v">{yoy_html}{star}</span>'
@@ -1058,10 +1100,10 @@ def slide_cash_assets(d) -> str:
         seq.append(f"{prev_year} 年 {bx._n(prev_ratio, 2)} 倍")
     seq.append(f"{last_yr} 年 {bx._n(cover, 2)} 倍")
     seq.append(f"2026 上半年 {bx._n(cover_h1, 2)} 倍")
+    # ⚠️ 别再复述图例那半句（「深色柱是…浅色是…」）—— `.legend2` 就在柱图正下方，
+    #    图注里重复一遍会白白吃掉两行高度，而这张图是整组里最高的。
     note = (
-        "深色柱是经营现金流净额、浅色是归母净利润，两根柱的比值就是现金含量："
-        + "、".join(seq)
-        + "，逐年并不一样。2026 上半年净额本身同比 "
+        "现金含量 " + "、".join(seq) + "，逐年并不一样。2026 上半年净额本身同比 "
         + f"{bx._pct_plain(_f(ytd.get('累计经营现金流同比_pct')))}"
         + " 是低基数上的回升，同期归母净利同比 "
         + f"{bx._pct_plain(_f(ytd.get('累计归母净利同比_pct')))}，不是同步在涨。"
@@ -1075,12 +1117,14 @@ def slide_cash_assets(d) -> str:
         # 取 2 + 2 = 4 行。这张图已经有头部 + 柱图 + 解读句三块，榜单再加到 5 行
         # 会把整图长宽比顶到 1:2.89（超过全组上限 1:2.8）；现金流三张表中
         # 经营活动已在头部讲过、投资与筹资两条足已说明「钱去哪了」。
-        + _swing_table(qr, {"损益": 2, "现金流": 2})
+        # 每行多带一行「变动原因」（取自半年报原文，见 _SWING_WHY）——
+        # 只有数字没有原因的变动表，读者看完只会问「那为什么」。
+        + _swing_table(qr, {"损益": 2, "现金流": 2}, _SWING_WHY)
         + bx._note(note)
     )
-    foot = ("⚠️ 口径：柱状图为最近三个完整年度（经营现金流净额 / 归母净利润），"
-            "与 2026 上半年累计不可直接比；现金含量 = 经营现金流净额 ÷ 归母净利润；"
-            "「主要变动项」中损益与现金流为年初至今累计口径")
+    foot = ("⚠️ 口径：柱状图为最近三个完整年度，与 2026 上半年累计不可直接比；"
+            "现金含量 = 经营现金流净额 ÷ 归母净利润；「主要变动项」中损益与现金流"
+            "为年初至今累计口径；变动原因取自 2026 半年报原文（营业成本一条为报表直算）")
     return bx._slide(8, "钱赚到了没有", "现金流质量 · 利润有没有变成现金", body, foot)
 
 
